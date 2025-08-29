@@ -11,3 +11,7 @@ thiserror = "2.0"
 [features]
 # The `serde` feature enables serialization and deserialization support.
 serde = ["dep:serde"]
+
+[profile.bench]
+lto = "thin"
+codegen-units = 1
