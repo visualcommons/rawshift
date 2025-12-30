@@ -40,7 +40,7 @@ Here is the list of formats that are being worked on in order of priority:
 
 As of August 2025, the minimum supported Rust version (MSRV) is 1.89.0. This may be quite high but the reason is to ensure modern Rust features are available early in development. This may not be bumped up in for a good while.
 
-## Developing
+## Development
 
 It is important that development velocity is maintained regardless of project complexity. Unit tests for all contributions are expected, especially for platform-specific behaviours!
 
@@ -49,6 +49,28 @@ It is important that development velocity is maintained regardless of project co
 ```sh
 cargo test --features=serde
 ```
+
+### Library Design Principles
+
+- Stateless: The library should assume nothing about the state to support portability and parallelization.
+- Separation of IO and CPU: Writing good IO-heavy and CPU-heavy code can be tough in different ways so we separate it where possible to simplify benching.
+
+
+#### Safety Boundaries
+
+- `src/tiff`: Safe Rust is strictly required.
+- `src/formats`: Safe Rust is strictly required.
+- `src/data`: Safe Rust is strictly required.
+- `src/core`: Safe Rust is strictly required.
+- `src/processing`: Unsafe Rust is acceptable as long as it is constrained to hot paths.
+- `src/transforms`: Unsafe Rust is acceptable as long as it is constrained to hot paths.
+- `**/**`: TBD
+
+#### Testing Strategy
+
+- Integration tests (`tests/`): Ensure common workflows are functional.
+- Unit tests: All major functions should be rigorously tested. Please place them in the same module file when possible.
+
 
 ## License
 

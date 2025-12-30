@@ -1,0 +1,3 @@
+//! ICC profile constants.
+
+// TODO
