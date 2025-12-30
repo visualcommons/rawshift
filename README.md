@@ -27,6 +27,13 @@ Here is the list of formats that are being worked on in order of priority:
 - Canon CR3
 - Canon CR2
 
+> Features and performance are being constantly improved. As most functionality are implemented from scratch to meet project goals, expect progressive improvements for format support over time.
+
+| Format | Decoding | Encoding | Notes |
+| ------ | -------- | -------- | ----- |
+
+
+
 <!-- TODO: Official supported device list -->
 
 ## MSRV
