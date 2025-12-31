@@ -98,7 +98,7 @@ impl<R: Read + Seek> RawFile<R> {
         }
 
         // 3. Demosaic
-        let demosaic_impl = options.demosaic.implementation();
+        let demosaic_impl = options.demosaic.to_demosaic();
         let mut rgb_image = demosaic_impl.demosaic(&raw_image);
 
         // 4. White Balance

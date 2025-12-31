@@ -1,4 +1,4 @@
-use super::{DemosaicError, DemosaicMethod};
+use super::{Demosaic, DemosaicError};
 use crate::core::image::{CfaPattern, RawImage};
 use rayon::prelude::*;
 
@@ -11,7 +11,7 @@ use rayon::prelude::*;
 /// This implementation uses rayon for parallel row processing on multi-core systems.
 pub struct Bilinear;
 
-impl DemosaicMethod for Bilinear {
+impl Demosaic for Bilinear {
     fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
         let width = raw.active_area.size.width;
         let height = raw.active_area.size.height;

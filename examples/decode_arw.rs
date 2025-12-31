@@ -1,6 +1,6 @@
 use clap::Parser;
 use rawshift::formats::RawFile;
-use rawshift::processing::{DemosaicAlgorithm, ProcessingOptions};
+use rawshift::processing::{BayerAlgorithm, DemosaicMethod, ProcessingOptions};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ struct Args {
     #[arg(required = true)]
     output: PathBuf,
 
-    /// Demosaic algorithm
+    /// Demosaic algorithm (for Bayer sensors)
     #[arg(short, long, value_enum, default_value_t = DemosaicAlgoArg::Bilinear)]
     demosaic: DemosaicAlgoArg,
 
@@ -37,16 +37,18 @@ struct Args {
 #[derive(clap::ValueEnum, Clone, Debug)]
 enum DemosaicAlgoArg {
     Bilinear,
-    Ahd,
-    Vng,
+    Amaze,
+    Lmmse,
+    Rcd,
 }
 
-impl From<DemosaicAlgoArg> for DemosaicAlgorithm {
+impl From<DemosaicAlgoArg> for DemosaicMethod {
     fn from(arg: DemosaicAlgoArg) -> Self {
         match arg {
-            DemosaicAlgoArg::Bilinear => DemosaicAlgorithm::Bilinear,
-            DemosaicAlgoArg::Ahd => DemosaicAlgorithm::Ahd,
-            DemosaicAlgoArg::Vng => DemosaicAlgorithm::Vng,
+            DemosaicAlgoArg::Bilinear => DemosaicMethod::Bayer(BayerAlgorithm::Bilinear),
+            DemosaicAlgoArg::Amaze => DemosaicMethod::Bayer(BayerAlgorithm::Amaze),
+            DemosaicAlgoArg::Lmmse => DemosaicMethod::Bayer(BayerAlgorithm::Lmmse),
+            DemosaicAlgoArg::Rcd => DemosaicMethod::Bayer(BayerAlgorithm::Rcd),
         }
     }
 }
