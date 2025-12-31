@@ -37,8 +37,51 @@ impl<'a> BitPump<'a> {
     }
 
     /// Fill the bit buffer, handling JPEG byte stuffing (FF 00 -> FF).
+    /// Optimized to read chunks of 8 bytes when possible.
     fn fill(&mut self) {
-        while self.bits_left <= 56 && self.pos < self.data.len() {
+        while self.bits_left <= 56 {
+            if self.pos >= self.data.len() {
+                break;
+            }
+
+            // Optimization: Try to read multiple bytes at once
+            // Only use fast path if we have enough data (8 bytes)
+            // and we can consume at least 4 bytes to justify the overhead
+            let remaining = self.data.len() - self.pos;
+            if remaining >= 8 {
+                let bytes_to_add = ((64 - self.bits_left) / 8) as usize;
+
+                if bytes_to_add >= 4 {
+                    // Safe to read 8 bytes due to remaining >= 8
+                    let mut buf = [0u8; 8];
+                    buf.copy_from_slice(&self.data[self.pos..self.pos + 8]);
+                    let chunk = u64::from_be_bytes(buf);
+
+                    // Check for 0xFF in the 8-byte chunk
+                    // Logic: !chunk has 0x00 where chunk has 0xFF
+                    // has_zero_byte(v) = (v - 0x01..) & !v & 0x80..
+                    let v = !chunk;
+                    let has_zero = (v.wrapping_sub(0x0101010101010101)) & (!v) & 0x8080808080808080;
+
+                    if has_zero == 0 {
+                        // No 0xFF markers, safe this consumes 'bytes_to_add'
+                        // Extract top 'bytes_to_add' bytes
+                        let shift = (8 - bytes_to_add) * 8;
+                        let val = chunk >> shift;
+
+                        let bits_added = bytes_to_add * 8;
+                        if bits_added == 64 {
+                            self.bits = val;
+                        } else {
+                            self.bits = (self.bits << bits_added) | val;
+                        }
+                        self.bits_left += (bytes_to_add * 8) as u32;
+                        self.pos += bytes_to_add;
+                        continue;
+                    }
+                }
+            }
+
             let byte = self.data[self.pos] as u64;
             self.pos += 1;
 
@@ -75,42 +118,14 @@ impl<'a> BitPump<'a> {
             return 0;
         }
         // Ensure we have enough bits
-        while self.bits_left < n && self.pos < self.data.len() {
-            self.fill_one();
+        if self.bits_left < n {
+            self.fill();
         }
         if self.bits_left < n {
             // Not enough data - return what we have padded with zeros
             return (self.bits as u32) << (n - self.bits_left);
         }
         ((self.bits >> (self.bits_left - n)) & ((1u64 << n) - 1)) as u32
-    }
-
-    /// Fill one byte into the bit buffer.
-    fn fill_one(&mut self) {
-        if self.pos >= self.data.len() {
-            return;
-        }
-
-        let byte = self.data[self.pos] as u64;
-        self.pos += 1;
-
-        // Handle byte stuffing: 0xFF followed by 0x00 means literal 0xFF
-        if byte == 0xFF && self.pos < self.data.len() {
-            let next = self.data[self.pos];
-            if next == 0x00 {
-                self.pos += 1; // Skip the stuffed 0x00
-            } else if (0xD0..=0xD7).contains(&next) {
-                // Restart marker - skip it
-                self.pos += 1;
-                return;
-            } else if next == 0xD9 {
-                // EOI - stop filling
-                return;
-            }
-        }
-
-        self.bits = (self.bits << 8) | byte;
-        self.bits_left += 8;
     }
 
     /// Consume n bits.
@@ -194,5 +209,43 @@ mod tests {
         assert_eq!(pump.peek(4), 0b1010);
         assert_eq!(pump.get_bits(4), 0b1010);
         assert_eq!(pump.peek(4), 0b1011);
+    }
+
+    #[test]
+    fn test_bit_pump_fast_path() {
+        // 16 bytes of data, no 0xFF (uses fast path)
+        let data: Vec<u8> = (0..16).map(|i| i as u8).collect();
+        let mut pump = BitPump::new(&data);
+
+        // consume 64 bits (8 bytes)
+        // 00 01 02 03 04 05 06 07
+        let val1 = pump.get_bits(32);
+        let val2 = pump.get_bits(32);
+
+        assert_eq!(val1, 0x00010203);
+        assert_eq!(val2, 0x04050607);
+
+        let val3 = pump.get_bits(32);
+        let val4 = pump.get_bits(32);
+        assert_eq!(val3, 0x08090A0B);
+        assert_eq!(val4, 0x0C0D0E0F);
+    }
+
+    #[test]
+    fn test_bit_pump_fast_path_with_stuffing() {
+        // Fast path should detect 0xFF and fallback to slow path
+        // 00 01 02 03 FF 00 05 06 ...
+        // FF 00 -> FF literal
+        let data = [
+            0x00, 0x01, 0x02, 0x03, 0xFF, 0x00, 0x05, 0x06, 0x07, 0x08, 0x09,
+        ];
+        let mut pump = BitPump::new(&data);
+
+        // read 32 bits: 00 01 02 03
+        assert_eq!(pump.get_bits(32), 0x00010203);
+
+        // read next 32 bits: FF 05 06 07
+        // 0xFF 00 becomes just 0xFF
+        assert_eq!(pump.get_bits(32), 0xFF050607);
     }
 }
