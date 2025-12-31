@@ -12,11 +12,13 @@ use std::fmt;
 /// Byte order marker for TIFF files.
 ///
 /// TIFF files begin with either "II" (Intel, little-endian) or "MM" (Motorola, big-endian).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BinRead, BinWrite)]
 pub enum ByteOrder {
     /// Little-endian byte order (Intel, "II")
+    #[brw(magic = b"II")]
     LittleEndian,
     /// Big-endian byte order (Motorola, "MM")
+    #[brw(magic = b"MM")]
     BigEndian,
 }
 

@@ -3,13 +3,15 @@
 //! This module defines known TIFF tags used in RAW image formats,
 //! including standard TIFF/EXIF tags and format-specific extensions.
 
+use binrw::{BinRead, BinWrite};
 use std::fmt;
 
 /// Known TIFF tag IDs.
 ///
 /// This enum contains tags commonly found in TIFF-based RAW formats.
 /// Unknown tags are handled separately via the parser's unknown tag storage.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, BinRead, BinWrite)]
+#[brw(repr = u16)]
 #[repr(u16)]
 pub enum TiffTag {
     // ========================================
@@ -366,7 +368,8 @@ impl fmt::Display for TiffTag {
 }
 
 /// Compression type values for the Compression tag (0x0103).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BinRead, BinWrite)]
+#[brw(repr = u16)]
 #[repr(u16)]
 pub enum CompressionType {
     /// No compression (1)
@@ -411,7 +414,8 @@ impl CompressionType {
 }
 
 /// Photometric interpretation values (0x0106).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BinRead, BinWrite)]
+#[brw(repr = u16)]
 #[repr(u16)]
 pub enum PhotometricInterpretation {
     /// WhiteIsZero (0)

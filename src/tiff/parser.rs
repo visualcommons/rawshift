@@ -6,7 +6,7 @@
 //! - SubIFD tree traversal
 //! - Value resolution (inline vs offset)
 
-use binrw::BinReaderExt;
+use binrw::{binread, BinRead, BinReaderExt};
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek, SeekFrom};
 
@@ -19,7 +19,83 @@ pub const TIFF_MAGIC: u16 = 42;
 /// BigTIFF magic number (43).
 pub const BIGTIFF_MAGIC: u16 = 43;
 
-// TODO: More properly use binrw derive syntax
+// ============================================================================
+// Raw binary structures for binrw parsing
+// ============================================================================
+
+/// Raw standard TIFF header (8 bytes) for binrw parsing.
+#[derive(Debug, Clone, BinRead)]
+pub struct RawTiffHeader {
+    /// Byte order marker
+    pub byte_order: ByteOrder,
+    /// Magic number (should be 42)
+    #[br(is_little = matches!(byte_order, ByteOrder::LittleEndian))]
+    pub magic: u16,
+    /// Offset to IFD0
+    #[br(is_little = matches!(byte_order, ByteOrder::LittleEndian))]
+    pub ifd0_offset: u32,
+}
+
+/// Raw BigTIFF header (16 bytes) for binrw parsing.
+#[derive(Debug, Clone, BinRead)]
+pub struct RawBigTiffHeader {
+    /// Byte order marker
+    pub byte_order: ByteOrder,
+    /// Magic number (should be 43)
+    #[br(is_little = matches!(byte_order, ByteOrder::LittleEndian))]
+    pub magic: u16,
+    /// Offset byte size (always 8 for BigTIFF)
+    #[br(is_little = matches!(byte_order, ByteOrder::LittleEndian))]
+    pub offset_bytesize: u16,
+    /// Always zero
+    #[br(is_little = matches!(byte_order, ByteOrder::LittleEndian))]
+    pub always_zero: u16,
+    /// Offset to IFD0
+    #[br(is_little = matches!(byte_order, ByteOrder::LittleEndian))]
+    pub ifd0_offset: u64,
+}
+
+/// Raw IFD entry for standard TIFF (12 bytes).
+#[binread]
+#[derive(Debug, Clone)]
+#[br(import { is_little: bool })]
+pub struct RawIfdEntry {
+    /// Tag ID
+    #[br(is_little = is_little)]
+    pub tag_id: u16,
+    /// Data type
+    #[br(is_little = is_little)]
+    pub data_type: u16,
+    /// Count of values
+    #[br(is_little = is_little)]
+    pub count: u32,
+    /// Value or offset
+    #[br(is_little = is_little)]
+    pub value_offset: u32,
+}
+
+/// Raw IFD entry for BigTIFF (20 bytes).
+#[binread]
+#[derive(Debug, Clone)]
+#[br(import { is_little: bool })]
+pub struct RawBigTiffIfdEntry {
+    /// Tag ID
+    #[br(is_little = is_little)]
+    pub tag_id: u16,
+    /// Data type
+    #[br(is_little = is_little)]
+    pub data_type: u16,
+    /// Count of values
+    #[br(is_little = is_little)]
+    pub count: u64,
+    /// Value or offset
+    #[br(is_little = is_little)]
+    pub value_offset: u64,
+}
+
+// ============================================================================
+// Higher-level parsed structures
+// ============================================================================
 
 /// TIFF file header (first 8 bytes).
 #[derive(Debug, Clone)]
@@ -39,58 +115,37 @@ impl TiffHeader {
     pub fn parse<R: Read + Seek>(reader: &mut R) -> RawResult<Self> {
         reader.seek(SeekFrom::Start(0))?;
 
-        // Read byte order marker (2 bytes)
-        let mut bo_bytes = [0u8; 2];
-        reader.read_exact(&mut bo_bytes)?;
+        // First, read just the byte order and magic to determine TIFF type
+        let raw_header: RawTiffHeader = reader
+            .read_ne()
+            .map_err(|_| RawError::InvalidByteOrder(0))?;
 
-        let byte_order = ByteOrder::from_bytes(bo_bytes)
-            .ok_or_else(|| RawError::InvalidByteOrder(u16::from_le_bytes(bo_bytes)))?;
-
-        // Read magic number (2 bytes)
-        let magic: u16 = match byte_order {
-            ByteOrder::LittleEndian => reader.read_le()?,
-            ByteOrder::BigEndian => reader.read_be()?,
-        };
-
-        // Validate magic number
-        let is_bigtiff = match magic {
+        // Validate magic number and determine if BigTIFF
+        let is_bigtiff = match raw_header.magic {
             TIFF_MAGIC => false,
             BIGTIFF_MAGIC => true,
             _ => {
                 return Err(RawError::InvalidMagic {
                     expected: TIFF_MAGIC,
-                    found: magic,
+                    found: raw_header.magic,
                 });
             }
         };
 
-        // Read IFD0 offset
+        // For BigTIFF, we need to re-parse with the full header
         let ifd0_offset = if is_bigtiff {
-            // BigTIFF: skip 4 bytes (offset bytesize + always 0), then read 8-byte offset
-            let _offset_bytesize: u16 = match byte_order {
-                ByteOrder::LittleEndian => reader.read_le()?,
-                ByteOrder::BigEndian => reader.read_be()?,
-            };
-            let _always_zero: u16 = match byte_order {
-                ByteOrder::LittleEndian => reader.read_le()?,
-                ByteOrder::BigEndian => reader.read_be()?,
-            };
-            match byte_order {
-                ByteOrder::LittleEndian => reader.read_le::<u64>()?,
-                ByteOrder::BigEndian => reader.read_be::<u64>()?,
-            }
+            reader.seek(SeekFrom::Start(0))?;
+            let bigtiff_header: RawBigTiffHeader = reader
+                .read_ne()
+                .map_err(|e| RawError::ParseError(e.to_string()))?;
+            bigtiff_header.ifd0_offset
         } else {
-            // Standard TIFF: 4-byte offset
-            let offset: u32 = match byte_order {
-                ByteOrder::LittleEndian => reader.read_le()?,
-                ByteOrder::BigEndian => reader.read_be()?,
-            };
-            offset as u64
+            raw_header.ifd0_offset as u64
         };
 
         Ok(TiffHeader {
-            byte_order,
-            magic,
+            byte_order: raw_header.byte_order,
+            magic: raw_header.magic,
             ifd0_offset,
             is_bigtiff,
         })
@@ -334,19 +389,25 @@ impl<R: Read + Seek> TiffParser<R> {
 
     /// Parse a single IFD entry (12 bytes for TIFF, 20 bytes for BigTIFF).
     fn parse_ifd_entry(&mut self) -> RawResult<IfdEntry> {
-        let tag_id = self.read_u16()?;
-        let data_type = self.read_u16()?;
+        let is_little = matches!(self.header.byte_order, ByteOrder::LittleEndian);
 
-        let count = if self.header.is_bigtiff {
-            self.read_u64()?
+        let (tag_id, data_type, count, value_offset) = if self.header.is_bigtiff {
+            let raw: RawBigTiffIfdEntry = self
+                .reader
+                .read_ne_args::<RawBigTiffIfdEntry>(binrw::args! { is_little })
+                .map_err(|e| RawError::ParseError(e.to_string()))?;
+            (raw.tag_id, raw.data_type, raw.count, raw.value_offset)
         } else {
-            self.read_u32()? as u64
-        };
-
-        let value_offset = if self.header.is_bigtiff {
-            self.read_u64()?
-        } else {
-            self.read_u32()? as u64
+            let raw: RawIfdEntry = self
+                .reader
+                .read_ne_args::<RawIfdEntry>(binrw::args! { is_little })
+                .map_err(|e| RawError::ParseError(e.to_string()))?;
+            (
+                raw.tag_id,
+                raw.data_type,
+                raw.count as u64,
+                raw.value_offset as u64,
+            )
         };
 
         let tiff_type = TiffType::from_u16(data_type);
