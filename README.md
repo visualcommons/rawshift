@@ -29,12 +29,41 @@ Here is the list of formats that are being worked on in order of priority:
 
 > Features and performance are being constantly improved. As most functionality are implemented from scratch to meet project goals, expect progressive improvements for format support over time.
 
-| Format | Decoding | Encoding | Notes |
-| ------ | -------- | -------- | ----- |
+> We aim to be liberal in what we accept (decode) and strict in what we give (encode).
+
+| Format       | Decoding | Encoding    | Notes                                                                                                                                                     |
+| ------------ | -------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sony ARW     | WIP      | N/A         |                                                                                                                                                           |
+| Canon CR2    | WIP      | N/A         |                                                                                                                                                           |
+| Canon CR3    | WIP      | N/A         |                                                                                                                                                           |
+| Canon CRW    | WIP      | N/A         |                                                                                                                                                           |
+| Adobe DNG    | WIP      | Not planned | We aim to support all standards-compliant DNG for decoding (includes Apple ProRAW) but don't plan to support encoding (as linear DNGs are not so common). |
+| Nikon NEF    | WIP      | N/A         |                                                                                                                                                           |
+| Fujifilm RAF | WIP      | N/A         |                                                                                                                                                           |
+| TIFF         | WIP      | WIP         |                                                                                                                                                           |
+| AVIF         | WIP      | WIP         |                                                                                                                                                           |
+| HEIC         | TBD      | Not planned | HEIC uses patented H.265 encoding. We may support decoding eventually but not encoding.                                                                   |
+| JPEG         | WIP      | WIP         |                                                                                                                                                           |
+| JXL          | WIP      | WIP         |                                                                                                                                                           |
+| PNG          | WIP      | WIP         |                                                                                                                                                           |
+| SVG          | WIP      | Not planned |                                                                                                                                                           |
+| WEBP         | WIP      | WIP         |                                                                                                                                                           |
+| GIF          | WIP      | Not planned |                                                                                                                                                           |
+
+Note on encoding support: For formats that we do not support encoding, you may still take the decoded pixel data and metadata, and encode it with your own encoding logic.
 
 
+## Official supported device list
 
-<!-- TODO: Official supported device list -->
+*A device is officially supported if we have thoroughly tested compatibility for it.*
+
+| Device                 | Format(s)       | Notes |
+| ---------------------- | --------------- | ----- |
+| Sony A7RV (ILCE-7RM5)  | ARW             |       |
+| Sony A7IV (ILCE-7M4)   | ARW             |       |
+| Sony a6700 (ILCE-6700) | ARW             |       |
+| iPhone 13 Pro (Max)    | DNG, HEIC, JPEG |
+| iPhone 16 Pro (Max)    | DNG, HEIC, JXL  |
 
 ## MSRV
 
@@ -54,7 +83,6 @@ cargo test --features=serde
 
 - Stateless: The library should assume nothing about the state to support portability and parallelization.
 - Separation of IO and CPU: Writing good IO-heavy and CPU-heavy code can be tough in different ways so we separate it where possible to simplify benching.
-
 
 #### Safety Boundaries
 
