@@ -405,8 +405,8 @@ impl<R: Read + Seek> ArwFile<R> {
                 // Tiled storage - decode each tile
                 let tile_w = metadata.tile_width as usize;
                 let tile_h = metadata.tile_height as usize;
-                let tiles_x = (width + tile_w - 1) / tile_w;
-                let _tiles_y = (height + tile_h - 1) / tile_h;
+                let tiles_x = width.div_ceil(tile_w);
+                let _tiles_y = height.div_ceil(tile_h);
 
                 for (tile_idx, (&tile_offset, &tile_size)) in metadata
                     .tile_offsets

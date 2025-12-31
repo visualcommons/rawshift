@@ -139,6 +139,72 @@ impl From<binrw::Error> for RawError {
     }
 }
 
+impl From<zune_image::errors::ImageErrors> for RawError {
+    fn from(err: zune_image::errors::ImageErrors) -> Self {
+        use zune_image::errors::ImageErrors;
+        match err {
+            // I/O Errors
+            ImageErrors::IoError(e) => RawError::Io(e),
+
+            // Dimension Mismatches
+            ImageErrors::DimensionsMisMatch(w, h) => RawError::InvalidDimensions {
+                width: w as u32,
+                height: h as u32,
+            },
+
+            // Decoding/Decompression Errors
+            ImageErrors::ImageDecodeErrors(desc) => RawError::DecompressionError(desc),
+
+            // Unsupported Formats & Features
+            ImageErrors::UnsupportedColorspace(cs, source, supported) => {
+                RawError::UnsupportedFormat(format!(
+                    "Colorspace {:?} in {}. Supported: {:?}",
+                    cs, source, supported
+                ))
+            }
+            ImageErrors::ImageDecoderNotIncluded(fmt) => {
+                RawError::UnsupportedFormat(format!("Decoder for {:?} not included", fmt))
+            }
+            ImageErrors::ImageDecoderNotImplemented(fmt) => {
+                RawError::UnsupportedFormat(format!("Decoder for {:?} not implemented", fmt))
+            }
+            ImageErrors::ImageOperationNotImplemented(op, bit) => RawError::UnsupportedFormat(
+                format!("Operation {} not implemented for {:?}", op, bit),
+            ),
+
+            // State and Logic Errors (Mapped to ParseError/Generic)
+            ImageErrors::NoImageForOperations => {
+                RawError::ParseError("No image available for operations".to_string())
+            }
+            ImageErrors::NoImageForEncoding => {
+                RawError::ParseError("No image available for encoding".to_string())
+            }
+            ImageErrors::NoImageBuffer => {
+                RawError::ParseError("No image buffer available".to_string())
+            }
+            ImageErrors::WrongTypeId(expected, found) => RawError::ParseError(format!(
+                "Type mismatch: expected {:?}, found {:?}",
+                expected, found
+            )),
+
+            // Generic String/Str Errors
+            ImageErrors::GenericString(s) => RawError::ParseError(s),
+            ImageErrors::GenericStr(s) => RawError::ParseError(s.to_string()),
+
+            // Nested Error Enums (Preserving context via String)
+            ImageErrors::OperationsError(e) => {
+                RawError::ParseError(format!("Operations error: {:?}", e))
+            }
+            ImageErrors::EncodeErrors(e) => {
+                RawError::ParseError(format!("Encoding error: {:?}", e))
+            }
+            ImageErrors::ChannelErrors(e) => {
+                RawError::ParseError(format!("Channel error: {:?}", e))
+            }
+        }
+    }
+}
+
 /// Result type alias using RawError.
 pub type RawResult<T> = Result<T, RawError>;
 

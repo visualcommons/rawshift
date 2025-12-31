@@ -9,7 +9,12 @@ pub mod dng;
 use std::io::{Read, Seek, SeekFrom};
 
 use crate::error::{RawError, RawResult};
+use crate::processing::color::{apply_color_matrix, apply_gamma, apply_white_balance};
+use crate::processing::ProcessingOptions;
 use crate::tiff::{TiffParser, TiffTag};
+use std::path::Path;
+use zune_core::colorspace::ColorSpace;
+use zune_image::image::Image;
 
 /// Supported RAW file formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +54,84 @@ impl<R: Read + Seek> RawFile<R> {
                 Ok(RawFile::Dng)
             }
         }
+    }
+
+    /// Export the raw file to an image format based on the file extension.
+    ///
+    /// This runs the full processing pipeline:
+    /// 1. Decode raw data
+    /// 2. Apply black level subtraction and normalization
+    /// 3. Demosaic
+    /// 4. Apply White Balance (if specified)
+    /// 5. Apply Color Matrix (if specified)
+    /// 6. Apply Gamma Correction (if specified)
+    /// 7. Save to disk
+    pub fn export<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+        options: &ProcessingOptions,
+    ) -> RawResult<()> {
+        let mut raw_image = match self {
+            RawFile::Arw(arw) => arw.decode_raw()?,
+            RawFile::Dng => {
+                return Err(RawError::UnsupportedFormat(
+                    "DNG export not implemented".to_string(),
+                ))
+            }
+        };
+
+        // 1. Black Level Subtraction
+        // TODO: Handle per-channel black levels correctly
+        let black_level = raw_image.black_levels[0];
+        if black_level > 0 {
+            for pixel in &mut raw_image.data {
+                *pixel = pixel.saturating_sub(black_level);
+            }
+        }
+
+        // 2. Scale to 16-bit (Normalize)
+        let shift = 16u8.saturating_sub(raw_image.bit_depth);
+        if shift > 0 {
+            for pixel in &mut raw_image.data {
+                *pixel <<= shift;
+            }
+        }
+
+        // 3. Demosaic
+        let demosaic_impl = options.demosaic.implementation();
+        let mut rgb_image = demosaic_impl.demosaic(&raw_image);
+
+        // 4. White Balance
+        if let Some(coeffs) = options.white_balance {
+            apply_white_balance(&mut rgb_image, coeffs);
+        }
+
+        // 5. Color Matrix
+        if let Some(matrix) = options.color_matrix {
+            apply_color_matrix(&mut rgb_image, &matrix);
+        }
+
+        // 6. Gamma
+        if let Some(gamma) = options.gamma {
+            apply_gamma(&mut rgb_image, gamma);
+        }
+
+        // 7. Save
+        let width = rgb_image.width;
+        let height = rgb_image.height;
+
+        // Create zune-image Image
+        // width, height, colorspace, depth, data
+        let image = Image::from_u16(
+            &rgb_image.data,
+            width as usize,
+            height as usize,
+            ColorSpace::RGB,
+        );
+
+        image.save(path)?;
+
+        Ok(())
     }
 
     /// Detect the format of the provided reader.

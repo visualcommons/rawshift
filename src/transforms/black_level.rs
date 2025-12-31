@@ -18,6 +18,12 @@ pub struct BlackLevelCorrection {
     // TODO: Store repeating pattern and values
 }
 
+impl Default for BlackLevelCorrection {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BlackLevelCorrection {
     pub fn new() -> Self {
         Self {}

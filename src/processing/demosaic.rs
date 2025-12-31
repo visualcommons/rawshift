@@ -367,7 +367,7 @@ mod tests {
                 for c in 0..3 {
                     let pixel = rgb.data[idx + c];
                     assert!(
-                        pixel >= 4000 && pixel <= 5500,
+                        (4000..=5500).contains(&pixel),
                         "Interior pixel at ({},{}) channel {} value {} out of range",
                         x,
                         y,

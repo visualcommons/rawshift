@@ -12,6 +12,7 @@ thiserror = "2.0.17"
 zune-core = "0.4.12"
 zune-jpeg = "0.4.13"
 zune-png = "0.4.10"
+zune-image = "0.4"
 
 
 [features]
@@ -28,4 +29,5 @@ eyre = "0.6.12"
 tokio = { version = "1.48.0", features = ["full"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0"
-image = { version = "0.25", default-features = false, features = ["png"] }
+zune-image = "0.4"
+clap = { version = "4.5", features = ["derive"] }
