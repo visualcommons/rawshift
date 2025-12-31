@@ -30,7 +30,8 @@ test_fixtures/
         └── <Filename>/
             ├── expected.json         # The primary source-of-truth JSON for unit tests
             ├── exiftool.json         # Full output from `exiftool -j -g -struct`
-            └── libraw_identify.txt   # Output from `raw-identify -v`
+            ├── libraw_identify.txt   # Output from `raw-identify -v`
+            └── dcraw_identify.txt    # Output from `dcraw -i -v`
 ```
 
 ## Adding New Test Images
@@ -47,4 +48,4 @@ This script will:
 - Detect the Make/Model of the new files.
 - Move them to the correct `test_data/<Make>/<Model>/` folder.
 - Generate the `test_fixtures` folder structure.
-- Run `exiftool` and `raw-identify` to populate the sidecar files.
+- Run `exiftool`, `raw-identify`, and `dcraw` to populate the sidecar files.
