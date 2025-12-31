@@ -106,6 +106,31 @@ pub enum RawError {
     /// Circular reference detected in IFD chain.
     #[error("Circular reference detected in IFD chain at offset {0}")]
     CircularReference(u64),
+
+    /// Unaccounted data found in file (gaps or trailing bytes).
+    #[error("Unaccounted data: {size} bytes at offset {offset}")]
+    UnaccountedData {
+        /// Offset where unaccounted data starts
+        offset: u64,
+        /// Size of unaccounted region
+        size: u64,
+    },
+
+    /// Overlapping data regions detected.
+    #[error("Overlapping data regions at offset {offset}")]
+    OverlappingData {
+        /// Offset where overlap occurs
+        offset: u64,
+    },
+
+    /// Unknown/unhandled TIFF tag found.
+    #[error("Unknown tag 0x{tag_id:04X} at IFD offset {ifd_offset}")]
+    UnknownTag {
+        /// The unknown tag ID
+        tag_id: u16,
+        /// Offset of the IFD containing the tag
+        ifd_offset: u64,
+    },
 }
 
 impl From<binrw::Error> for RawError {

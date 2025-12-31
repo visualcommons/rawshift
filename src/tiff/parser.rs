@@ -191,9 +191,9 @@ impl IfdEntry {
     }
 }
 
-/// Storage for unknown/proprietary tags.
+/// Storage for format-specific/other tags not in TiffTag enum.
 #[derive(Debug, Clone)]
-pub struct UnknownTag {
+pub struct OtherTag {
     /// Raw tag ID
     pub tag_id: u16,
     /// Raw type code
@@ -213,8 +213,8 @@ pub struct Ifd {
     pub offset: u64,
     /// Parsed entries (known tags)
     pub entries: HashMap<TiffTag, IfdEntry>,
-    /// Unknown tags with their raw data
-    pub unknown_tags: HashMap<u16, UnknownTag>,
+    /// Other tags (format-specific, not in TiffTag enum)
+    pub other_tags: HashMap<u16, OtherTag>,
     /// Offset to next IFD (0 if none)
     pub next_ifd_offset: u64,
     /// SubIFDs (parsed from SubIFDs tag)
@@ -234,10 +234,20 @@ impl Ifd {
         self.entries.contains_key(&tag)
     }
 
-    /// Get all tag IDs present in this IFD (both known and unknown).
+    /// Returns true if any other (format-specific) tags exist.
+    pub fn has_other_tags(&self) -> bool {
+        !self.other_tags.is_empty()
+    }
+
+    /// Returns list of other tag IDs in this IFD.
+    pub fn other_tag_ids(&self) -> Vec<u16> {
+        self.other_tags.keys().copied().collect()
+    }
+
+    /// Get all tag IDs present in this IFD (both known and other).
     pub fn all_tag_ids(&self) -> Vec<u16> {
         let mut ids: Vec<u16> = self.entries.keys().map(|t| t.as_u16()).collect();
-        ids.extend(self.unknown_tags.keys().copied());
+        ids.extend(self.other_tags.keys().copied());
         ids.sort();
         ids
     }
@@ -257,6 +267,7 @@ impl<R: Read + Seek> TiffParser<R> {
     /// Create a new parser and parse the header.
     pub fn new(mut reader: R) -> RawResult<Self> {
         let header = TiffHeader::parse(&mut reader)?;
+
         Ok(TiffParser {
             reader,
             header,
@@ -311,7 +322,7 @@ impl<R: Read + Seek> TiffParser<R> {
         }
 
         let mut entries = HashMap::new();
-        let mut unknown_tags = HashMap::new();
+        let mut other_tags = HashMap::new();
 
         // Parse each entry
         for _ in 0..entry_count {
@@ -320,19 +331,20 @@ impl<R: Read + Seek> TiffParser<R> {
             if let Some(tag) = entry.tag {
                 entries.insert(tag, entry);
             } else {
-                // Unknown tag - store with raw data
-                let unknown = UnknownTag {
+                // Other tag (format-specific) - store with raw data
+                let is_inline = entry.is_inline(self.header.is_bigtiff);
+                let other = OtherTag {
                     tag_id: entry.tag_id,
                     type_code: entry.data_type,
                     count: entry.count,
-                    data: None, // TODO: Resolve data lazily or eagerly
-                    offset: if entry.is_inline(self.header.is_bigtiff) {
+                    data: None,
+                    offset: if is_inline {
                         None
                     } else {
                         Some(entry.value_offset)
                     },
                 };
-                unknown_tags.insert(entry.tag_id, unknown);
+                other_tags.insert(entry.tag_id, other);
             }
         }
 
@@ -346,7 +358,7 @@ impl<R: Read + Seek> TiffParser<R> {
         let mut ifd = Ifd {
             offset,
             entries,
-            unknown_tags,
+            other_tags,
             next_ifd_offset,
             sub_ifds: Vec::new(),
             exif_ifd: None,
@@ -438,7 +450,7 @@ impl<R: Read + Seek> TiffParser<R> {
         Ok(ifds)
     }
 
-    /// Parse IFD0 (the first/main IFD).
+    /// Parse IFD0 (the first/main IFD) without validation.
     pub fn parse_ifd0(&mut self) -> RawResult<Ifd> {
         self.visited_offsets.clear();
         self.parse_ifd_at(self.header.ifd0_offset)
@@ -746,6 +758,90 @@ impl<R: Read + Seek> TiffParser<R> {
         self.reader.read_exact(&mut buffer)?;
         Ok(buffer)
     }
+
+    /// Get the total file size.
+    pub fn file_size(&mut self) -> RawResult<u64> {
+        let current = self.reader.stream_position()?;
+        let size = self.reader.seek(SeekFrom::End(0))?;
+        self.reader.seek(SeekFrom::Start(current))?;
+        Ok(size)
+    }
+
+    /// Validate that all IFD data references are within file bounds.
+    ///
+    /// This method walks the entire IFD structure and verifies that:
+    /// - All IFD offsets are within file bounds
+    /// - All value data referenced by entries (that's not inline) is within bounds
+    /// - No truncated data exists
+    ///
+    /// Returns an error if any data would extend past the end of the file.
+    pub fn validate_complete(&mut self) -> RawResult<()> {
+        let file_size = self.file_size()?;
+
+        // Validate header offset
+        if self.header.ifd0_offset >= file_size {
+            return Err(RawError::OffsetOutOfBounds {
+                offset: self.header.ifd0_offset,
+                size: 0,
+                file_size,
+            });
+        }
+
+        // Walk all IFDs and validate
+        let ifds = self.walk_ifd_chain()?;
+        for ifd in &ifds {
+            self.validate_ifd(ifd, file_size)?;
+        }
+
+        Ok(())
+    }
+
+    /// Validate a single IFD and its entries.
+    fn validate_ifd(&mut self, ifd: &Ifd, file_size: u64) -> RawResult<()> {
+        // Validate each entry's data reference
+        for entry in ifd.entries.values() {
+            if !entry.is_inline(self.header.is_bigtiff) {
+                let end = entry.value_offset.saturating_add(entry.value_size());
+                if end > file_size {
+                    return Err(RawError::OffsetOutOfBounds {
+                        offset: entry.value_offset,
+                        size: entry.value_size(),
+                        file_size,
+                    });
+                }
+            }
+        }
+
+        // Validate other tags
+        for other in ifd.other_tags.values() {
+            if let Some(offset) = other.offset {
+                let type_size = TiffType::from_u16(other.type_code)
+                    .map(|t| t.size())
+                    .unwrap_or(1) as u64;
+                let size = other.count.saturating_mul(type_size);
+                let end = offset.saturating_add(size);
+                if end > file_size {
+                    return Err(RawError::OffsetOutOfBounds {
+                        offset,
+                        size,
+                        file_size,
+                    });
+                }
+            }
+        }
+
+        // Validate sub-IFDs recursively
+        for sub_ifd in &ifd.sub_ifds {
+            self.validate_ifd(sub_ifd, file_size)?;
+        }
+
+        // Validate EXIF IFD if present
+        if let Some(ref exif_ifd) = ifd.exif_ifd {
+            self.validate_ifd(exif_ifd, file_size)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -842,5 +938,201 @@ mod tests {
 
         let ifds = parser.walk_ifd_chain().unwrap();
         assert_eq!(ifds.len(), 1);
+    }
+
+    // ========================================================================
+    // Strict parsing validation tests
+    // ========================================================================
+
+    #[test]
+    fn test_truncated_header() {
+        // Only 4 bytes - header needs 8
+        let data = vec![b'I', b'I', 42, 0];
+        let cursor = Cursor::new(data);
+        let result = TiffParser::new(cursor);
+
+        assert!(result.is_err(), "Should fail on truncated header");
+    }
+
+    #[test]
+    fn test_truncated_header_no_offset() {
+        // Header but no IFD offset
+        let mut data = Vec::new();
+        data.extend_from_slice(b"II");
+        data.extend_from_slice(&42u16.to_le_bytes());
+        // Missing 4 bytes for IFD offset
+
+        let cursor = Cursor::new(data);
+        let result = TiffParser::new(cursor);
+
+        assert!(result.is_err(), "Should fail when IFD offset is missing");
+    }
+
+    #[test]
+    fn test_ifd_offset_past_eof() {
+        // Valid header but IFD offset points past end of file
+        let mut data = Vec::new();
+        data.extend_from_slice(b"II");
+        data.extend_from_slice(&42u16.to_le_bytes());
+        data.extend_from_slice(&1000u32.to_le_bytes()); // IFD at offset 1000, but file is only ~8 bytes
+
+        let cursor = Cursor::new(data);
+        let mut parser = TiffParser::new(cursor).unwrap();
+
+        // Parsing should fail when trying to read IFD at invalid offset
+        let result = parser.parse_ifd0();
+        assert!(result.is_err(), "Should fail when IFD offset is past EOF");
+    }
+
+    #[test]
+    fn test_truncated_ifd_entry_count() {
+        // Valid header pointing to IFD, but IFD is truncated (no entry count)
+        let mut data = Vec::new();
+        data.extend_from_slice(b"II");
+        data.extend_from_slice(&42u16.to_le_bytes());
+        data.extend_from_slice(&8u32.to_le_bytes()); // IFD at offset 8
+                                                     // File ends here - no IFD data
+
+        let cursor = Cursor::new(data);
+        let mut parser = TiffParser::new(cursor).unwrap();
+
+        let result = parser.parse_ifd0();
+        assert!(
+            result.is_err(),
+            "Should fail when IFD entry count is missing"
+        );
+    }
+
+    #[test]
+    fn test_truncated_ifd_entries() {
+        // Valid header and entry count, but entries are truncated
+        let mut data = Vec::new();
+        data.extend_from_slice(b"II");
+        data.extend_from_slice(&42u16.to_le_bytes());
+        data.extend_from_slice(&8u32.to_le_bytes()); // IFD at offset 8
+        data.extend_from_slice(&2u16.to_le_bytes()); // 2 entries expected
+                                                     // Only partial first entry (needs 12 bytes per entry)
+        data.extend_from_slice(&[0u8; 6]); // Only 6 bytes
+
+        let cursor = Cursor::new(data);
+        let mut parser = TiffParser::new(cursor).unwrap();
+
+        let result = parser.parse_ifd0();
+        assert!(
+            result.is_err(),
+            "Should fail when IFD entries are truncated"
+        );
+    }
+
+    #[test]
+    fn test_validate_complete_valid_file() {
+        // Valid minimal TIFF should pass validation
+        let data = make_minimal_tiff();
+        let cursor = Cursor::new(data);
+        let mut parser = TiffParser::new(cursor).unwrap();
+
+        let result = parser.validate_complete();
+        assert!(
+            result.is_ok(),
+            "Valid TIFF should pass validation: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_validate_complete_value_past_eof() {
+        // TIFF with an entry whose value offset points past EOF
+        let mut data = Vec::new();
+        data.extend_from_slice(b"II");
+        data.extend_from_slice(&42u16.to_le_bytes());
+        data.extend_from_slice(&8u32.to_le_bytes()); // IFD at offset 8
+
+        // IFD with 1 entry
+        data.extend_from_slice(&1u16.to_le_bytes()); // 1 entry
+
+        // Entry: tag 0x0100 (ImageWidth), type SHORT (3), count 10, offset 1000
+        data.extend_from_slice(&0x0100u16.to_le_bytes()); // tag
+        data.extend_from_slice(&3u16.to_le_bytes()); // type SHORT
+        data.extend_from_slice(&10u32.to_le_bytes()); // count (10 shorts = 20 bytes, won't fit inline)
+        data.extend_from_slice(&1000u32.to_le_bytes()); // offset past EOF
+
+        // Next IFD offset
+        data.extend_from_slice(&0u32.to_le_bytes());
+
+        let cursor = Cursor::new(data);
+        let mut parser = TiffParser::new(cursor).unwrap();
+
+        let result = parser.validate_complete();
+        assert!(
+            matches!(result, Err(RawError::OffsetOutOfBounds { .. })),
+            "Should detect value data past EOF: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_unknown_tag_preserved() {
+        // TIFF with an unknown tag should have it stored in other_tags
+        let mut data = Vec::new();
+        data.extend_from_slice(b"II");
+        data.extend_from_slice(&42u16.to_le_bytes());
+        data.extend_from_slice(&8u32.to_le_bytes()); // IFD at offset 8
+
+        // IFD with 1 entry
+        data.extend_from_slice(&1u16.to_le_bytes()); // 1 entry
+
+        // Entry: unknown tag 0xFFFF, type SHORT (3), count 1, inline value 42
+        data.extend_from_slice(&0xFFFFu16.to_le_bytes()); // unknown tag
+        data.extend_from_slice(&3u16.to_le_bytes()); // type SHORT
+        data.extend_from_slice(&1u32.to_le_bytes()); // count 1
+        data.extend_from_slice(&42u32.to_le_bytes()); // value (inline)
+
+        // Next IFD offset
+        data.extend_from_slice(&0u32.to_le_bytes());
+
+        let cursor = Cursor::new(data);
+        let mut parser = TiffParser::new(cursor).unwrap();
+
+        let ifd = parser.parse_ifd0().unwrap();
+
+        assert!(
+            ifd.other_tags.contains_key(&0xFFFF),
+            "Unknown tag should be preserved"
+        );
+        assert!(ifd.entries.is_empty(), "No known tags should be parsed");
+    }
+
+    #[test]
+    fn test_unknown_data_type_preserved() {
+        // TIFF with an unknown data type should still be stored
+        let mut data = Vec::new();
+        data.extend_from_slice(b"II");
+        data.extend_from_slice(&42u16.to_le_bytes());
+        data.extend_from_slice(&8u32.to_le_bytes()); // IFD at offset 8
+
+        // IFD with 1 entry
+        data.extend_from_slice(&1u16.to_le_bytes()); // 1 entry
+
+        // Entry: tag 0x0100 (ImageWidth), type 99 (unknown), count 1, inline value
+        data.extend_from_slice(&0x0100u16.to_le_bytes()); // known tag
+        data.extend_from_slice(&99u16.to_le_bytes()); // unknown type
+        data.extend_from_slice(&1u32.to_le_bytes()); // count 1
+        data.extend_from_slice(&42u32.to_le_bytes()); // value
+
+        // Next IFD offset
+        data.extend_from_slice(&0u32.to_le_bytes());
+
+        let cursor = Cursor::new(data);
+        let mut parser = TiffParser::new(cursor).unwrap();
+
+        let ifd = parser.parse_ifd0().unwrap();
+
+        // Entry should exist but with unknown tiff_type
+        let entry = ifd.entries.get(&TiffTag::ImageWidth);
+        assert!(entry.is_some(), "Entry should exist");
+        assert!(
+            entry.unwrap().tiff_type.is_none(),
+            "Unknown type should be None"
+        );
     }
 }

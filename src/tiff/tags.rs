@@ -89,6 +89,8 @@ pub enum TiffTag {
     ExifIFDPointer = 0x8769,
     /// Pointer to GPS IFD (0x8825)
     GPSInfoIFDPointer = 0x8825,
+    /// Print Image Matching data (0xC4B5)
+    PrintImageMatching = 0xC4B5,
 
     // ========================================
     // CFA (Color Filter Array) Tags
@@ -270,6 +272,7 @@ impl TiffTag {
             0xC740 => Some(TiffTag::OpcodeList1),
             0xC741 => Some(TiffTag::OpcodeList2),
             0xC74E => Some(TiffTag::OpcodeList3),
+            0xC4B5 => Some(TiffTag::PrintImageMatching),
             _ => None,
         }
     }
@@ -317,6 +320,7 @@ impl TiffTag {
             TiffTag::ReferenceBlackWhite => "ReferenceBlackWhite",
             TiffTag::ExifIFDPointer => "ExifIFDPointer",
             TiffTag::GPSInfoIFDPointer => "GPSInfoIFDPointer",
+            TiffTag::PrintImageMatching => "PrintImageMatching",
             TiffTag::CFARepeatPatternDim => "CFARepeatPatternDim",
             TiffTag::CFAPattern => "CFAPattern",
             TiffTag::DNGVersion => "DNGVersion",
