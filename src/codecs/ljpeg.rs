@@ -131,132 +131,87 @@ impl HuffmanTable {
     }
 }
 
-/// Bit reader for entropy-coded data
-pub struct BitPump<'a> {
-    data: &'a [u8],
-    pos: usize,
-    bits: u64,      // Bit buffer
-    bits_left: u32, // Bits remaining in buffer
-}
+// Re-export BitPump for external use
+pub use super::bit_pump::BitPump;
 
-impl<'a> BitPump<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
-        let mut pump = Self {
-            data,
-            pos: 0,
-            bits: 0,
-            bits_left: 0,
-        };
-        pump.fill();
-        pump
-    }
-
-    /// Fill the bit buffer, handling JPEG byte stuffing (FF 00 -> FF)
-    fn fill(&mut self) {
-        while self.bits_left <= 56 && self.pos < self.data.len() {
-            let byte = self.data[self.pos] as u64;
-            self.pos += 1;
-
-            // Handle byte stuffing: 0xFF followed by 0x00 means literal 0xFF
-            if byte == 0xFF && self.pos < self.data.len() {
-                let next = self.data[self.pos];
-                if next == 0x00 {
-                    self.pos += 1; // Skip the stuffed 0x00
-                } else if (0xD0..=0xD7).contains(&next) {
-                    // Restart marker - skip it
-                    self.pos += 1;
-                    continue;
-                } else if next == 0xD9 {
-                    // EOI - stop
-                    break;
-                }
-            }
-
-            self.bits = (self.bits << 8) | byte;
-            self.bits_left += 8;
-        }
-    }
-
-    /// Peek at the next n bits without consuming them
-    #[inline]
-    pub fn peek(&mut self, n: u32) -> u32 {
-        if n == 0 {
-            return 0;
-        }
-        // Ensure we have enough bits
-        while self.bits_left < n && self.pos < self.data.len() {
-            self.fill_one();
-        }
-        if self.bits_left < n {
-            // Not enough data - return what we have padded with zeros
-            return (self.bits as u32) << (n - self.bits_left);
-        }
-        ((self.bits >> (self.bits_left - n)) & ((1u64 << n) - 1)) as u32
-    }
-
-    /// Fill one byte into the bit buffer
-    fn fill_one(&mut self) {
-        if self.pos >= self.data.len() {
-            return;
-        }
-
-        let byte = self.data[self.pos] as u64;
-        self.pos += 1;
-
-        // Handle byte stuffing: 0xFF followed by 0x00 means literal 0xFF
-        if byte == 0xFF && self.pos < self.data.len() {
-            let next = self.data[self.pos];
-            if next == 0x00 {
-                self.pos += 1; // Skip the stuffed 0x00
-            } else if (0xD0..=0xD7).contains(&next) {
-                // Restart marker - skip it
-                self.pos += 1;
-                return;
-            } else if next == 0xD9 {
-                // EOI - stop filling
-                return;
-            }
-        }
-
-        self.bits = (self.bits << 8) | byte;
-        self.bits_left += 8;
-    }
-
-    /// Consume n bits
-    #[inline]
-    pub fn consume(&mut self, n: u32) {
-        if n <= self.bits_left {
-            self.bits_left -= n;
-        } else {
-            self.bits_left = 0;
-        }
-        if self.bits_left < 32 {
-            self.fill();
-        }
-    }
-
-    /// Get n bits and consume them
-    #[inline]
-    pub fn get_bits(&mut self, n: u32) -> u32 {
-        let val = self.peek(n);
-        self.consume(n);
-        val
-    }
-}
-
-/// Lossless JPEG Decoder
+/// Lossless JPEG Decoder.
+///
+/// Decodes lossless JPEG data (ITU-T T.81 Annex H / SOF3),
+/// commonly used in camera raw files like Sony ARW.
+///
+/// # Construction
+///
+/// Use the builder pattern for cleaner construction:
+/// ```ignore
+/// let pixels = LjpegDecoder::builder()
+///     .dimensions(6000, 4000)
+///     .build()
+///     .decode(&data)?;
+/// ```
+///
+/// Or the traditional methods for backward compatibility:
+/// ```ignore
+/// let mut decoder = LjpegDecoder::new();
+/// decoder.set_dimensions(6000, 4000);
+/// let pixels = decoder.decode(&data)?;
+/// ```
 pub struct LjpegDecoder {
-    pub frame: FrameInfo,
-    pub huffman_dc: [HuffmanTable; 4],
-    pub restart_interval: u16,
-    pub predictor: u8,
-    pub point_transform: u8,
+    frame: FrameInfo,
+    huffman_dc: [HuffmanTable; 4],
+    restart_interval: u16,
+    predictor: u8,
+    point_transform: u8,
     /// Real dimensions (from TIFF metadata, overrides JPEG header)
-    pub real_width: Option<u32>,
-    pub real_height: Option<u32>,
+    real_width: Option<u32>,
+    real_height: Option<u32>,
+}
+
+/// Builder for [`LjpegDecoder`].
+///
+/// Provides a fluent API for constructing an LJPEG decoder.
+#[derive(Debug, Clone, Default)]
+pub struct LjpegDecoderBuilder {
+    width: Option<u32>,
+    height: Option<u32>,
+}
+
+impl LjpegDecoderBuilder {
+    /// Create a new builder with default settings.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the output dimensions.
+    ///
+    /// These override any dimensions specified in the JPEG header.
+    /// Required when decoding Sony ARW files that have placeholder dimensions.
+    #[must_use]
+    pub fn dimensions(mut self, width: u32, height: u32) -> Self {
+        self.width = Some(width);
+        self.height = Some(height);
+        self
+    }
+
+    /// Build the decoder.
+    #[must_use]
+    pub fn build(self) -> LjpegDecoder {
+        let mut decoder = LjpegDecoder::new();
+        if let (Some(w), Some(h)) = (self.width, self.height) {
+            decoder.set_dimensions(w, h);
+        }
+        decoder
+    }
+
+    /// Build the decoder and immediately decode the provided data.
+    ///
+    /// Convenience method equivalent to `builder.build().decode(data)`.
+    pub fn decode(self, data: &[u8]) -> RawResult<Vec<u16>> {
+        self.build().decode(data)
+    }
 }
 
 impl LjpegDecoder {
+    /// Create a new decoder with default settings.
     pub fn new() -> Self {
         Self {
             frame: FrameInfo::default(),
@@ -274,10 +229,20 @@ impl LjpegDecoder {
         }
     }
 
-    /// Set real dimensions from TIFF metadata (Sony uses dummy values in JPEG header)
+    /// Create a builder for configuring a new decoder.
+    pub fn builder() -> LjpegDecoderBuilder {
+        LjpegDecoderBuilder::new()
+    }
+
+    /// Set real dimensions from TIFF metadata (Sony uses dummy values in JPEG header).
     pub fn set_dimensions(&mut self, width: u32, height: u32) {
         self.real_width = Some(width);
         self.real_height = Some(height);
+    }
+
+    /// Get the frame information (parsed from JPEG header).
+    pub fn frame_info(&self) -> &FrameInfo {
+        &self.frame
     }
 
     /// Parse JPEG markers and decode the image

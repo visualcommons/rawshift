@@ -1,53 +1,141 @@
 use crate::core::image::{CfaPattern, RawImage, RgbImage};
 
-/// Trait for demosaicing algorithms.
-pub trait DemosaicMethod {
-    /// Demosaic a raw image into an RGB image.
-    fn demosaic(&self, raw: &RawImage) -> RgbImage;
+/// Error type for demosaicing operations.
+#[derive(Debug, Clone)]
+pub enum DemosaicError {
+    /// Output buffer size does not match expected size
+    BufferSizeMismatch {
+        /// Expected buffer size in u16 elements
+        expected: usize,
+        /// Actual buffer size provided
+        actual: usize,
+    },
+    /// Invalid image dimensions
+    InvalidDimensions,
 }
 
-/// Bilinear interpolation demosaicing algorithm.
-pub struct Bilinear;
+impl std::fmt::Display for DemosaicError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DemosaicError::BufferSizeMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "buffer size mismatch: expected {} elements, got {}",
+                    expected, actual
+                )
+            }
+            DemosaicError::InvalidDimensions => write!(f, "invalid image dimensions"),
+        }
+    }
+}
 
-impl DemosaicMethod for Bilinear {
+impl std::error::Error for DemosaicError {}
+
+/// Trait for demosaicing algorithms.
+///
+/// Implementors should override [`demosaic_into`](Self::demosaic_into) as the primary method.
+/// The [`demosaic`](Self::demosaic) method provides a convenience wrapper that allocates output.
+///
+/// # Example
+///
+/// ```ignore
+/// use rawshift::processing::demosaic::{Bilinear, DemosaicMethod};
+///
+/// let demosaiced = Bilinear.demosaic(&raw_image);
+/// ```
+pub trait DemosaicMethod {
+    /// Demosaic a raw image into a pre-allocated RGB buffer.
+    ///
+    /// This is the primary method that implementors must override.
+    /// The output buffer must have exactly `width * height * 3` elements.
+    ///
+    /// # Arguments
+    /// * `raw` - The raw image to demosaic
+    /// * `output` - Pre-allocated buffer for RGB output (interleaved R, G, B, R, G, B, ...)
+    ///
+    /// # Errors
+    /// Returns [`DemosaicError::BufferSizeMismatch`] if buffer size is incorrect.
+    fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError>;
+
+    /// Demosaic a raw image into a newly allocated RGB image.
+    ///
+    /// This is a convenience wrapper that allocates the output buffer
+    /// and calls [`demosaic_into`](Self::demosaic_into).
+    #[must_use]
     fn demosaic(&self, raw: &RawImage) -> RgbImage {
         let width = raw.active_area.size.width;
         let height = raw.active_area.size.height;
-        let x_offset = raw.active_area.origin.x;
-        let y_offset = raw.active_area.origin.y;
-
-        let mut data = Vec::with_capacity((width * height * 3) as usize);
-
-        // Pre-calculate strides and bounds to avoid repeated checks in the loop
-        let raw_width = raw.size.width;
-        let raw_height = raw.size.height;
-
-        let get_raw = |x: u32, y: u32| -> u16 {
-            if x < raw_width && y < raw_height {
-                raw.data[(y as usize) * (raw_width as usize) + (x as usize)]
-            } else {
-                0
-            }
-        };
-
-        for y in 0..height {
-            for x in 0..width {
-                // Absolute coordinates in the raw image
-                let abs_x = x + x_offset;
-                let abs_y = y + y_offset;
-
-                let (r, g, b) = demosaic_pixel_bilinear(abs_x, abs_y, raw.cfa_pattern, &get_raw);
-                data.push(r);
-                data.push(g);
-                data.push(b);
-            }
-        }
-
+        let mut data = vec![0u16; (width as usize) * (height as usize) * 3];
+        self.demosaic_into(raw, &mut data)
+            .expect("demosaic_into failed with correctly sized buffer");
         RgbImage {
             width,
             height,
             data,
         }
+    }
+}
+
+/// Bilinear interpolation demosaicing algorithm.
+///
+/// A fast, simple demosaicing algorithm that interpolates missing color
+/// values using the average of neighboring pixels. This produces acceptable
+/// results for most images but may show color fringing on high-contrast edges.
+///
+/// This implementation uses rayon for parallel row processing on multi-core systems.
+pub struct Bilinear;
+
+impl DemosaicMethod for Bilinear {
+    fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
+        use rayon::prelude::*;
+
+        let width = raw.active_area.size.width;
+        let height = raw.active_area.size.height;
+        let x_offset = raw.active_area.origin.x;
+        let y_offset = raw.active_area.origin.y;
+
+        let expected_size = (width as usize) * (height as usize) * 3;
+        if output.len() != expected_size {
+            return Err(DemosaicError::BufferSizeMismatch {
+                expected: expected_size,
+                actual: output.len(),
+            });
+        }
+
+        let raw_width = raw.size.width;
+        let raw_height = raw.size.height;
+        let raw_data = &raw.data;
+        let cfa_pattern = raw.cfa_pattern;
+        let row_stride = (width as usize) * 3;
+
+        // Get raw pixel with bounds checking (closure captures raw data)
+        let get_raw = |x: u32, y: u32| -> u16 {
+            if x < raw_width && y < raw_height {
+                raw_data[(y as usize) * (raw_width as usize) + (x as usize)]
+            } else {
+                0
+            }
+        };
+
+        // Process rows in parallel
+        output
+            .par_chunks_mut(row_stride)
+            .enumerate()
+            .for_each(|(y, row_output)| {
+                let abs_y = (y as u32) + y_offset;
+
+                for x in 0..width {
+                    let abs_x = x + x_offset;
+                    let (r, g, b) = demosaic_pixel_bilinear(abs_x, abs_y, cfa_pattern, &get_raw);
+
+                    let idx = (x as usize) * 3;
+                    row_output[idx] = r;
+                    row_output[idx + 1] = g;
+                    row_output[idx + 2] = b;
+                }
+            });
+
+        Ok(())
     }
 }
 
@@ -205,3 +293,188 @@ fn avg4(a: u16, b: u16, c: u16, d: u16) -> u16 {
 }
 
 // TODO: AHD, VHG algorithms
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::image::{Point, Rect, Size};
+
+    /// Create a test raw image with given dimensions and CFA pattern.
+    fn create_test_raw(width: u32, height: u32, pattern: CfaPattern, value: u16) -> RawImage {
+        let size = Size::new(width, height);
+        let active_area = Rect::new(Point::ORIGIN, size);
+        let pixel_count = (width * height) as usize;
+        RawImage {
+            size,
+            active_area,
+            bit_depth: 14,
+            cfa_pattern: pattern,
+            black_levels: [0; 4],
+            white_level: 16383,
+            data: vec![value; pixel_count],
+        }
+    }
+
+    /// Create a raw image with a 2x2 Bayer pattern.
+    fn create_bayer_2x2(pattern: CfaPattern) -> RawImage {
+        // Create a 2x2 pattern with distinct values for each cell
+        let mut raw = create_test_raw(2, 2, pattern, 0);
+        // Set values for each pixel position
+        raw.data[0] = 1000; // (0, 0)
+        raw.data[1] = 2000; // (1, 0)
+        raw.data[2] = 3000; // (0, 1)
+        raw.data[3] = 4000; // (1, 1)
+        raw
+    }
+
+    #[test]
+    fn test_demosaic_into_correct_size() {
+        let raw = create_test_raw(10, 10, CfaPattern::Rggb, 1000);
+        let mut output = vec![0u16; 10 * 10 * 3]; // Correct size
+
+        let result = Bilinear.demosaic_into(&raw, &mut output);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_demosaic_into_wrong_size() {
+        let raw = create_test_raw(10, 10, CfaPattern::Rggb, 1000);
+        let mut output = vec![0u16; 50]; // Too small
+
+        let result = Bilinear.demosaic_into(&raw, &mut output);
+        assert!(matches!(
+            result,
+            Err(DemosaicError::BufferSizeMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_demosaic_solid_color() {
+        // A uniform input should produce roughly uniform output
+        let raw = create_test_raw(10, 10, CfaPattern::Rggb, 5000);
+        let demosaic = Bilinear;
+        let rgb = demosaic.demosaic(&raw);
+
+        assert_eq!(rgb.width, 10);
+        assert_eq!(rgb.height, 10);
+        assert_eq!(rgb.data.len(), 10 * 10 * 3);
+
+        // Interior pixels (not on edge) should be close to input value
+        // Edge pixels may have lower values due to boundary handling
+        for y in 1..9 {
+            for x in 1..9 {
+                let idx = ((y * 10 + x) * 3) as usize;
+                for c in 0..3 {
+                    let pixel = rgb.data[idx + c];
+                    assert!(
+                        pixel >= 4000 && pixel <= 5500,
+                        "Interior pixel at ({},{}) channel {} value {} out of range",
+                        x,
+                        y,
+                        c,
+                        pixel
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_demosaic_all_cfa_patterns() {
+        let patterns = [
+            CfaPattern::Rggb,
+            CfaPattern::Grbg,
+            CfaPattern::Gbrg,
+            CfaPattern::Bggr,
+        ];
+
+        for pattern in patterns {
+            let raw = create_test_raw(8, 8, pattern, 2000);
+            let rgb = Bilinear.demosaic(&raw);
+
+            assert_eq!(rgb.width, 8);
+            assert_eq!(rgb.height, 8);
+            assert_eq!(rgb.data.len(), 8 * 8 * 3);
+
+            // Verify all pixels have reasonable values
+            for pixel in &rgb.data {
+                assert!(
+                    *pixel <= 3000,
+                    "Pattern {:?}: pixel value {} too high",
+                    pattern,
+                    pixel
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_demosaic_rggb_pattern() {
+        // Test that RGGB pattern is correctly interpreted
+        let raw = create_bayer_2x2(CfaPattern::Rggb);
+        let rgb = Bilinear.demosaic(&raw);
+
+        // For RGGB, position (0,0) is Red
+        // The output should have interpolated values
+        assert_eq!(rgb.width, 2);
+        assert_eq!(rgb.height, 2);
+
+        // First pixel (0,0) - this is a Red position in RGGB
+        let r = rgb.data[0];
+        let g = rgb.data[1];
+        let _b = rgb.data[2];
+
+        // Red should be the original value (1000)
+        assert_eq!(r, 1000, "Red at RGGB position (0,0) should be 1000");
+
+        // Green should be interpolated from neighbors
+        // At (0,0), only (1,0) and (0,1) are in bounds, both at edges
+        assert!(g > 0, "Green should be interpolated");
+    }
+
+    #[test]
+    fn test_demosaic_with_active_area() {
+        // Test that active_area is respected
+        let mut raw = create_test_raw(10, 10, CfaPattern::Rggb, 1000);
+        // Set active area to only the center 4x4
+        raw.active_area = Rect::from_coords(3, 3, 4, 4);
+
+        let rgb = Bilinear.demosaic(&raw);
+
+        // Output dimensions should match active area
+        assert_eq!(rgb.width, 4);
+        assert_eq!(rgb.height, 4);
+        assert_eq!(rgb.data.len(), 4 * 4 * 3);
+    }
+
+    #[test]
+    fn test_avg2() {
+        assert_eq!(avg2(0, 0), 0);
+        assert_eq!(avg2(100, 100), 100);
+        assert_eq!(avg2(100, 200), 150);
+        assert_eq!(avg2(0, 65535), 32767);
+    }
+
+    #[test]
+    fn test_avg4() {
+        assert_eq!(avg4(0, 0, 0, 0), 0);
+        assert_eq!(avg4(100, 100, 100, 100), 100);
+        assert_eq!(avg4(0, 100, 200, 300), 150);
+        assert_eq!(avg4(0, 0, 0, 65535), 16383);
+    }
+
+    #[test]
+    fn test_demosaic_error_display() {
+        let err = DemosaicError::BufferSizeMismatch {
+            expected: 300,
+            actual: 100,
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("300"));
+        assert!(msg.contains("100"));
+
+        let err = DemosaicError::InvalidDimensions;
+        let msg = format!("{}", err);
+        assert!(msg.contains("dimension"));
+    }
+}
