@@ -15,13 +15,43 @@ pub enum EncodeOptions {
     Jxl(JxlOptions),
     /// WebP format options
     WebP(WebPOptions),
+    /// TIFF format options
+    Tiff(TiffOptions),
     /// DNG format options
     Dng(DngExportConfig),
 }
 
-impl Default for EncodeOptions {
-    fn default() -> Self {
-        EncodeOptions::Png(PngOptions::default())
+impl EncodeOptions {
+    pub fn png() -> Self {
+        Self::Png(PngOptions::default())
+    }
+
+    pub fn jpeg() -> Self {
+        Self::Jpeg(JpegOptions::default())
+    }
+
+    pub fn avif() -> Self {
+        Self::Avif(AvifOptions::default())
+    }
+
+    pub fn heic() -> Self {
+        Self::Heic(HeicOptions::default())
+    }
+
+    pub fn jxl() -> Self {
+        Self::Jxl(JxlOptions::default())
+    }
+
+    pub fn webp() -> Self {
+        Self::WebP(WebPOptions::default())
+    }
+
+    pub fn tiff() -> Self {
+        Self::Tiff(TiffOptions::default())
+    }
+
+    pub fn dng() -> Self {
+        Self::Dng(DngExportConfig::default())
     }
 }
 
@@ -79,4 +109,10 @@ pub struct WebPOptions {
     pub quality: f32,
     /// Lossless mode. Default: true
     pub lossless: bool,
+}
+
+/// Options for TIFF encoding.
+#[derive(Debug, Clone, Default)]
+pub struct TiffOptions {
+    // TODO: Add options
 }

@@ -311,14 +311,15 @@ impl<R: Read + Seek> RawFile<R> {
                 use std::io::Write;
                 file.write_all(&encoded_data)?;
             }
-            export::EncodeOptions::Dng(config) => {
-                export_dng(path.as_ref(), &rgb_image, &self.metadata(), config)?;
-            }
             export::EncodeOptions::Jpeg(_) => unimplemented!("JPEG encoding not yet implemented"),
             export::EncodeOptions::Avif(_) => unimplemented!("AVIF encoding not yet implemented"),
             export::EncodeOptions::Heic(_) => unimplemented!("HEIC encoding not yet implemented"),
             export::EncodeOptions::Jxl(_) => unimplemented!("JXL encoding not yet implemented"),
             export::EncodeOptions::WebP(_) => unimplemented!("WebP encoding not yet implemented"),
+            export::EncodeOptions::Tiff(_) => unimplemented!("TIFF encoding not yet implemented"),
+            export::EncodeOptions::Dng(config) => {
+                export_dng(path.as_ref(), &rgb_image, &self.metadata(), config)?;
+            }
         }
 
         Ok(())

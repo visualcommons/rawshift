@@ -1,5 +1,6 @@
 use clap::Parser;
 use rawshift::formats::RawFile;
+use rawshift::prelude::export::EncodeOptions;
 use rawshift::processing::{BayerAlgorithm, DemosaicMethod, ProcessingOptions};
 use std::fs::File;
 use std::io::BufReader;
@@ -8,7 +9,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Input ARW file
+    /// Input image file
     #[arg(required = true)]
     input: PathBuf,
 
@@ -54,19 +55,48 @@ impl From<DemosaicAlgoArg> for DemosaicMethod {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
+    use tracing_subscriber::prelude::*;
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::filter::LevelFilter::TRACE)
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
-    println!("Opening {:?}", args.input);
-    let file = File::open(&args.input)?;
+    let Args {
+        input,
+        output,
+        demosaic,
+        white_balance,
+        gamma,
+        no_matrix,
+    } = Args::parse();
+
+    let encode_options = match output.extension().and_then(|ext| ext.to_str()) {
+        Some("png") => EncodeOptions::png(),
+        Some("jpg") => EncodeOptions::jpeg(),
+        Some("jpeg") => EncodeOptions::jpeg(),
+        Some("avif") => EncodeOptions::avif(),
+        Some("heic") => EncodeOptions::heic(),
+        Some("jxl") => EncodeOptions::jxl(),
+        Some("webp") => EncodeOptions::webp(),
+        Some("tiff") => EncodeOptions::tiff(),
+        Some("dng") => EncodeOptions::dng(),
+        _ => panic!("Unsupported/unknown output format: {}", output.display()),
+    };
+
+    println!("Opening {:?}", input);
+    let file = File::open(&input)?;
     let reader = BufReader::new(file);
     let mut raw_file = RawFile::open(reader)?;
+    // let meta = raw.metadata();
+    // println!("Metadata: BitDepth={}", meta.image.bit_depth);
 
     let mut options = ProcessingOptions::new()
-        .demosaic(args.demosaic.into())
-        .gamma(args.gamma);
+        .demosaic(demosaic.into())
+        .gamma(gamma);
 
     // TODO: Remove white balance arg and just use what is extracted from metadata
-    if let Some(wb) = args.white_balance {
+    if let Some(wb) = white_balance {
         if wb.len() == 3 {
             println!(
                 "Using custom White Balance: {:.2}, {:.2}, {:.2}",
@@ -79,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         options = options.white_balance(2.35, 1.0, 1.65);
     }
 
-    if !args.no_matrix {
+    if !no_matrix {
         // Default generic "Neutral" matrix
         println!("Applying Color Matrix");
         #[rustfmt::skip]
@@ -93,10 +123,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Color Matrix disabled");
     }
 
-    use rawshift::formats::export::EncodeOptions;
-
-    println!("Exporting to {:?}", args.output);
-    raw_file.export(&args.output, &options, &EncodeOptions::default())?;
+    println!("Exporting to {:?}", output);
+    raw_file.export(&output, &options, &encode_options)?;
 
     println!("Done!");
     Ok(())
