@@ -181,13 +181,6 @@ impl<R: Read + Seek> DngFile<R> {
         })
     }
 
-    /// Find the IFD containing the raw image data (static version for when parser not available).
-    #[allow(dead_code)]
-    fn find_raw_ifd(_ifds: &[Ifd]) -> (Option<usize>, Option<(usize, usize)>) {
-        // This method is deprecated - use find_raw_ifd_with_parser instead
-        (None, None)
-    }
-
     /// Get the raw IFD.
     fn raw_ifd(&self) -> Option<&Ifd> {
         if let Some((parent_idx, sub_idx)) = self.raw_is_subifd {

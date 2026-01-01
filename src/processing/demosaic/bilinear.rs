@@ -64,6 +64,7 @@ impl Demosaic for Bilinear {
 }
 
 /// Interpolates a single pixel using bilinear interpolation.
+/// `get_raw`: (x: u32, y: u32) -> <raw pixel value>: u16
 fn demosaic_pixel_bilinear<F>(x: u32, y: u32, pattern: CfaPattern, get_raw: &F) -> (u16, u16, u16)
 where
     F: Fn(u32, u32) -> u16,
@@ -119,7 +120,7 @@ where
                     if matches!(pattern, CfaPattern::Rggb) {
                         (
                             avg2(get_raw(x, y.saturating_sub(1)), get_raw(x, y + 1)),
-                            avg2(get_raw(x.saturating_sub(1), y), get_raw(x, y + 1)),
+                            avg2(get_raw(x.saturating_sub(1), y), get_raw(x + 1, y)),
                         )
                     } else {
                         (

@@ -79,7 +79,7 @@ impl<R: Read + Seek> RawFile<R> {
     /// 6. Apply Gamma Correction (if specified)
     /// 7. Save to disk using format-specific encoder
     #[instrument(
-        skip(self), 
+        skip(self),
         fields(
             path = %path.as_ref().display(),
             process = ?processing_options,
@@ -104,11 +104,11 @@ impl<R: Read + Seek> RawFile<R> {
             let RawFile::Dng(dng) = self else {
                 unreachable!()
             };
-            
+
             let metadata = dng.metadata();
             let bit_depth = metadata.map(|m| m.bit_depth).unwrap_or(16);
             let linearization_table = metadata.and_then(|m| m.linearization_table.as_ref());
-            
+
             // Determine if the data is already scaled to 16-bit based on LinearizationTable
             let is_scaled_by_table = if let Some(table) = linearization_table {
                 if !table.is_empty() {
@@ -124,7 +124,7 @@ impl<R: Read + Seek> RawFile<R> {
             } else {
                 false
             };
-            
+
             let mut image = dng.decode_linear_raw()?;
 
             // Normalize to 16-bit
@@ -135,7 +135,11 @@ impl<R: Read + Seek> RawFile<R> {
             };
 
             if shift > 0 {
-                tracing::debug!("Scaling {}-bit linear data to 16-bit (shift: {})", bit_depth, shift);
+                tracing::debug!(
+                    "Scaling {}-bit linear data to 16-bit (shift: {})",
+                    bit_depth,
+                    shift
+                );
                 for pixel in &mut image.data {
                     let val = (*pixel as u32) << shift;
                     *pixel = val.min(65535) as u16;
@@ -170,11 +174,11 @@ impl<R: Read + Seek> RawFile<R> {
             // Demosaic
             let demosaic_impl = processing_options.demosaic.to_demosaic();
             let mut rgb = demosaic_impl.demosaic(&raw_image);
-            
+
             // Transfer metadata
             rgb.baseline_exposure = raw_image.baseline_exposure;
             rgb.default_crop = raw_image.default_crop;
-            
+
             rgb
         };
 
@@ -184,12 +188,16 @@ impl<R: Read + Seek> RawFile<R> {
         // Apply Baseline Exposure
         if let Some(exposure) = rgb_image.baseline_exposure {
             // Exposure adjustment in EV. Gain = 2^exposure.
-            // Negative exposure (e.g. -0.8) means we need to apply gain < 1.0 (darken)? 
-            // Or usually BaselineExposure is a correction factor to applied: 
+            // Negative exposure (e.g. -0.8) means we need to apply gain < 1.0 (darken)?
+            // Or usually BaselineExposure is a correction factor to applied:
             // "adjustment ... to match the baseline exposure".
             // Typically means multiplying the linear values by 2^exposure.
             let gain = 2.0f32.powf(exposure);
-            tracing::trace!("Applying baseline exposure gain: {:.4} (EV: {:.2})", gain, exposure);
+            tracing::trace!(
+                "Applying baseline exposure gain: {:.4} (EV: {:.2})",
+                gain,
+                exposure
+            );
             for pixel in &mut rgb_image.data {
                 *pixel = clamp_u16(*pixel as f32 * gain);
             }
@@ -197,24 +205,29 @@ impl<R: Read + Seek> RawFile<R> {
 
         // Apply Crop
         if let Some(crop) = rgb_image.default_crop {
-             let x = crop.origin.x as usize;
-             let y = crop.origin.y as usize;
-             let w = crop.size.width as usize;
-             let h = crop.size.height as usize;
-             
-             if x + w <= rgb_image.width as usize && y + h <= rgb_image.height as usize {
-                 tracing::trace!("Cropping to default crop: {}x{} at {},{}", w, h, x, y);
-                 let mut new_data = Vec::with_capacity(w * h * 3);
-                 for row in 0..h {
-                     let src_base = ((y + row) * rgb_image.width as usize + x) * 3;
-                     new_data.extend_from_slice(&rgb_image.data[src_base..src_base + w * 3]);
-                 }
-                 rgb_image.width = w as u32;
-                 rgb_image.height = h as u32;
-                 rgb_image.data = new_data;
-             } else {
-                  tracing::warn!("Default crop out of bounds: {:?} vs {}x{}", crop, rgb_image.width, rgb_image.height);
-             }
+            let x = crop.origin.x as usize;
+            let y = crop.origin.y as usize;
+            let w = crop.size.width as usize;
+            let h = crop.size.height as usize;
+
+            if x + w <= rgb_image.width as usize && y + h <= rgb_image.height as usize {
+                tracing::trace!("Cropping to default crop: {}x{} at {},{}", w, h, x, y);
+                let mut new_data = Vec::with_capacity(w * h * 3);
+                for row in 0..h {
+                    let src_base = ((y + row) * rgb_image.width as usize + x) * 3;
+                    new_data.extend_from_slice(&rgb_image.data[src_base..src_base + w * 3]);
+                }
+                rgb_image.width = w as u32;
+                rgb_image.height = h as u32;
+                rgb_image.data = new_data;
+            } else {
+                tracing::warn!(
+                    "Default crop out of bounds: {:?} vs {}x{}",
+                    crop,
+                    rgb_image.width,
+                    rgb_image.height
+                );
+            }
         }
 
         // White Balance
@@ -226,8 +239,12 @@ impl<R: Read + Seek> RawFile<R> {
                 // Multipliers are 1/x normalized to Green=1.0 usually, or just 1/x.
                 // We'll just use 1/x.
                 if neutral[0] > 0.0 && neutral[1] > 0.0 && neutral[2] > 0.0 {
-                     tracing::trace!("Using AsShotNeutral from metadata: {:?}", neutral);
-                     return Some((1.0 / neutral[0] as f32, 1.0 / neutral[1] as f32, 1.0 / neutral[2] as f32));
+                    tracing::trace!("Using AsShotNeutral from metadata: {:?}", neutral);
+                    return Some((
+                        1.0 / neutral[0] as f32,
+                        1.0 / neutral[1] as f32,
+                        1.0 / neutral[2] as f32,
+                    ));
                 }
             }
             None
@@ -247,7 +264,7 @@ impl<R: Read + Seek> RawFile<R> {
         // Gamma Correction
         // Default to sRGB (2.2) if not specified, especially for display formats like PNG
         let gamma = processing_options.gamma.or(Some(2.2)); // TODO: See if this is correct
-        
+
         if let Some(g) = gamma {
             tracing::trace!("Applying gamma: {}", g);
             apply_gamma(&mut rgb_image, g);
@@ -255,12 +272,12 @@ impl<R: Read + Seek> RawFile<R> {
 
         // 3. Save to Disk
         tracing::info!("Encoding image to disk: {:?}", path.as_ref());
-        
+
         match encode_options {
             export::EncodeOptions::Png(opts) => {
-                use zune_png::PngEncoder;
-                use zune_core::options::EncoderOptions;
                 use zune_core::colorspace::ColorSpace;
+                use zune_core::options::EncoderOptions;
+                use zune_png::PngEncoder;
 
                 // Configure options
                 let options = EncoderOptions::default()
@@ -271,24 +288,24 @@ impl<R: Read + Seek> RawFile<R> {
 
                 // Prepare data (Big Endian for 16-bit PNG)
                 let data_bytes = if opts.bit_depth == zune_core::bit_depth::BitDepth::Sixteen {
-                     let mut bytes = Vec::with_capacity(rgb_image.data.len() * 2);
-                     for &pixel in &rgb_image.data {
-                         bytes.extend_from_slice(&pixel.to_be_bytes());
-                     }
-                     bytes
+                    let mut bytes = Vec::with_capacity(rgb_image.data.len() * 2);
+                    for &pixel in &rgb_image.data {
+                        bytes.extend_from_slice(&pixel.to_be_bytes());
+                    }
+                    bytes
                 } else {
                     // 8-bit downscaling
-                     let mut bytes = Vec::with_capacity(rgb_image.data.len());
-                     for &pixel in &rgb_image.data {
-                         bytes.push((pixel >> 8) as u8);
-                     }
-                     bytes
+                    let mut bytes = Vec::with_capacity(rgb_image.data.len());
+                    for &pixel in &rgb_image.data {
+                        bytes.push((pixel >> 8) as u8);
+                    }
+                    bytes
                 };
 
                 // Encode
                 let mut encoder = PngEncoder::new(&data_bytes, options);
                 let encoded_data = encoder.encode();
-                
+
                 // Write to file
                 let mut file = std::fs::File::create(path.as_ref())?;
                 use std::io::Write;
@@ -308,7 +325,7 @@ impl<R: Read + Seek> RawFile<R> {
     }
 
     /// Helper to check if the current file is a LinearRaw DNG
-    fn is_linear_raw_dng(&self) -> bool {
+    pub fn is_linear_raw_dng(&self) -> bool {
         match self {
             RawFile::Dng(dng) => dng.metadata().map(|m| m.is_linear_raw).unwrap_or(false),
             _ => false,

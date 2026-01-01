@@ -119,13 +119,13 @@ impl<R: Read + Seek> ArwFile<R> {
     }
 
     /// Get the raw SubIFD.
-    pub fn raw_ifd(&self) -> Option<&Ifd> {
+    fn raw_ifd(&self) -> Option<&Ifd> {
         self.raw_ifd_index
             .map(|(ifd_idx, sub_idx)| &self.ifds[ifd_idx].sub_ifds[sub_idx])
     }
 
     /// Get the main IFD (IFD0).
-    pub fn ifd0(&self) -> Option<&Ifd> {
+    fn ifd0(&self) -> Option<&Ifd> {
         self.ifds.first()
     }
 
@@ -367,6 +367,9 @@ impl<R: Read + Seek> ArwFile<R> {
         Ok(())
     }
 
+    /// Read raw data as a byte vector.
+    ///
+    /// This retrieves the compressed raw data stream from the file.
     pub fn read_raw_data(&mut self) -> RawResult<Vec<u8>> {
         let metadata = self
             .metadata
