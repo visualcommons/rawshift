@@ -638,10 +638,23 @@ impl<R: Read + Seek> DngFile<R> {
                 .unwrap_or(Rect::from_coords(0, 0, width as u32, height as u32));
         let cfa_pattern = metadata.cfa_pattern.unwrap_or(CfaPattern::Rggb);
 
+        // If linearization table is applied, the effective bit depth is usually 16-bit
+        // (or determined by the table). We'll assume 16-bit to avoid double scaling later.
+        let output_bit_depth = if metadata
+            .linearization_table
+            .as_ref()
+            .map(|t| !t.is_empty())
+            .unwrap_or(false)
+        {
+            16
+        } else {
+            metadata.bit_depth
+        };
+
         let mut raw_image = RawImage {
             size: metadata.sensor_size,
             active_area,
-            bit_depth: metadata.bit_depth,
+            bit_depth: output_bit_depth,
             cfa_pattern,
             black_levels: [
                 metadata.black_levels.first().copied().unwrap_or(0) as u16,

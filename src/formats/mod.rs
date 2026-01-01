@@ -105,11 +105,24 @@ impl<R: Read + Seek> RawFile<R> {
                 unreachable!()
             };
             
-            let bit_depth = dng.metadata().map(|m| m.bit_depth).unwrap_or(16);
+            let metadata = dng.metadata();
+            let bit_depth = metadata.map(|m| m.bit_depth).unwrap_or(16);
+            let has_linearization_table = metadata
+                .and_then(|m| m.linearization_table.as_ref())
+                .map(|t| !t.is_empty())
+                .unwrap_or(false);
+            
             let mut image = dng.decode_linear_raw()?;
 
             // Normalize to 16-bit
-            let shift = 16u8.saturating_sub(bit_depth);
+            // If linearization table is applied, values are already mapped (likely to 16-bit).
+            // So we skip shifting if a table was present.
+            let shift = if has_linearization_table {
+                0
+            } else {
+                16u8.saturating_sub(bit_depth)
+            };
+
             if shift > 0 {
                 tracing::debug!("Scaling {}-bit linear data to 16-bit", bit_depth);
                 for pixel in &mut image.data {
