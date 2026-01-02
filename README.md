@@ -52,7 +52,6 @@ Here is the list of formats that are being worked on in order of priority:
 
 Note on encoding support: For formats that we do not support encoding, you may still take the decoded pixel data and metadata, and encode it with your own encoding logic.
 
-
 ## Official supported device list
 
 *A device is officially supported if we have thoroughly tested compatibility for it.*
@@ -62,8 +61,8 @@ Note on encoding support: For formats that we do not support encoding, you may s
 | Sony A7RV (ILCE-7RM5)  | ARW             |       |
 | Sony A7IV (ILCE-7M4)   | ARW             |       |
 | Sony a6700 (ILCE-6700) | ARW             |       |
-| iPhone 13 Pro (Max)    | DNG, HEIC, JPEG |
-| iPhone 16 Pro (Max)    | DNG, HEIC, JXL  |
+| iPhone 13 Pro (Max)    | DNG, HEIC, JPEG |       |
+| iPhone 16 Pro (Max)    | DNG, HEIC, JXL  |       |
 
 ## MSRV
 
@@ -83,6 +82,7 @@ cargo test --features=serde
 
 - Stateless: The library should assume nothing about the state to support portability and parallelization.
 - Separation of IO and CPU: Writing good IO-heavy and CPU-heavy code can be tough in different ways so we separate it where possible to simplify benching.
+- Reinvent the wheel only when necessary: We should aim to use existing mature libraries for functionality; but often there are libraries that are either: lacking low-level features, non-performant for specific use cases, or insufficiently mature.
 
 #### Safety Boundaries
 
