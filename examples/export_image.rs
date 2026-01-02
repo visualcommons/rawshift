@@ -107,9 +107,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             options = options.white_balance(wb[0], wb[1], wb[2]);
         }
-    } else {
-        println!("Using default Daylight White Balance");
-        options = options.white_balance(2.35, 1.0, 1.65);
     }
 
     if !no_matrix {

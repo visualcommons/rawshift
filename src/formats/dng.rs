@@ -346,11 +346,15 @@ impl<R: Read + Seek> DngFile<R> {
         let color_matrix1 = self.extract_matrix(&ifd0, TiffTag::ColorMatrix1)?;
         let color_matrix2 = self.extract_matrix(&ifd0, TiffTag::ColorMatrix2)?;
 
-        // Extract as-shot neutral
-        let as_shot_neutral = self.extract_triplet(&ifd0, TiffTag::AsShotNeutral)?;
+        // Extract as-shot neutral (check IFD0 first, then Raw IFD)
+        let as_shot_neutral = self
+            .extract_triplet(&ifd0, TiffTag::AsShotNeutral)?
+            .or(self.extract_triplet(&raw_ifd, TiffTag::AsShotNeutral)?);
 
-        // Extract analog balance
-        let analog_balance = self.extract_triplet(&ifd0, TiffTag::AnalogBalance)?;
+        // Extract analog balance (check IFD0 first, then Raw IFD)
+        let analog_balance = self
+            .extract_triplet(&ifd0, TiffTag::AnalogBalance)?
+            .or(self.extract_triplet(&raw_ifd, TiffTag::AnalogBalance)?);
 
         // Extract black levels
         let black_levels = if let Some(entry) = raw_ifd.get(TiffTag::BlackLevel) {

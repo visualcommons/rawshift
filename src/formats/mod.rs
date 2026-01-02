@@ -248,6 +248,13 @@ impl<R: Read + Seek> RawFile<R> {
                     ));
                 }
             }
+
+            if !self.is_linear_raw_dng() {
+                tracing::warn!(
+                    "No white balance metadata found. Image may appear green (unbalanced)."
+                );
+            }
+
             None
         });
 
