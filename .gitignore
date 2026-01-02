@@ -8,3 +8,6 @@ test_fixtures/
 *.png
 *.jpeg
 *.jpg
+*.avif
+*.jxl
+*.dng

@@ -7,17 +7,14 @@ pub enum EncodeOptions {
     Png(PngOptions),
     /// JPEG format options
     Jpeg(JpegOptions),
-    /// AVIF format options
-    Avif(AvifOptions),
-    /// HEIC format options
-    #[cfg(feature = "heic")]
-    Heic(HeicOptions),
-    /// JPEG XL format options
-    Jxl(JxlOptions),
     /// WebP format options
     WebP(WebPOptions),
-    /// TIFF format options
-    Tiff(TiffOptions),
+    /// AVIF format options (requires `avif` feature)
+    #[cfg(feature = "avif")]
+    Avif(AvifOptions),
+    /// JPEG XL format options (requires `jxl-encode` feature)
+    #[cfg(feature = "jxl-encode")]
+    Jxl(JxlOptions),
     /// DNG format options
     Dng(DngExportConfig),
 }
@@ -31,25 +28,18 @@ impl EncodeOptions {
         Self::Jpeg(JpegOptions::default())
     }
 
-    pub fn avif() -> Self {
-        Self::Avif(AvifOptions::default())
-    }
-
-    #[cfg(feature = "heic")]
-    pub fn heic() -> Self {
-        Self::Heic(HeicOptions::default())
-    }
-
-    pub fn jxl() -> Self {
-        Self::Jxl(JxlOptions::default())
-    }
-
     pub fn webp() -> Self {
         Self::WebP(WebPOptions::default())
     }
 
-    pub fn tiff() -> Self {
-        Self::Tiff(TiffOptions::default())
+    #[cfg(feature = "avif")]
+    pub fn avif() -> Self {
+        Self::Avif(AvifOptions::default())
+    }
+
+    #[cfg(feature = "jxl-encode")]
+    pub fn jxl() -> Self {
+        Self::Jxl(JxlOptions::default())
     }
 
     pub fn dng() -> Self {
@@ -93,44 +83,6 @@ impl Default for JpegOptions {
     }
 }
 
-/// Options for AVIF encoding.
-#[derive(Debug, Clone)]
-pub struct AvifOptions {
-    /// Quality (1-100). Default: 80
-    pub quality: u8,
-    /// Speed (0-10). Default: 6
-    pub speed: u8,
-    /// Whether to embed EXIF metadata. Default: true
-    pub embed_exif: bool,
-}
-
-impl Default for AvifOptions {
-    fn default() -> Self {
-        Self {
-            quality: 80,
-            speed: 6,
-            embed_exif: true,
-        }
-    }
-}
-
-/// Options for HEIC encoding.
-#[cfg(feature = "heic")]
-#[derive(Debug, Clone, Default)]
-pub struct HeicOptions {
-    /// Quality (1-100). Default: 80
-    pub quality: u8,
-}
-
-/// Options for JPEG XL encoding.
-#[derive(Debug, Clone, Default)]
-pub struct JxlOptions {
-    /// Quality (1-100, or 0 for lossless). Default: 0 (Lossless)
-    pub quality: f32,
-    /// Effort (1-9). Default: 7
-    pub effort: u8,
-}
-
 /// Options for WebP encoding.
 #[derive(Debug, Clone)]
 pub struct WebPOptions {
@@ -155,8 +107,48 @@ impl Default for WebPOptions {
     }
 }
 
-/// Options for TIFF encoding.
-#[derive(Debug, Clone, Default)]
-pub struct TiffOptions {
-    // TODO: Add options
+/// Options for AVIF encoding (requires `avif` feature).
+#[cfg(feature = "avif")]
+#[derive(Debug, Clone)]
+pub struct AvifOptions {
+    /// Quality (0-100, lower is better). Default: 80
+    pub quality: u8,
+    /// Speed (1-10, higher is faster). Default: 6
+    pub speed: u8,
+    /// Whether to embed EXIF metadata. Default: true
+    pub embed_exif: bool,
+}
+
+#[cfg(feature = "avif")]
+impl Default for AvifOptions {
+    fn default() -> Self {
+        Self {
+            quality: 80,
+            speed: 6,
+            embed_exif: true,
+        }
+    }
+}
+
+/// Options for JPEG XL encoding (requires `jxl-encode` feature).
+#[cfg(feature = "jxl-encode")]
+#[derive(Debug, Clone)]
+pub struct JxlOptions {
+    /// Quality (0.0-100.0, 0 for lossless). Default: 0.0 (lossless)
+    pub quality: f32,
+    /// Effort (1-9, higher is slower). Default: 7
+    pub effort: u8,
+    /// Whether to embed EXIF metadata. Default: true
+    pub embed_exif: bool,
+}
+
+#[cfg(feature = "jxl-encode")]
+impl Default for JxlOptions {
+    fn default() -> Self {
+        Self {
+            quality: 0.0,
+            effort: 7,
+            embed_exif: true,
+        }
+    }
 }

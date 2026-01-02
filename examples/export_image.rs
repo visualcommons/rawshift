@@ -13,7 +13,7 @@ struct Args {
     #[arg(required = true)]
     input: PathBuf,
 
-    /// Output image path (extension determines format: png, jpg, tiff)
+    /// Output image path (extension determines format: png, jpg, webp, avif, jxl, dng)
     #[arg(required = true)]
     output: PathBuf,
 
@@ -73,15 +73,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let encode_options = match output.extension().and_then(|ext| ext.to_str()) {
         Some("png") => EncodeOptions::png(),
-        Some("jpg") => EncodeOptions::jpeg(),
-        Some("jpeg") => EncodeOptions::jpeg(),
-        Some("avif") => EncodeOptions::avif(),
-        #[cfg(feature = "heic")]
-        Some("heic") => EncodeOptions::heic(),
-        Some("jxl") => EncodeOptions::jxl(),
+        Some("jpg") | Some("jpeg") => EncodeOptions::jpeg(),
         Some("webp") => EncodeOptions::webp(),
-        Some("tiff") => EncodeOptions::tiff(),
-        Some("dng") => EncodeOptions::dng(),
+        #[cfg(feature = "avif")]
+        Some("avif") => EncodeOptions::avif(),
+        #[cfg(feature = "jxl-encode")]
+        Some("jxl") => EncodeOptions::jxl(),
+
+        #[cfg(not(feature = "jxl-encode"))]
+        Some("jxl") => panic!(
+            "JXL support requires the 'jxl-encode' feature. Compile with --features jxl-encode"
+        ),
         _ => panic!("Unsupported/unknown output format: {}", output.display()),
     };
 

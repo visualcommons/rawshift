@@ -264,6 +264,24 @@ impl<'a> ExifBuilder<'a> {
         webp.encoder().write_to(&mut output)?;
         Ok(output.into_inner())
     }
+
+    /// Append EXIF metadata to existing AVIF file.
+    ///
+    /// Uses little_exif's native HEIF support (AVIF uses the HEIF/ISOBMFF container).
+    pub fn append_to_avif_file(&self, path: &std::path::Path) -> Result<(), ExifError> {
+        let exif = self.build();
+        exif.write_to_file(path)
+            .map_err(|e| ExifError::Container(format!("AVIF EXIF embedding failed: {}", e)))
+    }
+
+    /// Append EXIF metadata to existing JXL file.
+    ///
+    /// Uses little_exif's native JXL support.
+    pub fn append_to_jxl_file(&self, path: &std::path::Path) -> Result<(), ExifError> {
+        let exif = self.build();
+        exif.write_to_file(path)
+            .map_err(|e| ExifError::Container(format!("JXL EXIF embedding failed: {}", e)))
+    }
 }
 
 #[cfg(test)]

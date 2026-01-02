@@ -4,10 +4,7 @@
 //! exported images when the corresponding options are enabled.
 //! These tests use actual RAW files via RawFile::export().
 
-use rawshift::formats::export::{
-    AvifOptions, EncodeOptions, HeicOptions, JpegOptions, JxlOptions, PngOptions, TiffOptions,
-    WebPOptions,
-};
+use rawshift::formats::export::{EncodeOptions, JpegOptions, PngOptions, WebPOptions};
 use rawshift::formats::RawFile;
 use rawshift::processing::ProcessingOptions;
 use std::fs::{self, File};
@@ -387,13 +384,29 @@ mod png_tests {
 }
 
 // ============================================================================
-// TODO: Unimplemented Format Tests
+// AVIF Export Tests (requires 'avif' feature)
 // ============================================================================
 
-// TODO: AVIF export tests
-// Uncomment when AVIF encoding is implemented with ravif
+#[cfg(feature = "avif")]
 mod avif_tests {
     use super::*;
+    use rawshift::formats::export::AvifOptions;
+
+    /// Check if AVIF data contains EXIF metadata
+    /// AVIF uses ISOBMFF container, EXIF is typically in 'Exif' box or within meta box
+    fn avif_has_exif(data: &[u8]) -> bool {
+        // Search for 'Exif' box type in the ISOBMFF container
+        for i in 0..data.len().saturating_sub(8) {
+            if &data[i..i + 4] == b"Exif" {
+                return true;
+            }
+            // Also check for 'exif' lowercase variant
+            if &data[i..i + 4] == b"exif" {
+                return true;
+            }
+        }
+        false
+    }
 
     #[test]
     fn test_avif_options_default() {
@@ -403,82 +416,189 @@ mod avif_tests {
         assert!(opts.embed_exif);
     }
 
-    // TODO: Uncomment when AVIF encoding is implemented
-    // #[test]
-    // fn test_avif_export_with_exif() {
-    //     let mut raw = open_test_raw();
-    //     let path = temp_path("export.avif");
-    //     let opts = AvifOptions { quality: 80, speed: 6, embed_exif: true };
-    //     raw.export(&path, &ProcessingOptions::default(), &EncodeOptions::Avif(opts))
-    //         .expect("Export AVIF");
-    //     // Verify EXIF in AVIF container...
-    //     fs::remove_file(&path).ok();
-    // }
-}
-
-// TODO: HEIC export tests
-#[cfg(feature = "heic")]
-mod heic_tests {
-    use super::*;
-
     #[test]
-    fn test_heic_options_default() {
-        let _opts = HeicOptions::default();
-        // HEIC encoding not implemented
+    fn test_avif_export_basic() {
+        let mut raw = open_test_raw();
+        let path = temp_path("export_basic.avif");
+
+        raw.export(&path, &ProcessingOptions::default(), &EncodeOptions::avif())
+            .expect("Export AVIF");
+
+        // Verify file was created
+        assert!(path.exists(), "AVIF file should exist");
+
+        let data = fs::read(&path).expect("Read AVIF");
+        assert!(data.len() > 12, "AVIF should not be empty");
+
+        // AVIF is based on ISOBMFF, check for ftyp box
+        // First 4 bytes are size, next 4 are 'ftyp'
+        assert_eq!(&data[4..8], b"ftyp", "Should have ISOBMFF ftyp box");
+
+        fs::remove_file(&path).ok();
     }
 
-    // TODO: Uncomment when HEIC encoding is implemented
-    // #[test]
-    // fn test_heic_export_basic() {
-    //     let mut raw = open_test_raw();
-    //     let path = temp_path("export.heic");
-    //     raw.export(&path, &ProcessingOptions::default(), &EncodeOptions::heic())
-    //         .expect("Export HEIC");
-    //     fs::remove_file(&path).ok();
-    // }
+    #[test]
+    fn test_avif_export_with_exif_enabled() {
+        let mut raw = open_test_raw();
+        let path = temp_path("export_with_exif.avif");
+
+        let opts = AvifOptions {
+            quality: 80,
+            speed: 6,
+            embed_exif: true,
+        };
+
+        raw.export(
+            &path,
+            &ProcessingOptions::default(),
+            &EncodeOptions::Avif(opts),
+        )
+        .expect("Export AVIF");
+
+        assert!(path.exists(), "AVIF file should exist");
+
+        let data = fs::read(&path).expect("Read AVIF");
+        assert!(avif_has_exif(&data), "AVIF should contain EXIF metadata");
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_avif_export_without_exif() {
+        let mut raw = open_test_raw();
+        let path = temp_path("export_no_exif.avif");
+
+        let opts = AvifOptions {
+            quality: 80,
+            speed: 6,
+            embed_exif: false,
+        };
+
+        raw.export(
+            &path,
+            &ProcessingOptions::default(),
+            &EncodeOptions::Avif(opts),
+        )
+        .expect("Export AVIF");
+
+        let data = fs::read(&path).expect("Read AVIF");
+        assert!(!avif_has_exif(&data), "AVIF should NOT contain EXIF");
+
+        fs::remove_file(&path).ok();
+    }
 }
 
-// TODO: JXL export tests
+// ============================================================================
+// JXL Export Tests (requires 'jxl-encode' feature)
+// ============================================================================
+
+#[cfg(feature = "jxl-encode")]
 mod jxl_tests {
     use super::*;
+    use rawshift::formats::export::JxlOptions;
+
+    /// Check if JXL data contains EXIF metadata
+    /// JXL container format stores EXIF in 'Exif' boxes
+    fn jxl_has_exif(data: &[u8]) -> bool {
+        // JXL container format: look for 'Exif' box type
+        for i in 0..data.len().saturating_sub(8) {
+            if &data[i..i + 4] == b"Exif" {
+                return true;
+            }
+            // Also check lowercase
+            if &data[i..i + 4] == b"exif" {
+                return true;
+            }
+        }
+        false
+    }
 
     #[test]
     fn test_jxl_options_default() {
-        let _opts = JxlOptions::default();
-        // JXL encoding not implemented
+        let opts = JxlOptions::default();
+        assert_eq!(opts.quality, 0.0); // Lossless
+        assert_eq!(opts.effort, 7);
+        assert!(opts.embed_exif);
     }
-
-    // TODO: Uncomment when JXL encoding is implemented
-    // #[test]
-    // fn test_jxl_export_with_exif() {
-    //     let mut raw = open_test_raw();
-    //     let path = temp_path("export.jxl");
-    //     raw.export(&path, &ProcessingOptions::default(), &EncodeOptions::jxl())
-    //         .expect("Export JXL");
-    //     // JXL supports EXIF in boxes
-    //     fs::remove_file(&path).ok();
-    // }
-}
-
-// TODO: TIFF export tests
-mod tiff_tests {
-    use super::*;
 
     #[test]
-    fn test_tiff_options_default() {
-        let _opts = TiffOptions::default();
-        // TIFF encoding not implemented
+    fn test_jxl_export_basic() {
+        let mut raw = open_test_raw();
+        let path = temp_path("export_basic.jxl");
+
+        raw.export(&path, &ProcessingOptions::default(), &EncodeOptions::jxl())
+            .expect("Export JXL");
+
+        // Verify file was created
+        assert!(path.exists(), "JXL file should exist");
+
+        let data = fs::read(&path).expect("Read JXL");
+        assert!(data.len() > 4, "JXL should not be empty");
+
+        // JXL signature: FF 0A (naked codestream) or 00 00 00 0C (container)
+        let is_naked = data[0] == 0xFF && data[1] == 0x0A;
+        let is_container = &data[0..4] == &[0x00, 0x00, 0x00, 0x0C];
+        assert!(
+            is_naked || is_container,
+            "Should have JXL signature: {:02X} {:02X} {:02X} {:02X}",
+            data[0],
+            data[1],
+            data[2],
+            data[3]
+        );
+
+        fs::remove_file(&path).ok();
     }
 
-    // TODO: Uncomment when TIFF encoding is implemented
-    // #[test]
-    // fn test_tiff_export_basic() {
-    //     let mut raw = open_test_raw();
-    //     let path = temp_path("export.tiff");
-    //     raw.export(&path, &ProcessingOptions::default(), &EncodeOptions::tiff())
-    //         .expect("Export TIFF");
-    //     fs::remove_file(&path).ok();
-    // }
+    #[test]
+    fn test_jxl_export_with_exif_enabled() {
+        let mut raw = open_test_raw();
+        let path = temp_path("export_with_exif.jxl");
+
+        let opts = JxlOptions {
+            quality: 90.0,
+            effort: 4,
+            embed_exif: true,
+        };
+
+        raw.export(
+            &path,
+            &ProcessingOptions::default(),
+            &EncodeOptions::Jxl(opts),
+        )
+        .expect("Export JXL");
+
+        assert!(path.exists(), "JXL file should exist");
+
+        let data = fs::read(&path).expect("Read JXL");
+        assert!(jxl_has_exif(&data), "JXL should contain EXIF metadata");
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_jxl_export_without_exif() {
+        let mut raw = open_test_raw();
+        let path = temp_path("export_no_exif.jxl");
+
+        let opts = JxlOptions {
+            quality: 90.0,
+            effort: 4,
+            embed_exif: false,
+        };
+
+        raw.export(
+            &path,
+            &ProcessingOptions::default(),
+            &EncodeOptions::Jxl(opts),
+        )
+        .expect("Export JXL");
+
+        let data = fs::read(&path).expect("Read JXL");
+        assert!(!jxl_has_exif(&data), "JXL should NOT contain EXIF");
+
+        fs::remove_file(&path).ok();
+    }
 }
 
 // ============================================================================
@@ -492,12 +612,11 @@ mod encode_options_tests {
     fn test_encode_options_constructors() {
         let _ = EncodeOptions::png();
         let _ = EncodeOptions::jpeg();
-        let _ = EncodeOptions::avif();
-        #[cfg(feature = "heic")]
-        let _ = EncodeOptions::heic();
-        let _ = EncodeOptions::jxl();
         let _ = EncodeOptions::webp();
-        let _ = EncodeOptions::tiff();
+        #[cfg(feature = "avif")]
+        let _ = EncodeOptions::avif();
+        #[cfg(feature = "jxl-encode")]
+        let _ = EncodeOptions::jxl();
         let _ = EncodeOptions::dng();
     }
 
@@ -516,13 +635,5 @@ mod encode_options_tests {
         assert!(opts.lossless, "WebP should be lossless by default");
         assert!(opts.embed_exif, "WebP should embed EXIF by default");
         assert!(opts.embed_icc, "WebP should embed ICC by default");
-    }
-
-    #[test]
-    fn test_avif_options_defaults() {
-        let opts = AvifOptions::default();
-        assert_eq!(opts.quality, 80, "AVIF default quality should be 80");
-        assert_eq!(opts.speed, 6, "AVIF default speed should be 6");
-        assert!(opts.embed_exif, "AVIF should embed EXIF by default");
     }
 }

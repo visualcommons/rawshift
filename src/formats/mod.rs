@@ -16,6 +16,7 @@ use crate::error::{RawError, RawResult};
 use crate::processing::color::{apply_color_matrix, apply_gamma, apply_white_balance, clamp_u16};
 use crate::processing::ProcessingOptions;
 use crate::tiff::{TiffParser, TiffTag};
+use export::EncodeOptions;
 use std::path::Path;
 use tracing::instrument;
 
@@ -90,7 +91,7 @@ impl<R: Read + Seek> RawFile<R> {
         &mut self,
         path: P,
         processing_options: &ProcessingOptions,
-        encode_options: &export::EncodeOptions,
+        encode_options: &EncodeOptions,
     ) -> RawResult<()> {
         tracing::trace!("Exporting raw file");
 
@@ -274,7 +275,7 @@ impl<R: Read + Seek> RawFile<R> {
         tracing::info!("Encoding image to disk: {:?}", path.as_ref());
 
         match encode_options {
-            export::EncodeOptions::Png(opts) => {
+            EncodeOptions::Png(opts) => {
                 use zune_core::colorspace::ColorSpace;
                 use zune_core::options::EncoderOptions;
                 use zune_png::PngEncoder;
@@ -311,7 +312,7 @@ impl<R: Read + Seek> RawFile<R> {
                 use std::io::Write;
                 file.write_all(&encoded_data)?;
             }
-            export::EncodeOptions::Jpeg(opts) => {
+            EncodeOptions::Jpeg(opts) => {
                 use crate::metadata::exif::ExifBuilder;
                 use crate::metadata::icc::IccProfile;
                 use jpeg_encoder::{ColorType, Encoder};
@@ -359,7 +360,7 @@ impl<R: Read + Seek> RawFile<R> {
                     std::fs::write(path.as_ref(), jpeg_data)?;
                 }
             }
-            export::EncodeOptions::WebP(opts) => {
+            EncodeOptions::WebP(opts) => {
                 use crate::metadata::exif::ExifBuilder;
                 use image_webp::WebPEncoder;
 
@@ -401,12 +402,90 @@ impl<R: Read + Seek> RawFile<R> {
                 // Write to file
                 std::fs::write(path.as_ref(), output)?;
             }
-            export::EncodeOptions::Avif(_) => unimplemented!("AVIF encoding not yet implemented"),
-            #[cfg(feature = "heic")]
-            export::EncodeOptions::Heic(_) => unimplemented!("HEIC encoding not yet implemented"),
-            export::EncodeOptions::Jxl(_) => unimplemented!("JXL encoding not yet implemented"),
-            export::EncodeOptions::Tiff(_) => unimplemented!("TIFF encoding not yet implemented"),
-            export::EncodeOptions::Dng(config) => {
+            #[cfg(feature = "avif")]
+            EncodeOptions::Avif(opts) => {
+                use ravif::{Encoder, Img, RGBA8};
+
+                // Convert 16-bit RGB to 8-bit RGBA (add opaque alpha)
+                let rgba_data: Vec<RGBA8> = rgb_image
+                    .data
+                    .chunks(3)
+                    .map(|rgb| {
+                        RGBA8::new(
+                            (rgb[0] >> 8) as u8,
+                            (rgb[1] >> 8) as u8,
+                            (rgb[2] >> 8) as u8,
+                            255, // Opaque alpha
+                        )
+                    })
+                    .collect();
+
+                // Create image
+                let img = Img::new(
+                    rgba_data.as_slice(),
+                    rgb_image.width as usize,
+                    rgb_image.height as usize,
+                );
+
+                // Create encoder
+                let encoder = Encoder::new()
+                    .with_quality(opts.quality as f32)
+                    .with_speed(opts.speed);
+
+                // Encode AVIF
+                let result = encoder.encode_rgba(img).expect("Encode AVIF");
+
+                // Write to file
+                std::fs::write(path.as_ref(), result.avif_file)?;
+
+                if opts.embed_exif {
+                    // TODO: Fix. It seems little_exif's AVIF support corrupts the file.
+                    use crate::metadata::exif::ExifBuilder;
+                    let metadata = self.metadata();
+                    let exif_builder = ExifBuilder::new(&metadata);
+                    if let Err(e) = exif_builder.append_to_avif_file(path.as_ref()) {
+                        tracing::warn!("Failed to embed EXIF in AVIF: {}", e);
+                    }
+                }
+            }
+            #[cfg(feature = "jxl-encode")]
+            EncodeOptions::Jxl(opts) => {
+                use zune_core::colorspace::ColorSpace;
+                use zune_core::options::EncoderOptions;
+                use zune_jpegxl::JxlSimpleEncoder;
+
+                // Convert 16-bit to 8-bit for JXL
+                let data_8bit: Vec<u8> = rgb_image.data.iter().map(|&p| (p >> 8) as u8).collect();
+
+                // Configure encoder options (quality is 0-100 as u8)
+                let quality = if opts.quality == 0.0 {
+                    100
+                } else {
+                    opts.quality as u8
+                };
+                let enc_options = EncoderOptions::default()
+                    .set_width(rgb_image.width as usize)
+                    .set_height(rgb_image.height as usize)
+                    .set_colorspace(ColorSpace::RGB)
+                    .set_quality(quality);
+
+                // Encode JXL
+                let encoder = JxlSimpleEncoder::new(&data_8bit, enc_options);
+                let encoded = encoder.encode().expect("Encode JXL");
+
+                // Write to file
+                std::fs::write(path.as_ref(), encoded)?;
+
+                if opts.embed_exif {
+                    use crate::metadata::exif::ExifBuilder;
+                    let metadata = self.metadata();
+                    let exif_builder = ExifBuilder::new(&metadata);
+                    if let Err(e) = exif_builder.append_to_jxl_file(path.as_ref()) {
+                        tracing::warn!("Failed to embed EXIF in JXL: {}", e);
+                    }
+                }
+            }
+            EncodeOptions::Dng(config) => {
                 export_dng(path.as_ref(), &rgb_image, &self.metadata(), config)?;
             }
         }

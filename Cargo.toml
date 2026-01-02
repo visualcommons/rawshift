@@ -32,6 +32,7 @@ jxl-encode = ["zune-jpegxl"]
 heic = []
 # SIMD enables CPU-specific optimizations
 # simd = []
+full = ["serde", "avif", "jxl-encode", "heic"]
 
 [profile.bench]
 lto = "thin"
