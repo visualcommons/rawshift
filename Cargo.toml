@@ -5,25 +5,31 @@ edition = "2024"
 
 [dependencies]
 binrw = "0.15.0"
+image-webp = "0.2"
+img-parts = "0.4"
+jpeg-encoder = "0.6"
+jxl-oxide = "0.10"
+little_exif = "0.6"
 rayon = "1.11.0"
+ravif = { version = "0.12", optional = true }
 serde = { version = "1.0.228", optional = true, features = ["derive"] }
 thiserror = "2.0.17"
+tracing = "0.1.44"
 zune-core = "0.4.12"
 zune-jpeg = "0.4.13"
+zune-jpegxl = { version = "0.4", optional = true }
 zune-png = "0.4.10"
 zune-image = "0.4"
-jxl-oxide = "0.10"
-tracing = "0.1.44"
 
-# Metadata encoding
-jpeg-encoder = "0.6"
-img-parts = "0.4"
-little_exif = "0.6"
-image-webp = "0.2"
-
-# Optional encoding backends
-ravif = { version = "0.12", optional = true }
-zune-jpegxl = { version = "0.4", optional = true }
+[dev-dependencies]
+clap = { version = "4.5", features = ["derive"] }
+eyre = "0.6.12"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.48.0", features = ["full"] }
+tracing = { version = "0.1.44", features = ["release_max_level_debug"] }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+zune-image = "0.4"
 
 [features]
 serde = ["dep:serde"]
@@ -46,13 +52,3 @@ incremental = true
 [profile.bench]
 lto = "thin"
 codegen-units = 1
-
-[dev-dependencies]
-eyre = "0.6.12"
-tokio = { version = "1.48.0", features = ["full"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0"
-zune-image = "0.4"
-clap = { version = "4.5", features = ["derive"] }
-tracing = { version = "0.1.44", features = ["release_max_level_debug"] }
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
