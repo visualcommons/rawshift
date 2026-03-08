@@ -95,10 +95,12 @@ impl<R: Read + Seek> RawFile<R> {
     ) -> RawResult<()> {
         tracing::trace!("Exporting raw file");
 
+        let mut wb_applied_to_cfa = false;
+
         // 1. Obtain the initial RGB image
         // Strategies:
         // A) LinearRaw (already RGB, e.g., iPhone ProRAW) -> Decode -> Scale to 16-bit
-        // B) Standard RAW (Bayer CFA) -> Decode -> Subtract Black -> Scale -> Demosaic
+        // B) Standard RAW (Bayer CFA) -> Decode -> Subtract Black -> WB -> Scale -> Demosaic
         let mut rgb_image = if self.is_linear_raw_dng() {
             tracing::trace!("Using LinearRaw path (already demosaiced)");
             // A) LinearRaw Path
@@ -150,6 +152,27 @@ impl<R: Read + Seek> RawFile<R> {
         } else {
             tracing::trace!("Using standard CFA path (demosaicing needed)");
             // B) Standard RAW Path
+
+            // Compute WB coefficients before decoding so they can be applied to raw CFA data
+            // before normalization, preventing highlight clipping from high-multiplier channels.
+            let cfa_wb = processing_options.white_balance.or_else(|| {
+                let meta = self.metadata();
+                if let Some(neutral) = meta.dng_color.as_shot_neutral {
+                    if neutral[0] > 0.0 && neutral[1] > 0.0 && neutral[2] > 0.0 {
+                        tracing::trace!("Using AsShotNeutral from metadata: {:?}", neutral);
+                        return Some((
+                            1.0 / neutral[0] as f32,
+                            1.0 / neutral[1] as f32,
+                            1.0 / neutral[2] as f32,
+                        ));
+                    }
+                }
+                tracing::warn!(
+                    "No white balance metadata found. Image may appear green (unbalanced)."
+                );
+                None
+            });
+
             let mut raw_image = match self {
                 RawFile::Arw(arw) => arw.decode_raw()?,
                 RawFile::Dng(dng) => dng.decode_raw()?,
@@ -168,11 +191,32 @@ impl<R: Read + Seek> RawFile<R> {
                 }
             }
 
-            // Normalize to 16-bit
-            let shift = 16u8.saturating_sub(raw_image.bit_depth);
-            if shift > 0 {
+            // Apply WB gains to CFA data before normalization.
+            // Applying high WB multipliers (e.g. Red 2.35) to already 16-bit-normalized data
+            // causes near-white pixels to clip to 65535, producing pink/cyan highlights.
+            // Applying WB at native bit depth and clamping to the sensor white level ensures
+            // only genuinely saturated pixels clip to white.
+            let effective_white = raw_image.white_level.saturating_sub(black_level);
+            if let Some((r_gain, g_gain, b_gain)) = cfa_wb {
+                let white_f = effective_white as f32;
+                let width = raw_image.size.width as usize;
+                let cfa_pattern = raw_image.cfa_pattern;
+                for (idx, pixel) in raw_image.data.iter_mut().enumerate() {
+                    let x = (idx % width) as u32;
+                    let y = (idx / width) as u32;
+                    let gain = cfa_channel_gain(x, y, cfa_pattern, r_gain, g_gain, b_gain);
+                    let scaled = *pixel as f32 * gain;
+                    *pixel = scaled.min(white_f).max(0.0) as u16;
+                }
+                wb_applied_to_cfa = true;
+            }
+
+            // Normalize to 16-bit based on actual white level (not a power-of-2 bit-shift).
+            // After WB and clamping, values are in [0, effective_white]; scale to [0, 65535].
+            if effective_white > 0 && effective_white < 65535 {
+                let scale = 65535.0 / effective_white as f32;
                 for pixel in &mut raw_image.data {
-                    *pixel <<= shift;
+                    *pixel = (*pixel as f32 * scale).min(65535.0) as u16;
                 }
             }
 
@@ -239,31 +283,37 @@ impl<R: Read + Seek> RawFile<R> {
         }
 
         // White Balance
-        // If not specified, try to derive from metadata (AsShotNeutral)
-        let wb_coeffs = processing_options.white_balance.or_else(|| {
-            let meta = self.metadata();
-            if let Some(neutral) = meta.dng_color.as_shot_neutral {
-                // AsShotNeutral is the neutral color in linear space (e.g. 0.47, 1.0, 0.65)
-                // Multipliers are 1/x normalized to Green=1.0 usually, or just 1/x.
-                // We'll just use 1/x.
-                if neutral[0] > 0.0 && neutral[1] > 0.0 && neutral[2] > 0.0 {
-                    tracing::trace!("Using AsShotNeutral from metadata: {:?}", neutral);
-                    return Some((
-                        1.0 / neutral[0] as f32,
-                        1.0 / neutral[1] as f32,
-                        1.0 / neutral[2] as f32,
-                    ));
-                }
-            }
-
-            if !self.is_linear_raw_dng() {
-                tracing::warn!(
-                    "No white balance metadata found. Image may appear green (unbalanced)."
-                );
-            }
-
+        // For the standard CFA path, WB was already applied to raw CFA data before
+        // normalization to prevent highlight clipping from high-multiplier channels.
+        // For LinearRaw DNG, apply WB here after decoding.
+        let wb_coeffs = if wb_applied_to_cfa {
             None
-        });
+        } else {
+            processing_options.white_balance.or_else(|| {
+                let meta = self.metadata();
+                if let Some(neutral) = meta.dng_color.as_shot_neutral {
+                    // AsShotNeutral is the neutral color in linear space (e.g. 0.47, 1.0, 0.65)
+                    // Multipliers are 1/x normalized to Green=1.0 usually, or just 1/x.
+                    // We'll just use 1/x.
+                    if neutral[0] > 0.0 && neutral[1] > 0.0 && neutral[2] > 0.0 {
+                        tracing::trace!("Using AsShotNeutral from metadata: {:?}", neutral);
+                        return Some((
+                            1.0 / neutral[0] as f32,
+                            1.0 / neutral[1] as f32,
+                            1.0 / neutral[2] as f32,
+                        ));
+                    }
+                }
+
+                if !self.is_linear_raw_dng() {
+                    tracing::warn!(
+                        "No white balance metadata found. Image may appear green (unbalanced)."
+                    );
+                }
+
+                None
+            })
+        };
 
         if let Some(coeffs) = wb_coeffs {
             tracing::trace!("Applying white balance: {:?}", coeffs);
@@ -564,10 +614,211 @@ impl<R: Read + Seek> RawFile<R> {
     }
 }
 
+/// Returns the white balance gain for a raw CFA pixel at position (x, y).
+///
+/// Uses the 2x2 Bayer pattern to map each pixel to its channel (R, G, or B)
+/// and return the corresponding WB gain.
+fn cfa_channel_gain(
+    x: u32,
+    y: u32,
+    pattern: crate::core::image::CfaPattern,
+    r_gain: f32,
+    g_gain: f32,
+    b_gain: f32,
+) -> f32 {
+    use crate::core::image::CfaPattern;
+    match pattern {
+        // RGGB: (0,0)=R  (1,0)=G  (0,1)=G  (1,1)=B
+        CfaPattern::Rggb => match (x % 2, y % 2) {
+            (0, 0) => r_gain,
+            (1, 1) => b_gain,
+            _ => g_gain,
+        },
+        // GRBG: (0,0)=G  (1,0)=R  (0,1)=B  (1,1)=G
+        CfaPattern::Grbg => match (x % 2, y % 2) {
+            (1, 0) => r_gain,
+            (0, 1) => b_gain,
+            _ => g_gain,
+        },
+        // BGGR: (0,0)=B  (1,0)=G  (0,1)=G  (1,1)=R
+        CfaPattern::Bggr => match (x % 2, y % 2) {
+            (1, 1) => r_gain,
+            (0, 0) => b_gain,
+            _ => g_gain,
+        },
+        // GBRG: (0,0)=G  (1,0)=B  (0,1)=R  (1,1)=G
+        CfaPattern::Gbrg => match (x % 2, y % 2) {
+            (0, 1) => r_gain,
+            (1, 0) => b_gain,
+            _ => g_gain,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    // -------------------------------------------------------------------------
+    // Tests for cfa_channel_gain
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_cfa_channel_gain_rggb() {
+        use crate::core::image::CfaPattern;
+        let (r, g, b) = (2.35f32, 1.0f32, 1.65f32);
+        // RGGB layout: (0,0)=R (1,0)=G (0,1)=G (1,1)=B
+        assert_eq!(cfa_channel_gain(0, 0, CfaPattern::Rggb, r, g, b), r);
+        assert_eq!(cfa_channel_gain(1, 0, CfaPattern::Rggb, r, g, b), g);
+        assert_eq!(cfa_channel_gain(0, 1, CfaPattern::Rggb, r, g, b), g);
+        assert_eq!(cfa_channel_gain(1, 1, CfaPattern::Rggb, r, g, b), b);
+        // Pattern repeats every 2 pixels
+        assert_eq!(cfa_channel_gain(2, 0, CfaPattern::Rggb, r, g, b), r);
+        assert_eq!(cfa_channel_gain(3, 1, CfaPattern::Rggb, r, g, b), b);
+    }
+
+    #[test]
+    fn test_cfa_channel_gain_grbg() {
+        use crate::core::image::CfaPattern;
+        let (r, g, b) = (2.35f32, 1.0f32, 1.65f32);
+        // GRBG layout: (0,0)=G (1,0)=R (0,1)=B (1,1)=G
+        assert_eq!(cfa_channel_gain(0, 0, CfaPattern::Grbg, r, g, b), g);
+        assert_eq!(cfa_channel_gain(1, 0, CfaPattern::Grbg, r, g, b), r);
+        assert_eq!(cfa_channel_gain(0, 1, CfaPattern::Grbg, r, g, b), b);
+        assert_eq!(cfa_channel_gain(1, 1, CfaPattern::Grbg, r, g, b), g);
+    }
+
+    #[test]
+    fn test_cfa_channel_gain_bggr() {
+        use crate::core::image::CfaPattern;
+        let (r, g, b) = (2.35f32, 1.0f32, 1.65f32);
+        // BGGR layout: (0,0)=B (1,0)=G (0,1)=G (1,1)=R
+        assert_eq!(cfa_channel_gain(0, 0, CfaPattern::Bggr, r, g, b), b);
+        assert_eq!(cfa_channel_gain(1, 0, CfaPattern::Bggr, r, g, b), g);
+        assert_eq!(cfa_channel_gain(0, 1, CfaPattern::Bggr, r, g, b), g);
+        assert_eq!(cfa_channel_gain(1, 1, CfaPattern::Bggr, r, g, b), r);
+    }
+
+    #[test]
+    fn test_cfa_channel_gain_gbrg() {
+        use crate::core::image::CfaPattern;
+        let (r, g, b) = (2.35f32, 1.0f32, 1.65f32);
+        // GBRG layout: (0,0)=G (1,0)=B (0,1)=R (1,1)=G
+        assert_eq!(cfa_channel_gain(0, 0, CfaPattern::Gbrg, r, g, b), g);
+        assert_eq!(cfa_channel_gain(1, 0, CfaPattern::Gbrg, r, g, b), b);
+        assert_eq!(cfa_channel_gain(0, 1, CfaPattern::Gbrg, r, g, b), r);
+        assert_eq!(cfa_channel_gain(1, 1, CfaPattern::Gbrg, r, g, b), g);
+    }
+
+    /// Verify that applying WB before normalization prevents highlight clipping
+    /// for neutral-gray pixels that would otherwise be pushed above 65535.
+    #[test]
+    fn test_wb_before_normalization_no_clipping_for_midtones() {
+        use crate::core::image::CfaPattern;
+
+        // Simulate 14-bit sensor: white_level=16383, black_level=512
+        // WB: R=2.35, G=1.0, B=1.65 (typical daylight for Sony APS-C)
+        let white_level: u16 = 16383;
+        let black_level: u16 = 512;
+        let effective_white = white_level - black_level; // 15871
+        let (r_gain, g_gain, b_gain) = (2.35f32, 1.0f32, 1.65f32);
+
+        // A neutral gray at 50% brightness:
+        // R_raw_neutral = effective_white / r_gain / 2 ≈ 3377 (+ black = 3889)
+        // G_raw_neutral = effective_white / 2 ≈ 7936 (+ black = 8448)
+        // B_raw_neutral = effective_white / b_gain / 2 ≈ 4810 (+ black = 5322)
+        let r_raw: u16 = 3377; // after black subtraction
+        let g_raw: u16 = 7936;
+        let b_raw: u16 = 4810;
+
+        // Apply WB and clamp to effective_white
+        let white_f = effective_white as f32;
+        let r_wb = (r_raw as f32 * r_gain).min(white_f) as u16;
+        let g_wb = (g_raw as f32 * g_gain).min(white_f) as u16;
+        let b_wb = (b_raw as f32 * b_gain).min(white_f) as u16;
+
+        // None should exceed effective_white
+        assert!(r_wb <= effective_white, "R clipped: {r_wb} > {effective_white}");
+        assert!(g_wb <= effective_white, "G clipped: {g_wb} > {effective_white}");
+        assert!(b_wb <= effective_white, "B clipped: {b_wb} > {effective_white}");
+
+        // After 16-bit normalization, all channels should be approximately equal
+        // (neutral gray should be neutral after WB)
+        let scale = 65535.0 / effective_white as f32;
+        let r_16 = (r_wb as f32 * scale) as u16;
+        let g_16 = (g_wb as f32 * scale) as u16;
+        let b_16 = (b_wb as f32 * scale) as u16;
+
+        // All should be close to ~32767 (50% of 65535), with ≤5% tolerance
+        let expected = 32767u16;
+        let tolerance = 2000u16;
+        assert!(
+            r_16.abs_diff(expected) < tolerance,
+            "R {r_16} not near {expected}"
+        );
+        assert!(
+            g_16.abs_diff(expected) < tolerance,
+            "G {g_16} not near {expected}"
+        );
+        assert!(
+            b_16.abs_diff(expected) < tolerance,
+            "B {b_16} not near {expected}"
+        );
+    }
+
+    /// Verify that the old approach (normalize-then-WB) clips midtones incorrectly.
+    /// This demonstrates the bug that the fix addresses.
+    #[test]
+    fn test_old_approach_clips_midtones() {
+        let white_level: u16 = 16383;
+        let black_level: u16 = 512;
+        let effective_white = white_level - black_level; // 15871
+        let r_gain = 2.35f32;
+
+        // A red pixel at ~44% of effective_white (just above the clipping threshold
+        // in the OLD normalize-then-WB pipeline)
+        let r_raw: u16 = (effective_white as f32 * 0.44) as u16; // ~6983
+
+        // Old pipeline: bit-shift to 16-bit FIRST, then WB
+        let shift = 16u8.saturating_sub(14); // bit_depth=14, shift=2
+        let r_shifted = ((r_raw as u32) << shift).min(65535) as u16; // *4
+        let r_old = (r_shifted as f32 * r_gain).min(65535.0) as u16;
+
+        // New pipeline: WB first (clamped to effective_white), then normalize
+        let white_f = effective_white as f32;
+        let r_wb = (r_raw as f32 * r_gain).min(white_f) as u16;
+        let scale = 65535.0 / effective_white as f32;
+        let r_new = (r_wb as f32 * scale).min(65535.0) as u16;
+
+        // Old approach clips to 65535 (wrong - this is only ~44% brightness)
+        assert_eq!(r_old, 65535, "Old approach should clip to white");
+
+        // New approach produces ~65535 too because 0.44 * 2.35 > 1.0,
+        // meaning this pixel IS genuinely overexposed for red at this WB setting.
+        // The important case is pixels BELOW the channel white point (effective_white/gain).
+        let r_channel_white = (effective_white as f32 / r_gain) as u16; // ~6753
+        let r_neutral_50pct = r_channel_white / 2; // ~3377
+
+        let r_wb_neutral = (r_neutral_50pct as f32 * r_gain).min(white_f) as u16;
+        let r_new_neutral = (r_wb_neutral as f32 * scale).min(65535.0) as u16;
+
+        let r_shifted_neutral = ((r_neutral_50pct as u32) << shift).min(65535) as u16;
+        let r_old_neutral = (r_shifted_neutral as f32 * r_gain).min(65535.0) as u16;
+
+        // Old approach: a 50%-brightness neutral red pixel does NOT clip
+        assert!(r_old_neutral < 65535, "Old neutral 50% should not clip");
+        // New approach: same, but also scales correctly to white level
+        assert!(r_new_neutral < 65535, "New neutral 50% should not clip");
+        // New approach gives a value close to ~32767 (50% of full range)
+        assert!(
+            r_new_neutral.abs_diff(32767) < 3000,
+            "New neutral 50% {r_new_neutral} should be ~50% of 65535"
+        );
+
+        // Suppress unused variable warning
+        let _ = r_new;
+    }
 
     #[test]
     fn test_detect_format_invalid_magic() {

@@ -329,10 +329,45 @@ impl<R: Read + Seek> ArwFile<R> {
             Vec::new()
         };
 
-        // Extract White Balance from MakerNote if possible
+        // Extract White Balance from raw SubIFD first (most reliable for newer Sony cameras).
+        // Sony ILCE series cameras (e.g., ILCE-6700) store WB_RGGBLevels (0x7313) as
+        // SSHORT values directly in the raw SubIFD, not in the MakerNote.
         let mut as_shot_neutral: Option<[f64; 3]> = None;
 
-        // But we need to look in the actual parser for the data
+        if let Some(entry) = raw_ifd.other_tags.get(&0x7313) {
+            match self.parser.read_value(entry) {
+                Ok(value) => {
+                    let vals_opt: Option<(f64, f64, f64, f64)> = match &value {
+                        TiffValue::SShorts(vals) if vals.len() >= 4 => Some((
+                            vals[0] as f64,
+                            vals[1] as f64,
+                            vals[2] as f64,
+                            vals[3] as f64,
+                        )),
+                        TiffValue::Shorts(vals) if vals.len() >= 4 => Some((
+                            vals[0] as f64,
+                            vals[1] as f64,
+                            vals[2] as f64,
+                            vals[3] as f64,
+                        )),
+                        _ => None,
+                    };
+                    if let Some((r, g1, g2, b)) = vals_opt {
+                        let g = (g1 + g2) / 2.0;
+                        if r > 0.0 && g > 0.0 && b > 0.0 {
+                            as_shot_neutral = Some([g / r, 1.0, g / b]);
+                            tracing::debug!(
+                                "Found WB_RGGBLevels in raw SubIFD (0x7313): RGGB=[{},{},{},{}] -> AsShotNeutral={:?}",
+                                r, g1, g2, b, as_shot_neutral
+                            );
+                        }
+                    }
+                }
+                Err(e) => tracing::debug!("Failed to read 0x7313 from raw SubIFD: {}", e),
+            }
+        }
+
+        // Fallback: extract White Balance from MakerNote if not found in raw SubIFD.
         // MakerNote is usually in the EXIF IFD
         let makernote_entry = if let Some(exif_ifd) = &ifd0.exif_ifd {
             tracing::debug!("Found Exif IFD at offset {}", exif_ifd.offset);
@@ -342,7 +377,8 @@ impl<R: Read + Seek> ArwFile<R> {
             ifd0.get(TiffTag::MakerNote)
         };
 
-        if let Some(entry) = makernote_entry
+        if as_shot_neutral.is_none()
+            && let Some(entry) = makernote_entry
             && let Ok(value) = self.parser.read_value(entry)
             && let TiffValue::Undefined(bytes) = value
         {
@@ -466,7 +502,7 @@ impl<R: Read + Seek> ArwFile<R> {
 
         // Check for Sony SR2 SubIFD (Tag 0x02BC) which often contains the WB data
         // 0x02BC is usually treated as "Unknown" tag in generic parser, so check other_tags.
-        if let Some(entry) = ifd0.other_tags.get(&0x02BC) {
+        if as_shot_neutral.is_none() && let Some(entry) = ifd0.other_tags.get(&0x02BC) {
             tracing::debug!(
                 "Found Tag 0x02BC (SR2 Offset Candidate). Type={:?} Count={}",
                 entry.tiff_type, entry.count
