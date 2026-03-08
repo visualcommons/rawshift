@@ -12,6 +12,8 @@ pub enum DemosaicError {
     },
     /// Invalid image dimensions
     InvalidDimensions,
+    /// The requested demosaicing algorithm is not yet implemented
+    UnsupportedAlgorithm(&'static str),
 }
 
 impl std::fmt::Display for DemosaicError {
@@ -25,6 +27,9 @@ impl std::fmt::Display for DemosaicError {
                 )
             }
             DemosaicError::InvalidDimensions => write!(f, "invalid image dimensions"),
+            DemosaicError::UnsupportedAlgorithm(name) => {
+                write!(f, "demosaicing algorithm '{}' is not yet implemented", name)
+            }
         }
     }
 }

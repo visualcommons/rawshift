@@ -89,10 +89,82 @@ pub enum TiffTag {
     ExifIFDPointer = 0x8769,
     /// Pointer to GPS IFD (0x8825)
     GPSInfoIFDPointer = 0x8825,
+    /// Exposure time in seconds (0x829A)
+    ExposureTime = 0x829A,
+    /// F-number (0x829D)
+    FNumber = 0x829D,
+    /// Exposure program (0x8822)
+    ExposureProgram = 0x8822,
+    /// ISO speed ratings (0x8827)
+    ISOSpeedRatings = 0x8827,
+    /// EXIF version (0x9000)
+    ExifVersion = 0x9000,
+    /// Date/time original (0x9003)
+    DateTimeOriginal = 0x9003,
+    /// Date/time digitized (0x9004)
+    DateTimeDigitized = 0x9004,
+    /// Offset time (timezone for DateTime, 0x9010)
+    OffsetTime = 0x9010,
+    /// Offset time original (timezone for DateTimeOriginal, 0x9011)
+    OffsetTimeOriginal = 0x9011,
+    /// Offset time digitized (timezone for DateTimeDigitized, 0x9012)
+    OffsetTimeDigitized = 0x9012,
+    /// Shutter speed value APEX (0x9201)
+    ShutterSpeedValue = 0x9201,
+    /// Aperture value APEX (0x9202)
+    ApertureValue = 0x9202,
+    /// Brightness value (0x9203)
+    BrightnessValue = 0x9203,
+    /// Exposure compensation (0x9204)
+    ExposureBiasValue = 0x9204,
+    /// Maximum aperture value (0x9205)
+    MaxApertureValue = 0x9205,
+    /// Metering mode (0x9207)
+    MeteringMode = 0x9207,
+    /// Flash (0x9209)
+    Flash = 0x9209,
+    /// Focal length (0x920A)
+    FocalLength = 0x920A,
+    /// Sub-second time (0x9290)
+    SubSecTime = 0x9290,
+    /// Sub-second time original (0x9291)
+    SubSecTimeOriginal = 0x9291,
+    /// Sub-second time digitized (0x9292)
+    SubSecTimeDigitized = 0x9292,
     /// MakerNote (0x927C)
     MakerNote = 0x927C,
+    /// Focal length in 35mm film equivalent (0xA405)
+    FocalLengthIn35mmFilm = 0xA405,
+    /// Lens make (0xA433)
+    LensMake = 0xA433,
+    /// Lens model (0xA434)
+    LensModel = 0xA434,
     /// Print Image Matching data (0xC4B5)
     PrintImageMatching = 0xC4B5,
+
+    // ========================================
+    // GPS Tags
+    // ========================================
+    /// GPS latitude reference ('N' or 'S') (0x0001)
+    GPSLatitudeRef = 0x0001,
+    /// GPS latitude (0x0002)
+    GPSLatitude = 0x0002,
+    /// GPS longitude reference ('E' or 'W') (0x0003)
+    GPSLongitudeRef = 0x0003,
+    /// GPS longitude (0x0004)
+    GPSLongitude = 0x0004,
+    /// GPS altitude reference (0x0005)
+    GPSAltitudeRef = 0x0005,
+    /// GPS altitude (0x0006)
+    GPSAltitude = 0x0006,
+    /// GPS timestamp (0x0007)
+    GPSTimeStamp = 0x0007,
+    /// GPS speed (0x000D)
+    GPSSpeed = 0x000D,
+    /// GPS image direction (0x0011)
+    GPSImgDirection = 0x0011,
+    /// GPS datestamp (0x001D)
+    GPSDateStamp = 0x001D,
 
     // ========================================
     // CFA (Color Filter Array) Tags
@@ -258,10 +330,24 @@ impl TiffTag {
             0x7221 => Some(TiffTag::SR2SubIFDKey),
             0x74C7 => Some(TiffTag::SonyCropTopLeft),
             0x74C8 => Some(TiffTag::SonyCropSize),
+            0x0001 => Some(TiffTag::GPSLatitudeRef),
+            0x0002 => Some(TiffTag::GPSLatitude),
+            0x0003 => Some(TiffTag::GPSLongitudeRef),
+            0x0004 => Some(TiffTag::GPSLongitude),
+            0x0005 => Some(TiffTag::GPSAltitudeRef),
+            0x0006 => Some(TiffTag::GPSAltitude),
+            0x0007 => Some(TiffTag::GPSTimeStamp),
+            0x000D => Some(TiffTag::GPSSpeed),
+            0x0011 => Some(TiffTag::GPSImgDirection),
+            0x001D => Some(TiffTag::GPSDateStamp),
             0x828D => Some(TiffTag::CFARepeatPatternDim),
             0x828E => Some(TiffTag::CFAPattern),
+            0x829A => Some(TiffTag::ExposureTime),
+            0x829D => Some(TiffTag::FNumber),
             0x8769 => Some(TiffTag::ExifIFDPointer),
+            0x8822 => Some(TiffTag::ExposureProgram),
             0x8825 => Some(TiffTag::GPSInfoIFDPointer),
+            0x8827 => Some(TiffTag::ISOSpeedRatings),
             0xC612 => Some(TiffTag::DNGVersion),
             0xC613 => Some(TiffTag::DNGBackwardVersion),
             0xC614 => Some(TiffTag::UniqueCameraModel),
@@ -301,8 +387,28 @@ impl TiffTag {
             0xC6FC => Some(TiffTag::ProfileToneCurve),
             0xCD40 => Some(TiffTag::ProfileGainTableMap),
             0xCD31 => Some(TiffTag::SemanticName),
-            0xC4B5 => Some(TiffTag::PrintImageMatching),
+            0x9000 => Some(TiffTag::ExifVersion),
+            0x9003 => Some(TiffTag::DateTimeOriginal),
+            0x9004 => Some(TiffTag::DateTimeDigitized),
+            0x9010 => Some(TiffTag::OffsetTime),
+            0x9011 => Some(TiffTag::OffsetTimeOriginal),
+            0x9012 => Some(TiffTag::OffsetTimeDigitized),
+            0x9201 => Some(TiffTag::ShutterSpeedValue),
+            0x9202 => Some(TiffTag::ApertureValue),
+            0x9203 => Some(TiffTag::BrightnessValue),
+            0x9204 => Some(TiffTag::ExposureBiasValue),
+            0x9205 => Some(TiffTag::MaxApertureValue),
+            0x9207 => Some(TiffTag::MeteringMode),
+            0x9209 => Some(TiffTag::Flash),
+            0x920A => Some(TiffTag::FocalLength),
+            0x9290 => Some(TiffTag::SubSecTime),
+            0x9291 => Some(TiffTag::SubSecTimeOriginal),
+            0x9292 => Some(TiffTag::SubSecTimeDigitized),
             0x927C => Some(TiffTag::MakerNote),
+            0xA405 => Some(TiffTag::FocalLengthIn35mmFilm),
+            0xA433 => Some(TiffTag::LensMake),
+            0xA434 => Some(TiffTag::LensModel),
+            0xC4B5 => Some(TiffTag::PrintImageMatching),
             _ => None,
         }
     }
@@ -350,8 +456,42 @@ impl TiffTag {
             TiffTag::ReferenceBlackWhite => "ReferenceBlackWhite",
             TiffTag::ExifIFDPointer => "ExifIFDPointer",
             TiffTag::GPSInfoIFDPointer => "GPSInfoIFDPointer",
+            TiffTag::ExposureTime => "ExposureTime",
+            TiffTag::FNumber => "FNumber",
+            TiffTag::ExposureProgram => "ExposureProgram",
+            TiffTag::ISOSpeedRatings => "ISOSpeedRatings",
+            TiffTag::ExifVersion => "ExifVersion",
+            TiffTag::DateTimeOriginal => "DateTimeOriginal",
+            TiffTag::DateTimeDigitized => "DateTimeDigitized",
+            TiffTag::OffsetTime => "OffsetTime",
+            TiffTag::OffsetTimeOriginal => "OffsetTimeOriginal",
+            TiffTag::OffsetTimeDigitized => "OffsetTimeDigitized",
+            TiffTag::ShutterSpeedValue => "ShutterSpeedValue",
+            TiffTag::ApertureValue => "ApertureValue",
+            TiffTag::BrightnessValue => "BrightnessValue",
+            TiffTag::ExposureBiasValue => "ExposureBiasValue",
+            TiffTag::MaxApertureValue => "MaxApertureValue",
+            TiffTag::MeteringMode => "MeteringMode",
+            TiffTag::Flash => "Flash",
+            TiffTag::FocalLength => "FocalLength",
+            TiffTag::SubSecTime => "SubSecTime",
+            TiffTag::SubSecTimeOriginal => "SubSecTimeOriginal",
+            TiffTag::SubSecTimeDigitized => "SubSecTimeDigitized",
             TiffTag::MakerNote => "MakerNote",
+            TiffTag::FocalLengthIn35mmFilm => "FocalLengthIn35mmFilm",
+            TiffTag::LensMake => "LensMake",
+            TiffTag::LensModel => "LensModel",
             TiffTag::PrintImageMatching => "PrintImageMatching",
+            TiffTag::GPSLatitudeRef => "GPSLatitudeRef",
+            TiffTag::GPSLatitude => "GPSLatitude",
+            TiffTag::GPSLongitudeRef => "GPSLongitudeRef",
+            TiffTag::GPSLongitude => "GPSLongitude",
+            TiffTag::GPSAltitudeRef => "GPSAltitudeRef",
+            TiffTag::GPSAltitude => "GPSAltitude",
+            TiffTag::GPSTimeStamp => "GPSTimeStamp",
+            TiffTag::GPSSpeed => "GPSSpeed",
+            TiffTag::GPSImgDirection => "GPSImgDirection",
+            TiffTag::GPSDateStamp => "GPSDateStamp",
             TiffTag::CFARepeatPatternDim => "CFARepeatPatternDim",
             TiffTag::CFAPattern => "CFAPattern",
             TiffTag::DNGVersion => "DNGVersion",

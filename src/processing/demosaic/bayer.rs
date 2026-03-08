@@ -16,7 +16,7 @@ pub struct Amaze;
 
 impl Demosaic for Amaze {
     fn demosaic_into(&self, _raw: &RawImage, _output: &mut [u16]) -> Result<(), DemosaicError> {
-        unimplemented!("AMaZE")
+        Err(DemosaicError::UnsupportedAlgorithm("AMaZE"))
     }
 }
 
@@ -28,7 +28,7 @@ pub struct Lmmse;
 
 impl Demosaic for Lmmse {
     fn demosaic_into(&self, _raw: &RawImage, _output: &mut [u16]) -> Result<(), DemosaicError> {
-        unimplemented!("LMMSE")
+        Err(DemosaicError::UnsupportedAlgorithm("LMMSE"))
     }
 }
 
@@ -40,7 +40,7 @@ pub struct Rcd;
 
 impl Demosaic for Rcd {
     fn demosaic_into(&self, _raw: &RawImage, _output: &mut [u16]) -> Result<(), DemosaicError> {
-        unimplemented!("RCD")
+        Err(DemosaicError::UnsupportedAlgorithm("RCD"))
     }
 }
 

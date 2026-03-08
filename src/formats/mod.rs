@@ -155,12 +155,16 @@ impl<R: Read + Seek> RawFile<R> {
                 RawFile::Dng(dng) => dng.decode_raw()?,
             };
 
-            // Black Level Subtraction
-            // TODO: Handle per-channel black levels correctly
-            let black_level = raw_image.black_levels[0];
-            if black_level > 0 {
-                for pixel in &mut raw_image.data {
-                    *pixel = pixel.saturating_sub(black_level);
+            // Per-channel black level subtraction
+            // black_levels[i] maps to CFA position (i % 2, i / 2) in the 2x2 Bayer pattern
+            let bl = raw_image.black_levels;
+            if bl[0] > 0 || bl[1] > 0 || bl[2] > 0 || bl[3] > 0 {
+                let width = raw_image.size.width as usize;
+                for (i, pixel) in raw_image.data.iter_mut().enumerate() {
+                    let x = i % width;
+                    let y = i / width;
+                    let bl_idx = (y % 2) * 2 + (x % 2);
+                    *pixel = pixel.saturating_sub(bl[bl_idx]);
                 }
             }
 
@@ -313,14 +317,15 @@ impl<R: Read + Seek> RawFile<R> {
                     bytes
                 };
 
-                // Encode
+                // Encode and write to file
                 let mut encoder = PngEncoder::new(&data_bytes, options);
-                let encoded_data = encoder.encode();
-
-                // Write to file
+                let mut output = Vec::new();
+                encoder
+                    .encode(&mut output)
+                    .map_err(|e| RawError::ParseError(format!("PNG encoding error: {:?}", e)))?;
                 let mut file = std::fs::File::create(path.as_ref())?;
                 use std::io::Write;
-                file.write_all(&encoded_data)?;
+                file.write_all(&output)?;
             }
             EncodeOptions::Jpeg(opts) => {
                 use crate::metadata::exif::ExifBuilder;
@@ -449,13 +454,12 @@ impl<R: Read + Seek> RawFile<R> {
                 std::fs::write(path.as_ref(), result.avif_file)?;
 
                 if opts.embed_exif {
-                    // TODO: Fix. It seems little_exif's AVIF support corrupts the file.
-                    use crate::metadata::exif::ExifBuilder;
-                    let metadata = self.metadata();
-                    let exif_builder = ExifBuilder::new(&metadata);
-                    if let Err(e) = exif_builder.append_to_avif_file(path.as_ref()) {
-                        tracing::warn!("Failed to embed EXIF in AVIF: {}", e);
-                    }
+                    // AVIF EXIF embedding is disabled: little_exif's AVIF support
+                    // corrupts the output file. See https://github.com/nickkjolsing/little_exif/issues
+                    tracing::warn!(
+                        "AVIF EXIF embedding is currently disabled due to file corruption. \
+                         The image was saved without EXIF metadata."
+                    );
                 }
             }
             #[cfg(feature = "jxl-encode")]

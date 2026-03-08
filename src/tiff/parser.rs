@@ -206,6 +206,8 @@ pub struct Ifd {
     pub sub_ifds: Vec<Ifd>,
     /// EXIF IFD (if present)
     pub exif_ifd: Option<Box<Ifd>>,
+    /// GPS IFD (if present)
+    pub gps_ifd: Option<Box<Ifd>>,
 }
 
 impl Ifd {
@@ -335,6 +337,7 @@ impl<R: Read + Seek> TiffParser<R> {
             next_ifd_offset,
             sub_ifds: Vec::new(),
             exif_ifd: None,
+            gps_ifd: None,
         };
 
         // Parse SubIFDs if present
@@ -366,6 +369,24 @@ impl<R: Read + Seek> TiffParser<R> {
                             tracing::warn!(
                                 "Failed to parse EXIF IFD at offset {}: {}",
                                 exif_offset,
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Parse GPS IFD if present
+        if let Some(gps_entry) = ifd.entries.get(&TiffTag::GPSInfoIFDPointer).cloned() {
+            if let Some(gps_offset) = self.read_value_as_u64(&gps_entry)? {
+                if gps_offset != 0 {
+                    match self.parse_ifd_at(gps_offset) {
+                        Ok(gps_ifd) => ifd.gps_ifd = Some(Box::new(gps_ifd)),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to parse GPS IFD at offset {}: {}",
+                                gps_offset,
                                 e
                             );
                         }

@@ -10,6 +10,7 @@
 //! - [`types`] - TIFF data types and values
 //! - [`writer`] - TIFF/DNG file writing
 
+pub mod metadata_helper;
 mod parser;
 mod tags;
 mod types;

@@ -44,6 +44,18 @@ pub struct ArwMetadata {
     pub tile_byte_counts: Vec<u64>,
     /// As Shot Neutral (converted from WB multipliers if found)
     pub as_shot_neutral: Option<[f64; 3]>,
+    /// EXIF exposure/capture settings
+    pub exif: crate::core::metadata::ExifInfo,
+    /// Date/time information
+    pub datetime: crate::core::metadata::DateTimeInfo,
+    /// GPS location data
+    pub gps: crate::core::metadata::GpsInfo,
+    /// Lens make
+    pub lens_make: Option<String>,
+    /// Lens model
+    pub lens_model: Option<String>,
+    /// EXIF orientation tag (1-8)
+    pub orientation: Option<u16>,
 }
 
 /// Parsed Sony ARW file.
@@ -527,6 +539,14 @@ impl<R: Read + Seek> ArwFile<R> {
             }
         }
 
+        // Extract EXIF/GPS/DateTime/orientation from IFD0
+        use crate::tiff::metadata_helper;
+        let exif = metadata_helper::extract_exif(&mut self.parser, &ifd0);
+        let datetime = metadata_helper::extract_datetime(&mut self.parser, &ifd0);
+        let gps = metadata_helper::extract_gps(&mut self.parser, &ifd0);
+        let (lens_make, lens_model) = metadata_helper::extract_lens_info(&mut self.parser, &ifd0);
+        let orientation = metadata_helper::extract_orientation(&mut self.parser, &ifd0);
+
         self.metadata = Some(ArwMetadata {
             make,
             model,
@@ -544,6 +564,12 @@ impl<R: Read + Seek> ArwFile<R> {
             tile_offsets,
             tile_byte_counts,
             as_shot_neutral,
+            exif,
+            datetime,
+            gps,
+            lens_make,
+            lens_model,
+            orientation,
         });
 
         Ok(())
@@ -744,14 +770,14 @@ impl<R: Read + Seek> crate::core::MetadataExtractor for ArwFile<R> {
                 make: m.map(|x| x.make.clone()).unwrap_or_default(),
                 model: m.map(|x| x.model.clone()).unwrap_or_default(),
                 unique_camera_model: None, // ARW doesn't have this DNG tag
-                lens_make: None,           // TODO: Extract from MakerNotes
-                lens_model: None,          // TODO: Extract from MakerNotes
+                lens_make: m.and_then(|x| x.lens_make.clone()),
+                lens_model: m.and_then(|x| x.lens_model.clone()),
                 lens_info: None,
                 serial_number: None,
             },
-            exif: ExifInfo::default(),         // TODO: Parse EXIF IFD
-            datetime: DateTimeInfo::default(), // TODO: Parse EXIF IFD
-            gps: GpsInfo::default(),           // TODO: Parse GPS IFD
+            exif: m.map(|x| x.exif.clone()).unwrap_or_default(),
+            datetime: m.map(|x| x.datetime.clone()).unwrap_or_default(),
+            gps: m.map(|x| x.gps.clone()).unwrap_or_default(),
             dng_color: DngColorInfo {
                 as_shot_neutral,
                 ..DngColorInfo::default()
@@ -759,7 +785,7 @@ impl<R: Read + Seek> crate::core::MetadataExtractor for ArwFile<R> {
             dng_calibration: DngCalibrationInfo::default(),
             dng_profile: DngProfileInfo::default(),
             image: ImageInfo {
-                orientation: None, // TODO: Extract from IFD0
+                orientation: m.and_then(|x| x.orientation),
                 bit_depth: m.map(|x| x.bit_depth).unwrap_or(14),
                 black_levels: m
                     .map(|x| x.black_levels.iter().map(|&v| v as u32).collect())

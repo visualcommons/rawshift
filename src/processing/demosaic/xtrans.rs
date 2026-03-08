@@ -14,7 +14,7 @@ pub struct Markesteijn;
 
 impl Demosaic for Markesteijn {
     fn demosaic_into(&self, _raw: &RawImage, _output: &mut [u16]) -> Result<(), DemosaicError> {
-        unimplemented!("Markesteijn")
+        Err(DemosaicError::UnsupportedAlgorithm("Markesteijn"))
     }
 }
 
@@ -26,7 +26,7 @@ pub struct Markesteijn3Pass;
 
 impl Demosaic for Markesteijn3Pass {
     fn demosaic_into(&self, _raw: &RawImage, _output: &mut [u16]) -> Result<(), DemosaicError> {
-        unimplemented!("Markesteijn3Pass")
+        Err(DemosaicError::UnsupportedAlgorithm("Markesteijn 3-Pass"))
     }
 }
 
@@ -38,7 +38,7 @@ pub struct XTransFast;
 
 impl Demosaic for XTransFast {
     fn demosaic_into(&self, _raw: &RawImage, _output: &mut [u16]) -> Result<(), DemosaicError> {
-        unimplemented!("X-Trans Fast")
+        Err(DemosaicError::UnsupportedAlgorithm("X-Trans Fast"))
     }
 }
 

@@ -67,6 +67,28 @@ pub struct DngMetadata {
     pub linearization_table: Option<Vec<u16>>,
     /// Baseline exposure in EV (positive = brighten, negative = darken)
     pub baseline_exposure: Option<f32>,
+    /// Calibration illuminant 1
+    pub calibration_illuminant_1: Option<u16>,
+    /// Calibration illuminant 2
+    pub calibration_illuminant_2: Option<u16>,
+    /// Noise profile coefficients
+    pub noise_profile: Option<Vec<f64>>,
+    /// Profile name
+    pub profile_name: Option<String>,
+    /// Profile tone curve
+    pub profile_tone_curve: Option<Vec<f32>>,
+    /// EXIF exposure/capture settings
+    pub exif: crate::core::metadata::ExifInfo,
+    /// Date/time information
+    pub datetime: crate::core::metadata::DateTimeInfo,
+    /// GPS location data
+    pub gps: crate::core::metadata::GpsInfo,
+    /// Lens make
+    pub lens_make: Option<String>,
+    /// Lens model
+    pub lens_model: Option<String>,
+    /// EXIF orientation tag (1-8)
+    pub orientation: Option<u16>,
 }
 
 /// Type alias for raw IFD location: (index in main chain, (parent_index, sub_index) if subifd)
@@ -467,6 +489,49 @@ impl<R: Read + Seek> DngFile<R> {
             None
         };
 
+        // Extract EXIF/GPS/DateTime/orientation from IFD0
+        use crate::tiff::metadata_helper;
+        let exif = metadata_helper::extract_exif(&mut self.parser, &ifd0);
+        let datetime = metadata_helper::extract_datetime(&mut self.parser, &ifd0);
+        let gps = metadata_helper::extract_gps(&mut self.parser, &ifd0);
+        let (lens_make, lens_model) = metadata_helper::extract_lens_info(&mut self.parser, &ifd0);
+        let orientation = metadata_helper::extract_orientation(&mut self.parser, &ifd0);
+
+        // Extract DNG-specific calibration fields
+        let calibration_illuminant_1 = if let Some(entry) = ifd0.get(TiffTag::CalibrationIlluminant1) {
+            self.parser.read_value(entry).ok().and_then(|v| v.as_u32().map(|x| x as u16))
+        } else {
+            raw_ifd.get(TiffTag::CalibrationIlluminant1)
+                .and_then(|e| self.parser.read_value(e).ok())
+                .and_then(|v| v.as_u32().map(|x| x as u16))
+        };
+        let calibration_illuminant_2 = if let Some(entry) = ifd0.get(TiffTag::CalibrationIlluminant2) {
+            self.parser.read_value(entry).ok().and_then(|v| v.as_u32().map(|x| x as u16))
+        } else {
+            raw_ifd.get(TiffTag::CalibrationIlluminant2)
+                .and_then(|e| self.parser.read_value(e).ok())
+                .and_then(|v| v.as_u32().map(|x| x as u16))
+        };
+
+        // Extract noise profile
+        let noise_profile = raw_ifd.get(TiffTag::NoiseProfile)
+            .or_else(|| ifd0.get(TiffTag::NoiseProfile))
+            .and_then(|e| self.parser.read_value(e).ok())
+            .and_then(|v| v.as_f64_vec());
+
+        // Extract profile info
+        let profile_name = raw_ifd.get(TiffTag::ProfileName)
+            .or_else(|| ifd0.get(TiffTag::ProfileName))
+            .and_then(|e| self.parser.read_value(e).ok())
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+        let profile_tone_curve = raw_ifd.get(TiffTag::ProfileToneCurve)
+            .or_else(|| ifd0.get(TiffTag::ProfileToneCurve))
+            .and_then(|e| self.parser.read_value(e).ok())
+            .and_then(|v| match v {
+                TiffValue::Floats(f) => Some(f),
+                _ => v.as_f64_vec().map(|d| d.into_iter().map(|x| x as f32).collect()),
+            });
+
         self.metadata = Some(DngMetadata {
             make,
             model,
@@ -494,6 +559,17 @@ impl<R: Read + Seek> DngFile<R> {
             cfa_pattern,
             linearization_table,
             baseline_exposure,
+            calibration_illuminant_1,
+            calibration_illuminant_2,
+            noise_profile,
+            profile_name,
+            profile_tone_curve,
+            exif,
+            datetime,
+            gps,
+            lens_make,
+            lens_model,
+            orientation,
         });
 
         // Warn about unknown tags
@@ -820,19 +896,19 @@ impl<R: Read + Seek> crate::core::MetadataExtractor for DngFile<R> {
                 make: m.map(|x| x.make.clone()).unwrap_or_default(),
                 model: m.map(|x| x.model.clone()).unwrap_or_default(),
                 unique_camera_model: m.map(|x| x.unique_camera_model.clone()),
-                lens_make: None,  // TODO: Extract from EXIF
-                lens_model: None, // TODO: Extract from EXIF
+                lens_make: m.and_then(|x| x.lens_make.clone()),
+                lens_model: m.and_then(|x| x.lens_model.clone()),
                 lens_info: None,
                 serial_number: None,
             },
-            exif: ExifInfo::default(),         // TODO: Parse EXIF IFD
-            datetime: DateTimeInfo::default(), // TODO: Parse EXIF IFD
-            gps: GpsInfo::default(),           // TODO: Parse GPS IFD
+            exif: m.map(|x| x.exif.clone()).unwrap_or_default(),
+            datetime: m.map(|x| x.datetime.clone()).unwrap_or_default(),
+            gps: m.map(|x| x.gps.clone()).unwrap_or_default(),
             dng_color: DngColorInfo {
                 color_matrix_1: m.and_then(|x| x.color_matrix1),
                 color_matrix_2: m.and_then(|x| x.color_matrix2),
-                calibration_illuminant_1: None, // TODO: Extract from IFD
-                calibration_illuminant_2: None, // TODO: Extract from IFD
+                calibration_illuminant_1: m.and_then(|x| x.calibration_illuminant_1),
+                calibration_illuminant_2: m.and_then(|x| x.calibration_illuminant_2),
                 as_shot_neutral: m.and_then(|x| x.as_shot_neutral),
                 analog_balance: m.and_then(|x| x.analog_balance),
                 white_balance: None,
@@ -842,12 +918,15 @@ impl<R: Read + Seek> crate::core::MetadataExtractor for DngFile<R> {
                 baseline_exposure: m.and_then(|x| x.baseline_exposure.map(|v| v as f64)),
                 baseline_noise: None,
                 baseline_sharpness: None,
-                noise_profile: None, // TODO: Extract NoiseProfile tag
+                noise_profile: m.and_then(|x| x.noise_profile.clone()),
                 noise_reduction_applied: None,
             },
-            dng_profile: DngProfileInfo::default(), // TODO: Extract ProfileName, ProfileToneCurve
+            dng_profile: DngProfileInfo {
+                profile_name: m.and_then(|x| x.profile_name.clone()),
+                profile_tone_curve: m.and_then(|x| x.profile_tone_curve.clone()),
+            },
             image: ImageInfo {
-                orientation: None, // TODO: Extract from IFD0
+                orientation: m.and_then(|x| x.orientation),
                 bit_depth: m.map(|x| x.bit_depth).unwrap_or(16),
                 black_levels: m.map(|x| x.black_levels.clone()).unwrap_or_default(),
                 white_level: m.and_then(|x| x.white_levels.first().copied()),
