@@ -89,6 +89,12 @@ pub struct DngMetadata {
     pub lens_model: Option<String>,
     /// EXIF orientation tag (1-8)
     pub orientation: Option<u16>,
+    /// Raw bytes of OpcodeList1 (applied to raw CFA data before demosaic)
+    pub opcode_list1: Vec<u8>,
+    /// Raw bytes of OpcodeList2 (applied to linear/demosaiced data)
+    pub opcode_list2: Vec<u8>,
+    /// Raw bytes of OpcodeList3 (applied after colour processing)
+    pub opcode_list3: Vec<u8>,
 }
 
 /// Type alias for raw IFD location: (index in main chain, (parent_index, sub_index) if subifd)
@@ -532,6 +538,39 @@ impl<R: Read + Seek> DngFile<R> {
                 _ => v.as_f64_vec().map(|d| d.into_iter().map(|x| x as f32).collect()),
             });
 
+        // Extract opcode lists (stored as UNDEFINED bytes, big-endian binary format)
+        let opcode_list1 = raw_ifd
+            .get(TiffTag::OpcodeList1)
+            .or_else(|| ifd0.get(TiffTag::OpcodeList1))
+            .and_then(|e| self.parser.read_value(e).ok())
+            .and_then(|v| match v {
+                TiffValue::Undefined(b) | TiffValue::Bytes(b) => Some(b),
+                _ => None,
+            })
+            .unwrap_or_default();
+        let opcode_list2 = raw_ifd
+            .get(TiffTag::OpcodeList2)
+            .or_else(|| ifd0.get(TiffTag::OpcodeList2))
+            .and_then(|e| self.parser.read_value(e).ok())
+            .and_then(|v| match v {
+                TiffValue::Undefined(b) | TiffValue::Bytes(b) => Some(b),
+                _ => None,
+            })
+            .unwrap_or_default();
+        let opcode_list3 = raw_ifd
+            .get(TiffTag::OpcodeList3)
+            .or_else(|| ifd0.get(TiffTag::OpcodeList3))
+            .and_then(|e| self.parser.read_value(e).ok())
+            .and_then(|v| match v {
+                TiffValue::Undefined(b) | TiffValue::Bytes(b) => Some(b),
+                _ => None,
+            })
+            .unwrap_or_default();
+
+        if !opcode_list2.is_empty() {
+            tracing::debug!("DNG OpcodeList2: {} bytes present", opcode_list2.len());
+        }
+
         self.metadata = Some(DngMetadata {
             make,
             model,
@@ -570,6 +609,9 @@ impl<R: Read + Seek> DngFile<R> {
             lens_make,
             lens_model,
             orientation,
+            opcode_list1,
+            opcode_list2,
+            opcode_list3,
         });
 
         // Warn about unknown tags
@@ -881,6 +923,15 @@ impl<R: Read + Seek> DngFile<R> {
         } else {
             None
         };
+
+        // Apply OpcodeList2 — defined as corrections applied to linear raw (post-demosaic) data.
+        // This is where GainMap (lens shading correction) lives for iPhone ProRAW.
+        if !metadata.opcode_list2.is_empty() {
+            let opcode_list =
+                crate::transforms::opcodes::OpcodeList::parse(&metadata.opcode_list2);
+            opcode_list.apply_to_rgb(&mut image);
+        }
+
         Ok(image)
     }
 }
