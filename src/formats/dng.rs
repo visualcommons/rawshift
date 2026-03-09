@@ -8,7 +8,7 @@ use std::io::{Read, Seek};
 use crate::codecs::jxl::JxlDecoder;
 use crate::core::image::{CfaPattern, RawImage, Rect, RgbImage, Size};
 use crate::error::{RawError, RawResult};
-use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
+use crate::tiff::{ByteOrder, Ifd, TiffParser, TiffTag, TiffValue};
 
 // TODO: Ensure this code ensures all tags are parsed exhaustively
 
@@ -47,6 +47,12 @@ pub struct DngMetadata {
     pub tile_offsets: Vec<u64>,
     /// Tile byte counts
     pub tile_byte_counts: Vec<u64>,
+    /// Rows per strip (0 if tile-based)
+    pub rows_per_strip: u32,
+    /// Strip offsets
+    pub strip_offsets: Vec<u64>,
+    /// Strip byte counts
+    pub strip_byte_counts: Vec<u64>,
     /// Color matrix 1 (XYZ to camera native, illuminant 1)
     pub color_matrix1: Option<[f64; 9]>,
     /// Color matrix 2 (XYZ to camera native, illuminant 2)
@@ -370,6 +376,36 @@ impl<R: Read + Seek> DngFile<R> {
             Vec::new()
         };
 
+        // Extract strip dimensions (for strip-based layout)
+        let rows_per_strip = if let Some(entry) = raw_ifd.get(TiffTag::RowsPerStrip) {
+            let value = self.parser.read_value(entry)?;
+            value.as_u32().unwrap_or(0)
+        } else {
+            0
+        };
+
+        let strip_offsets = if let Some(entry) = raw_ifd.get(TiffTag::StripOffsets) {
+            let value = self.parser.read_value(entry)?;
+            value
+                .as_u32_vec()
+                .map(|v| v.into_iter().map(|x| x as u64).collect())
+                .or_else(|| value.as_u64_vec())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let strip_byte_counts = if let Some(entry) = raw_ifd.get(TiffTag::StripByteCounts) {
+            let value = self.parser.read_value(entry)?;
+            value
+                .as_u32_vec()
+                .map(|v| v.into_iter().map(|x| x as u64).collect())
+                .or_else(|| value.as_u64_vec())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
         // Extract color matrices
         let color_matrix1 = self.extract_matrix(&ifd0, TiffTag::ColorMatrix1)?;
         let color_matrix2 = self.extract_matrix(&ifd0, TiffTag::ColorMatrix2)?;
@@ -603,6 +639,9 @@ impl<R: Read + Seek> DngFile<R> {
             tile_height,
             tile_offsets,
             tile_byte_counts,
+            rows_per_strip,
+            strip_offsets,
+            strip_byte_counts,
             color_matrix1,
             color_matrix2,
             as_shot_neutral,
@@ -669,6 +708,239 @@ impl<R: Read + Seek> DngFile<R> {
         Ok(None)
     }
 
+    /// Copy a decoded block (tile or strip) into the output buffer.
+    #[allow(clippy::too_many_arguments)]
+    fn copy_block_to_output(
+        src: &[u16],
+        src_width: usize,
+        src_channels: usize,
+        dst: &mut [u16],
+        dst_width: usize,
+        dst_channels: usize,
+        block_x: usize,
+        block_y: usize,
+        copy_w: usize,
+        copy_h: usize,
+        linearization_table: &Option<Vec<u16>>,
+    ) {
+        for ty in 0..copy_h {
+            for tx in 0..copy_w {
+                let src_idx = (ty * src_width + tx) * src_channels;
+                let dst_x = block_x + tx;
+                let dst_y = block_y + ty;
+                let dst_idx = (dst_y * dst_width + dst_x) * dst_channels;
+
+                for c in 0..dst_channels.min(src_channels) {
+                    if src_idx + c < src.len() && dst_idx + c < dst.len() {
+                        let mut val = src[src_idx + c];
+                        if let Some(table) = linearization_table {
+                            if !table.is_empty() {
+                                let index = (val as usize).min(table.len() - 1);
+                                val = table[index];
+                            }
+                        }
+                        dst[dst_idx + c] = val;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Decode strip-based image data into the output buffer.
+    fn decode_strips(
+        &mut self,
+        metadata: &DngMetadata,
+        width: usize,
+        height: usize,
+        output_channels: usize,
+        output: &mut [u16],
+    ) -> RawResult<()> {
+        let rows_per_strip = if metadata.rows_per_strip > 0 {
+            metadata.rows_per_strip as usize
+        } else {
+            // Default: entire image is one strip
+            height
+        };
+
+        let byte_order = self.parser.byte_order();
+
+        for (strip_idx, (&strip_offset, &strip_size)) in metadata
+            .strip_offsets
+            .iter()
+            .zip(metadata.strip_byte_counts.iter())
+            .enumerate()
+        {
+            let strip_y = strip_idx * rows_per_strip;
+            let strip_rows = rows_per_strip.min(height - strip_y);
+
+            self.parser.seek_to(strip_offset)?;
+            let strip_data = self.parser.read_bytes(strip_size as usize)?;
+
+            match metadata.compression {
+                1 => {
+                    // Uncompressed
+                    let pixels = Self::decode_uncompressed_strip(
+                        &strip_data,
+                        width,
+                        strip_rows,
+                        output_channels,
+                        metadata.bit_depth,
+                        byte_order,
+                    )?;
+                    Self::copy_block_to_output(
+                        &pixels,
+                        width,
+                        output_channels,
+                        output,
+                        width,
+                        output_channels,
+                        0,
+                        strip_y,
+                        width,
+                        strip_rows,
+                        &metadata.linearization_table,
+                    );
+                }
+                52546 => {
+                    // JPEG XL compressed strip
+                    let (decoded_width, decoded_height, channels, pixels) =
+                        JxlDecoder::decode_tile_with_depth(&strip_data, metadata.bit_depth)?;
+
+                    let actual_w = decoded_width.min(width);
+                    let actual_h = decoded_height.min(strip_rows);
+
+                    Self::copy_block_to_output(
+                        &pixels,
+                        decoded_width,
+                        channels,
+                        output,
+                        width,
+                        output_channels,
+                        0,
+                        strip_y,
+                        actual_w,
+                        actual_h,
+                        &metadata.linearization_table,
+                    );
+                }
+                other => {
+                    return Err(RawError::UnsupportedFormat(format!(
+                        "Unsupported DNG strip compression: {} (supported: 1=uncompressed, 52546=JPEG XL)",
+                        other
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Decode an uncompressed strip from raw bytes to u16 pixel values.
+    fn decode_uncompressed_strip(
+        data: &[u8],
+        width: usize,
+        rows: usize,
+        channels: usize,
+        bit_depth: u8,
+        byte_order: ByteOrder,
+    ) -> RawResult<Vec<u16>> {
+        let total_samples = width * rows * channels;
+        let mut pixels = Vec::with_capacity(total_samples);
+
+        match bit_depth {
+            8 => {
+                for &b in data.iter().take(total_samples) {
+                    pixels.push(b as u16);
+                }
+            }
+            16 => {
+                let bytes_needed = total_samples * 2;
+                if data.len() < bytes_needed {
+                    return Err(RawError::UnsupportedFormat(format!(
+                        "Strip data too short: {} bytes for {} 16-bit samples",
+                        data.len(),
+                        total_samples
+                    )));
+                }
+                for i in 0..total_samples {
+                    let offset = i * 2;
+                    let val = match byte_order {
+                        ByteOrder::LittleEndian => {
+                            u16::from_le_bytes([data[offset], data[offset + 1]])
+                        }
+                        ByteOrder::BigEndian => {
+                            u16::from_be_bytes([data[offset], data[offset + 1]])
+                        }
+                    };
+                    pixels.push(val);
+                }
+            }
+            12 | 14 => {
+                // Packed bit depths: read as 16-bit and mask
+                let bytes_needed = total_samples * 2;
+                if data.len() >= bytes_needed {
+                    // Data stored as 16-bit values with upper bits zeroed
+                    for i in 0..total_samples {
+                        let offset = i * 2;
+                        let val = match byte_order {
+                            ByteOrder::LittleEndian => {
+                                u16::from_le_bytes([data[offset], data[offset + 1]])
+                            }
+                            ByteOrder::BigEndian => {
+                                u16::from_be_bytes([data[offset], data[offset + 1]])
+                            }
+                        };
+                        pixels.push(val);
+                    }
+                } else {
+                    // Tightly packed bits
+                    let total_bits = total_samples * bit_depth as usize;
+                    let bytes_needed = total_bits.div_ceil(8);
+                    if data.len() < bytes_needed {
+                        return Err(RawError::UnsupportedFormat(format!(
+                            "Strip data too short: {} bytes for {} {}-bit samples",
+                            data.len(),
+                            total_samples,
+                            bit_depth
+                        )));
+                    }
+                    let mut bit_pos: usize = 0;
+                    for _ in 0..total_samples {
+                        let byte_idx = bit_pos / 8;
+                        let bit_offset = bit_pos % 8;
+                        let mut val: u32 = 0;
+                        let mut bits_remaining = bit_depth as usize;
+                        let mut current_bit_offset = bit_offset;
+                        let mut current_byte = byte_idx;
+                        while bits_remaining > 0 {
+                            let bits_in_byte = (8 - current_bit_offset).min(bits_remaining);
+                            let mask = ((1u32 << bits_in_byte) - 1)
+                                << (8 - current_bit_offset - bits_in_byte);
+                            let extracted = (data[current_byte] as u32 & mask)
+                                >> (8 - current_bit_offset - bits_in_byte);
+                            val = (val << bits_in_byte) | extracted;
+                            bits_remaining -= bits_in_byte;
+                            current_bit_offset = 0;
+                            current_byte += 1;
+                        }
+                        pixels.push(val as u16);
+                        bit_pos += bit_depth as usize;
+                    }
+                }
+            }
+            _ => {
+                return Err(RawError::UnsupportedFormat(format!(
+                    "Unsupported bit depth for uncompressed strip: {}",
+                    bit_depth
+                )));
+            }
+        }
+
+        // Pad if needed
+        pixels.resize(total_samples, 0);
+        Ok(pixels)
+    }
+
     /// Decode the raw image data.
     ///
     /// For LinearRaw (iPhone ProRAW), this returns an RGB image directly.
@@ -680,14 +952,6 @@ impl<R: Read + Seek> DngFile<R> {
             .cloned()
             .ok_or_else(|| RawError::UnsupportedFormat("Metadata not extracted".to_string()))?;
 
-        // Check compression type
-        if metadata.compression != 52546 {
-            return Err(RawError::UnsupportedFormat(format!(
-                "Unsupported DNG compression: {} (only JPEG XL 52546 supported)",
-                metadata.compression
-            )));
-        }
-
         let width = metadata.sensor_size.width as usize;
         let height = metadata.sensor_size.height as usize;
 
@@ -695,81 +959,80 @@ impl<R: Read + Seek> DngFile<R> {
         // For CFA, output is single channel
         let output_channels = if metadata.is_linear_raw { 3 } else { 1 };
 
-        // Decode tiles
-        if metadata.tile_offsets.is_empty() {
+        let is_tile_based = !metadata.tile_offsets.is_empty();
+        let is_strip_based = !metadata.strip_offsets.is_empty();
+
+        if !is_tile_based && !is_strip_based {
             return Err(RawError::UnsupportedFormat(
-                "No tile data found (strip-based not yet supported)".to_string(),
+                "No tile or strip data found".to_string(),
             ));
         }
-
-        let tile_w = metadata.tile_width as usize;
-        let tile_h = metadata.tile_height as usize;
-        let tiles_x = width.div_ceil(tile_w);
-        let _tiles_y = height.div_ceil(tile_h);
 
         // Allocate output buffer
         let mut output = vec![0u16; width * height * output_channels];
 
-        for (tile_idx, (&tile_offset, &tile_size)) in metadata
-            .tile_offsets
-            .iter()
-            .zip(metadata.tile_byte_counts.iter())
-            .enumerate()
-        {
-            // Calculate tile position
-            let tile_col = tile_idx % tiles_x;
-            let tile_row = tile_idx / tiles_x;
-            let tile_x = tile_col * tile_w;
-            let tile_y = tile_row * tile_h;
+        if is_tile_based {
+            // Check compression type for tile-based (only JXL supported)
+            if metadata.compression != 52546 {
+                return Err(RawError::UnsupportedFormat(format!(
+                    "Unsupported DNG compression: {} (only JPEG XL 52546 supported for tiles)",
+                    metadata.compression
+                )));
+            }
 
-            // Read tile data
-            self.parser.seek_to(tile_offset)?;
-            let tile_data = self.parser.read_bytes(tile_size as usize)?;
+            let tile_w = metadata.tile_width as usize;
+            let tile_h = metadata.tile_height as usize;
+            let tiles_x = width.div_ceil(tile_w);
 
-            // Decode JXL tile
-            let (decoded_width, decoded_height, channels, tile_pixels) =
-                JxlDecoder::decode_tile_with_depth(&tile_data, metadata.bit_depth)?;
+            for (tile_idx, (&tile_offset, &tile_size)) in metadata
+                .tile_offsets
+                .iter()
+                .zip(metadata.tile_byte_counts.iter())
+                .enumerate()
+            {
+                let tile_col = tile_idx % tiles_x;
+                let tile_row = tile_idx / tiles_x;
+                let tile_x = tile_col * tile_w;
+                let tile_y = tile_row * tile_h;
 
-            // Validate decoded dimensions
-            if channels != output_channels {
-                tracing::warn!(
-                    "Tile {} has {} channels, expected {}",
-                    tile_idx,
+                self.parser.seek_to(tile_offset)?;
+                let tile_data = self.parser.read_bytes(tile_size as usize)?;
+
+                let (decoded_width, decoded_height, channels, tile_pixels) =
+                    JxlDecoder::decode_tile_with_depth(&tile_data, metadata.bit_depth)?;
+
+                if channels != output_channels {
+                    tracing::warn!(
+                        "Tile {} has {} channels, expected {}",
+                        tile_idx,
+                        channels,
+                        output_channels
+                    );
+                }
+
+                let actual_tile_w = decoded_width.min(width - tile_x);
+                let actual_tile_h = decoded_height.min(height - tile_y);
+
+                Self::copy_block_to_output(
+                    &tile_pixels,
+                    decoded_width,
                     channels,
-                    output_channels
+                    &mut output,
+                    width,
+                    output_channels,
+                    tile_x,
+                    tile_y,
+                    actual_tile_w,
+                    actual_tile_h,
+                    &metadata.linearization_table,
                 );
             }
-
-            // Copy tile pixels to output at correct position
-            let actual_tile_w = decoded_width.min(width - tile_x);
-            let actual_tile_h = decoded_height.min(height - tile_y);
-
-            for ty in 0..actual_tile_h {
-                for tx in 0..actual_tile_w {
-                    let src_idx = (ty * decoded_width + tx) * channels;
-                    let dst_x = tile_x + tx;
-                    let dst_y = tile_y + ty;
-                    let dst_idx = (dst_y * width + dst_x) * output_channels;
-
-                    for c in 0..output_channels.min(channels) {
-                        if src_idx + c < tile_pixels.len() && dst_idx + c < output.len() {
-                            let mut val = tile_pixels[src_idx + c];
-                            // Apply linearization table if present
-                            if let Some(table) = &metadata.linearization_table {
-                                if !table.is_empty() {
-                                    let index = (val as usize).min(table.len() - 1);
-                                    val = table[index];
-                                }
-                            }
-                            output[dst_idx + c] = val;
-                        }
-                    }
-                }
-            }
+        } else {
+            // Strip-based layout
+            self.decode_strips(&metadata, width, height, output_channels, &mut output)?;
         }
 
         // Create RawImage
-        // For LinearRaw, we still create a RawImage but mark it appropriately
         let active_area =
             metadata
                 .active_area
@@ -777,7 +1040,6 @@ impl<R: Read + Seek> DngFile<R> {
         let cfa_pattern = metadata.cfa_pattern.unwrap_or(CfaPattern::Rggb);
 
         // If linearization table is applied, the effective bit depth is usually 16-bit
-        // (or determined by the table). We'll assume 16-bit to avoid double scaling later.
         let output_bit_depth = if metadata
             .linearization_table
             .as_ref()
@@ -813,10 +1075,7 @@ impl<R: Read + Seek> DngFile<R> {
         };
 
         // If LinearRaw, the data is already RGB interleaved
-        // We need to handle this specially in the export pipeline
         if metadata.is_linear_raw {
-            // For LinearRaw, the data layout is different - it's RGB interleaved
-            // We'll need to update the RawFile export to handle this
             raw_image.bit_depth = metadata.bit_depth;
         }
 
@@ -840,27 +1099,18 @@ impl<R: Read + Seek> DngFile<R> {
             ));
         }
 
-        // Check compression type
-        if metadata.compression != 52546 {
-            return Err(RawError::UnsupportedFormat(format!(
-                "Unsupported DNG compression: {} (only JPEG XL 52546 supported)",
-                metadata.compression
-            )));
-        }
-
         let width = metadata.sensor_size.width as usize;
         let height = metadata.sensor_size.height as usize;
 
-        // Decode tiles
-        if metadata.tile_offsets.is_empty() {
+        let is_tile_based = !metadata.tile_offsets.is_empty();
+        let is_strip_based = !metadata.strip_offsets.is_empty();
+
+        if !is_tile_based && !is_strip_based {
             return Err(RawError::UnsupportedFormat(
-                "No tile data found".to_string(),
+                "No tile or strip data found".to_string(),
             ));
         }
 
-        let tile_w = metadata.tile_width as usize;
-        let tile_h = metadata.tile_height as usize;
-        let tiles_x = width.div_ceil(tile_w);
         let active_area =
             metadata
                 .active_area
@@ -870,62 +1120,74 @@ impl<R: Read + Seek> DngFile<R> {
         let offset_x = active_area.origin.x as usize;
         let offset_y = active_area.origin.y as usize;
 
-        // Allocate output buffer (RGB interleaved)
+        // Allocate full sensor buffer, then crop to active area
+        let mut sensor_buf = vec![0u16; width * height * 3];
+
+        if is_tile_based {
+            if metadata.compression != 52546 {
+                return Err(RawError::UnsupportedFormat(format!(
+                    "Unsupported DNG compression: {} (only JPEG XL 52546 supported for tiles)",
+                    metadata.compression
+                )));
+            }
+
+            let tile_w = metadata.tile_width as usize;
+            let tile_h = metadata.tile_height as usize;
+            let tiles_x = width.div_ceil(tile_w);
+
+            for (tile_idx, (&tile_offset, &tile_size)) in metadata
+                .tile_offsets
+                .iter()
+                .zip(metadata.tile_byte_counts.iter())
+                .enumerate()
+            {
+                let tile_col = tile_idx % tiles_x;
+                let tile_row = tile_idx / tiles_x;
+                let tile_x = tile_col * tile_w;
+                let tile_y = tile_row * tile_h;
+
+                self.parser.seek_to(tile_offset)?;
+                let tile_data = self.parser.read_bytes(tile_size as usize)?;
+
+                let (decoded_width, decoded_height, channels, tile_pixels) =
+                    JxlDecoder::decode_tile(&tile_data)?;
+
+                let actual_tile_w = decoded_width.min(width - tile_x);
+                let actual_tile_h = decoded_height.min(height - tile_y);
+
+                Self::copy_block_to_output(
+                    &tile_pixels,
+                    decoded_width,
+                    channels,
+                    &mut sensor_buf,
+                    width,
+                    3,
+                    tile_x,
+                    tile_y,
+                    actual_tile_w,
+                    actual_tile_h,
+                    &metadata.linearization_table,
+                );
+            }
+        } else {
+            self.decode_strips(&metadata, width, height, 3, &mut sensor_buf)?;
+        }
+
+        // Crop to active area
         let mut output = vec![0u16; out_width * out_height * 3];
-
-        for (tile_idx, (&tile_offset, &tile_size)) in metadata
-            .tile_offsets
-            .iter()
-            .zip(metadata.tile_byte_counts.iter())
-            .enumerate()
-        {
-            let tile_col = tile_idx % tiles_x;
-            let tile_row = tile_idx / tiles_x;
-            let tile_x = tile_col * tile_w;
-            let tile_y = tile_row * tile_h;
-
-            self.parser.seek_to(tile_offset)?;
-            let tile_data = self.parser.read_bytes(tile_size as usize)?;
-
-            let (decoded_width, decoded_height, channels, tile_pixels) =
-                JxlDecoder::decode_tile(&tile_data)?;
-
-            let actual_tile_w = decoded_width.min(width - tile_x);
-            let actual_tile_h = decoded_height.min(height - tile_y);
-
-            for ty in 0..actual_tile_h {
-                let y_in_sensor = tile_y + ty;
-                if y_in_sensor < offset_y || y_in_sensor >= offset_y + out_height {
-                    // Skip this tile row
-                    continue;
+        for y in 0..out_height {
+            let src_y = offset_y + y;
+            if src_y >= height {
+                break;
+            }
+            for x in 0..out_width {
+                let src_x = offset_x + x;
+                if src_x >= width {
+                    break;
                 }
-                let dst_y = y_in_sensor - offset_y;
-
-                for tx in 0..actual_tile_w {
-                    let x_in_sensor = tile_x + tx;
-                    if x_in_sensor < offset_x || x_in_sensor >= offset_x + out_width {
-                        // Skip this tile column
-                        continue;
-                    }
-                    let dst_x = x_in_sensor - offset_x;
-
-                    let src_idx = (ty * decoded_width + tx) * channels;
-                    let dst_idx = (dst_y * out_width + dst_x) * 3;
-
-                    for c in 0..3.min(channels) {
-                        if src_idx + c < tile_pixels.len() && dst_idx + c < output.len() {
-                            let mut val = tile_pixels[src_idx + c];
-                            // Apply linearization table if present
-                            if let Some(table) = &metadata.linearization_table {
-                                if !table.is_empty() {
-                                    let index = (val as usize).min(table.len() - 1);
-                                    val = table[index];
-                                }
-                            }
-                            output[dst_idx + c] = val;
-                        }
-                    }
-                }
+                let src_idx = (src_y * width + src_x) * 3;
+                let dst_idx = (y * out_width + x) * 3;
+                output[dst_idx..dst_idx + 3].copy_from_slice(&sensor_buf[src_idx..src_idx + 3]);
             }
         }
 
@@ -1006,8 +1268,10 @@ impl<R: Read + Seek> crate::core::MetadataExtractor for DngFile<R> {
 mod tests {
     use super::*;
     use std::fs::File;
-    use std::io::BufReader;
+    use std::io::{BufReader, Cursor};
     use std::path::PathBuf;
+
+    use crate::tiff::writer::{IfdEntry, TiffWriter};
 
     fn test_data_path(filename: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1019,6 +1283,168 @@ mod tests {
         if !path.exists() {
             panic!("Test data at {:?} not found", path);
         }
+    }
+
+    /// Build a minimal synthetic strip-based DNG (CFA, uncompressed, 16-bit) in memory.
+    /// Returns the raw TIFF bytes.
+    fn build_strip_dng(
+        width: u32,
+        height: u32,
+        rows_per_strip: u32,
+        pixel_data: &[u16],
+    ) -> Vec<u8> {
+        let mut buf = Cursor::new(Vec::new());
+        let mut writer = TiffWriter::new(&mut buf, ByteOrder::LittleEndian);
+
+        // Write TIFF header
+        writer.write_header().unwrap();
+
+        // Write pixel data first so we know the strip offsets
+        let num_strips = height.div_ceil(rows_per_strip) as usize;
+        let mut offsets = Vec::with_capacity(num_strips);
+        let mut byte_counts = Vec::with_capacity(num_strips);
+
+        for strip_idx in 0..num_strips {
+            let strip_y = strip_idx as u32 * rows_per_strip;
+            let strip_rows = rows_per_strip.min(height - strip_y) as usize;
+            let samples_in_strip = width as usize * strip_rows;
+
+            let start_sample = strip_y as usize * width as usize;
+            let end_sample = start_sample + samples_in_strip;
+            let strip_slice = &pixel_data[start_sample..end_sample];
+
+            let (offset, count) = writer.write_image_strip_rgb16(strip_slice).unwrap();
+            offsets.push(offset as u32);
+            byte_counts.push(count as u32);
+        }
+
+        // Record where the IFD will start, then update the header pointer
+        let ifd_offset = writer.position();
+        writer.update_ifd0_offset(ifd_offset as u32).unwrap();
+
+        let dng_version: [u8; 4] = [1, 4, 0, 0];
+
+        let mut entries = vec![
+            IfdEntry::long(TiffTag::ImageWidth, width),
+            IfdEntry::long(TiffTag::ImageLength, height),
+            IfdEntry::short(TiffTag::BitsPerSample, 16),
+            IfdEntry::short(TiffTag::Compression, 1),
+            IfdEntry::short(TiffTag::PhotometricInterpretation, 32803),
+            IfdEntry::ascii(TiffTag::Make, "TestCam"),
+            IfdEntry::ascii(TiffTag::Model, "StripTest"),
+            IfdEntry::longs(TiffTag::StripOffsets, &offsets),
+            IfdEntry::short(TiffTag::SamplesPerPixel, 1),
+            IfdEntry::long(TiffTag::RowsPerStrip, rows_per_strip),
+            IfdEntry::longs(TiffTag::StripByteCounts, &byte_counts),
+            IfdEntry::bytes(TiffTag::DNGVersion, &dng_version),
+            IfdEntry::bytes(TiffTag::CFAPattern, &[0, 1, 1, 2]),
+        ];
+
+        writer.write_ifd(&mut entries, 0).unwrap();
+
+        buf.into_inner()
+    }
+
+    #[test]
+    fn test_strip_dng_parse_metadata() {
+        let width = 8u32;
+        let height = 6u32;
+        let rows_per_strip = 2u32;
+        let pixel_data = vec![1000u16; (width * height) as usize];
+        let dng_bytes = build_strip_dng(width, height, rows_per_strip, &pixel_data);
+
+        let reader = Cursor::new(dng_bytes);
+        let dng = DngFile::parse(reader).unwrap();
+        let meta = dng.metadata().unwrap();
+
+        assert_eq!(meta.sensor_size.width, width);
+        assert_eq!(meta.sensor_size.height, height);
+        assert_eq!(meta.compression, 1);
+        assert_eq!(meta.rows_per_strip, rows_per_strip);
+        assert_eq!(meta.strip_offsets.len(), 3); // ceil(6/2) = 3 strips
+        assert_eq!(meta.strip_byte_counts.len(), 3);
+        assert!(meta.tile_offsets.is_empty());
+        assert_eq!(meta.bit_depth, 16);
+        assert!(!meta.is_linear_raw);
+    }
+
+    #[test]
+    fn test_strip_dng_decode_raw() {
+        let width = 8u32;
+        let height = 6u32;
+        let rows_per_strip = 2u32;
+        // Fill with a known pattern: pixel value = row * width + col + 100
+        let mut pixel_data = vec![0u16; (width * height) as usize];
+        for y in 0..height as usize {
+            for x in 0..width as usize {
+                pixel_data[y * width as usize + x] = (y * width as usize + x + 100) as u16;
+            }
+        }
+
+        let dng_bytes = build_strip_dng(width, height, rows_per_strip, &pixel_data);
+
+        let reader = Cursor::new(dng_bytes);
+        let mut dng = DngFile::parse(reader).unwrap();
+
+        let raw_image = dng.decode_raw().unwrap();
+
+        assert_eq!(raw_image.size.width, width);
+        assert_eq!(raw_image.size.height, height);
+        assert_eq!(raw_image.data.len(), (width * height) as usize);
+
+        // Verify all pixel values match the input
+        for y in 0..height as usize {
+            for x in 0..width as usize {
+                let idx = y * width as usize + x;
+                let expected = (y * width as usize + x + 100) as u16;
+                assert_eq!(
+                    raw_image.data[idx], expected,
+                    "Pixel mismatch at ({}, {}): got {}, expected {}",
+                    x, y, raw_image.data[idx], expected
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_strip_dng_single_strip() {
+        // Entire image in one strip (rows_per_strip >= height)
+        let width = 4u32;
+        let height = 4u32;
+        let rows_per_strip = 4u32;
+        let pixel_data: Vec<u16> = (0..16).map(|i| i * 100 + 500).collect();
+
+        let dng_bytes = build_strip_dng(width, height, rows_per_strip, &pixel_data);
+
+        let reader = Cursor::new(dng_bytes);
+        let mut dng = DngFile::parse(reader).unwrap();
+
+        let meta = dng.metadata().unwrap();
+        assert_eq!(meta.strip_offsets.len(), 1);
+
+        let raw_image = dng.decode_raw().unwrap();
+        assert_eq!(raw_image.data, pixel_data);
+    }
+
+    #[test]
+    fn test_strip_dng_uneven_strips() {
+        // Height not evenly divisible by rows_per_strip
+        let width = 4u32;
+        let height = 7u32;
+        let rows_per_strip = 3u32;
+        // 3 strips: rows 0-2, 3-5, 6 (last strip has 1 row)
+        let pixel_data: Vec<u16> = (0..(width * height) as u16).map(|i| i + 200).collect();
+
+        let dng_bytes = build_strip_dng(width, height, rows_per_strip, &pixel_data);
+
+        let reader = Cursor::new(dng_bytes);
+        let mut dng = DngFile::parse(reader).unwrap();
+
+        let meta = dng.metadata().unwrap();
+        assert_eq!(meta.strip_offsets.len(), 3); // ceil(7/3) = 3
+
+        let raw_image = dng.decode_raw().unwrap();
+        assert_eq!(raw_image.data, pixel_data);
     }
 
     #[test]
