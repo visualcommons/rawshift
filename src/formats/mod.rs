@@ -15,6 +15,7 @@ use std::io::{Read, Seek, SeekFrom};
 use crate::error::{RawError, RawResult};
 use crate::processing::color::{apply_color_matrix, apply_gamma, apply_white_balance};
 use crate::processing::ProcessingOptions;
+use crate::transforms::tonemap::apply_tonemap;
 use crate::tiff::{TiffParser, TiffTag};
 use export::EncodeOptions;
 use std::path::Path;
@@ -235,25 +236,15 @@ impl<R: Read + Seek> RawFile<R> {
         // 2. Shared Post-Processing Pipeline
         tracing::trace!("Applying post-processing");
 
-        // Baseline Exposure: stored as metadata but NOT applied as a simple linear gain.
+        // Baseline Exposure + Tone Mapping
         //
-        // The DNG spec's BaselineExposure indicates how much to adjust exposure to match
-        // the camera's intended rendering. Negative values (e.g. -0.83 for iPhone ProRAW)
-        // mean the camera captured with extra highlight headroom.
-        //
-        // In a full DNG renderer (e.g. Adobe Camera Raw), BaselineExposure is applied
-        // alongside a sophisticated tone curve that remaps the compressed range back to
-        // full output. Without that tone mapping, applying it as a raw pixel multiply
-        // just darkens the image (e.g. max output = 199/255 instead of 255/255).
-        //
-        // For our simple gamma-only pipeline, skipping BaselineExposure produces a
-        // correctly-exposed result. The value remains available in metadata for advanced
-        // users or future tone mapping support.
+        // BaselineExposure is applied in scene-linear space via the Hable filmic tone curve,
+        // which uses extra highlight headroom (negative EV) for smooth rolloff instead of
+        // clipping. This replaces the simple gamma step further below.
         if let Some(exposure) = rgb_image.baseline_exposure {
-            tracing::debug!(
-                "BaselineExposure={:.2} EV (not applied - requires tone mapping pipeline)",
-                exposure,
-            );
+            tracing::debug!("Applying BaselineExposure={:.2} EV with filmic tone mapping", exposure);
+        } else {
+            tracing::trace!("Applying filmic tone mapping (no BaselineExposure)");
         }
 
         // Apply Crop
@@ -327,13 +318,15 @@ impl<R: Read + Seek> RawFile<R> {
             apply_color_matrix(&mut rgb_image, &matrix);
         }
 
-        // Gamma Correction
-        // Default to sRGB (2.2) if not specified, especially for display formats like PNG
-        let gamma = processing_options.gamma.or(Some(2.2)); // TODO: See if this is correct
-
-        if let Some(g) = gamma {
-            tracing::trace!("Applying gamma: {}", g);
+        // Tone Mapping + sRGB Encoding
+        // The filmic tone curve handles BaselineExposure and maps scene-linear to display-referred.
+        // If a custom gamma is explicitly requested, use simple gamma instead (advanced users).
+        if let Some(g) = processing_options.gamma {
+            tracing::trace!("Applying custom gamma override: {}", g);
             apply_gamma(&mut rgb_image, g);
+        } else {
+            let baseline_exposure = rgb_image.baseline_exposure;
+            apply_tonemap(&mut rgb_image, baseline_exposure);
         }
 
         // Orientation Transform
