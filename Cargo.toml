@@ -2,6 +2,15 @@
 name = "rawshift"
 version = "0.1.0"
 edition = "2024"
+description = "RAW image processing library focused on compatibility, correctness, and interoperability"
+license = "MPL-2.0"
+repository = "https://github.com/justin13888/rawshift"
+homepage = "https://github.com/justin13888/rawshift"
+documentation = "https://docs.rs/rawshift"
+keywords = ["raw", "image", "dng", "arw", "photo"]
+categories = ["multimedia::images", "encoding", "parser-implementations"]
+readme = "README.md"
+rust-version = "1.85"
 
 [dependencies]
 binrw = "0.15"
