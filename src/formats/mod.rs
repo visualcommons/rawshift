@@ -18,7 +18,9 @@ use crate::error::{RawError, RawResult};
 use crate::processing::ProcessingOptions;
 use crate::tiff::{TiffParser, TiffTag};
 use crate::transforms::black_level::apply_black_level;
-use crate::transforms::color::{apply_color_matrix, apply_white_balance, apply_white_balance_raw};
+use crate::transforms::color::{
+    apply_color_matrix, apply_white_balance, apply_white_balance_raw, compute_camera_to_srgb,
+};
 use crate::transforms::tonemap::apply_tone_reproduction;
 use export::EncodeOptions;
 use std::path::Path;
@@ -302,7 +304,42 @@ impl<R: Read + Seek> RawFile<R> {
         }
 
         // Color Matrix
-        if let Some(matrix) = processing_options.color_matrix {
+        // Priority: explicit processing option > file metadata > camera database fallback
+        let color_matrix = processing_options.color_matrix.or_else(|| {
+            let meta = self.metadata();
+            // Prefer ColorMatrix2 (typically D65/daylight) over ColorMatrix1
+            let xyz_to_cam = meta
+                .dng_color
+                .color_matrix_2
+                .or(meta.dng_color.color_matrix_1)
+                .or_else(|| {
+                    // Fallback: look up from camera database
+                    let model = &meta.camera.model;
+                    if model.is_empty() {
+                        return None;
+                    }
+                    let cal = crate::data::cameras::find_camera_calibration(model)?;
+                    tracing::trace!("Using camera database color matrix for {}", model);
+                    cal.color_matrix_2.or(cal.color_matrix_1)
+                });
+
+            if let Some(ref cm) = xyz_to_cam {
+                match compute_camera_to_srgb(cm) {
+                    Some(m) => {
+                        tracing::trace!("Auto-resolved camera-to-sRGB color matrix");
+                        Some(m)
+                    }
+                    None => {
+                        tracing::warn!("Color matrix is singular, skipping color correction");
+                        None
+                    }
+                }
+            } else {
+                tracing::debug!("No color matrix available in metadata or camera database");
+                None
+            }
+        });
+        if let Some(matrix) = color_matrix {
             tracing::trace!("Applying color matrix");
             apply_color_matrix(&mut rgb_image, &matrix);
         }
