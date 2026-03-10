@@ -131,6 +131,53 @@ pub enum RawError {
         /// Offset of the IFD containing the tag
         ifd_offset: u64,
     },
+
+    // ── Format-specific errors ──────────────────────────────────────
+    /// Canon CR2 format error.
+    #[error("CR2 error: {0}")]
+    Cr2Error(String),
+
+    /// Nikon NEF format error.
+    #[error("NEF error: {0}")]
+    NefError(String),
+
+    /// Canon CR3/ISOBMFF format error.
+    #[error("CR3 error: {0}")]
+    Cr3Error(String),
+
+    /// Fujifilm RAF format error.
+    #[error("RAF error: {0}")]
+    RafError(String),
+
+    /// Canon CRW/CIFF format error.
+    #[error("CRW error: {0}")]
+    CrwError(String),
+
+    /// Standard image format decoding error.
+    #[error("Image decode error ({format}): {message}")]
+    ImageDecodeError {
+        /// Format name (e.g., "JPEG", "PNG")
+        format: &'static str,
+        /// Error description
+        message: String,
+    },
+
+    /// Demosaicing error.
+    #[error("Demosaic error: {0}")]
+    DemosaicError(String),
+
+    /// Color processing error.
+    #[error("Color processing error: {0}")]
+    ColorError(String),
+
+    /// Encoding/export error.
+    #[error("Encoding error ({format}): {message}")]
+    EncodingError {
+        /// Format name (e.g., "JPEG", "PNG")
+        format: &'static str,
+        /// Error description
+        message: String,
+    },
 }
 
 impl From<binrw::Error> for RawError {
