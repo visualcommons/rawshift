@@ -37,6 +37,7 @@ pub mod color;
 pub mod denoise;
 pub mod lens_correction;
 pub mod opcodes;
+pub mod simd;
 pub mod tonemap;
 
 pub use bad_pixel::{
@@ -51,4 +52,5 @@ pub use color::{
 };
 pub use denoise::{apply_bilateral_filter, apply_gaussian_blur};
 pub use lens_correction::{apply_warp_rectilinear, apply_warp_rectilinear_tangential};
+pub use simd::{apply_gains_rgb, apply_matrix_rgb, subtract_black_level_uniform};
 pub use tonemap::{apply_tone_reproduction, apply_tonemap};

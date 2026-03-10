@@ -1,4 +1,4 @@
-//! Standard image format decoders (JPEG, PNG, WebP, TIFF, JXL, AVIF).
+//! Standard image format decoders (JPEG, PNG, WebP, TIFF, JXL, AVIF, HEIC, SVG, APV).
 //!
 //! This module provides decoders for common non-RAW image formats that decode
 //! directly to RGB pixel data stored in an [`RgbImage`].
@@ -30,6 +30,12 @@ pub enum StandardFormat {
     Tiff,
     /// AVIF
     Avif,
+    /// HEIC / HEIF (High Efficiency Image Container using H.265)
+    Heic,
+    /// SVG (Scalable Vector Graphics)
+    Svg,
+    /// APV (All-intra Predictive Video codec)
+    Apv,
 }
 
 impl StandardFormat {
@@ -43,6 +49,9 @@ impl StandardFormat {
             StandardFormat::Jxl => "JXL",
             StandardFormat::Tiff => "TIFF",
             StandardFormat::Avif => "AVIF",
+            StandardFormat::Heic => "HEIC",
+            StandardFormat::Svg => "SVG",
+            StandardFormat::Apv => "APV",
         }
     }
 }
@@ -83,6 +92,33 @@ pub fn detect_standard_format(data: &[u8]) -> Option<StandardFormat> {
             && (&d[8..12] == b"avif" || &d[8..12] == b"avis" || &d[8..12] == b"mif1") =>
         {
             Some(StandardFormat::Avif)
+        }
+        // HEIC/HEIF: ftyp box with heic/heis/hevc/hevx brand
+        d if d.len() >= 12
+            && &d[4..8] == b"ftyp"
+            && (&d[8..12] == b"heic"
+                || &d[8..12] == b"heis"
+                || &d[8..12] == b"hevc"
+                || &d[8..12] == b"hevx") =>
+        {
+            Some(StandardFormat::Heic)
+        }
+        // APV: ftyp box with apv1/apvx brand
+        d if d.len() >= 12
+            && &d[4..8] == b"ftyp"
+            && (&d[8..12] == b"apv1" || &d[8..12] == b"apvx") =>
+        {
+            Some(StandardFormat::Apv)
+        }
+        // SVG: XML starting with <?xml, <svg, or <!-- with <svg present in file
+        d if d.len() >= 4
+            && (&d[0..4] == b"<?xm" || &d[0..4] == b"<svg" || &d[0..4] == b"<!--") =>
+        {
+            if d.windows(4).any(|w| w == b"<svg") {
+                Some(StandardFormat::Svg)
+            } else {
+                None
+            }
         }
         _ => None,
     }
@@ -409,6 +445,80 @@ fn decode_avif(_data: &[u8]) -> RawResult<RgbImage> {
     ))
 }
 
+// ── HEIC ─────────────────────────────────────────────────────────────────────
+
+fn decode_heic(_data: &[u8]) -> RawResult<RgbImage> {
+    // HEIC uses the ISOBMFF container with H.265 (HEVC) compression.
+    // H.265 decoding requires a licensed library and is not implemented here.
+    Err(RawError::ImageDecodeError {
+        format: "HEIC",
+        message: "HEIC decoding requires a licensed H.265 decoder. \
+                  Set the 'heic' feature flag and provide a compatible library."
+            .to_string(),
+    })
+}
+
+// ── SVG ──────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "svg")]
+fn decode_svg(data: &[u8]) -> RawResult<RgbImage> {
+    use resvg::{tiny_skia, usvg};
+
+    let options = usvg::Options::default();
+    let tree = usvg::Tree::from_data(data, &options).map_err(|e| RawError::ImageDecodeError {
+        format: "SVG",
+        message: e.to_string(),
+    })?;
+
+    let pixmap_size = tree.size().to_int_size();
+    let width = pixmap_size.width();
+    let height = pixmap_size.height();
+
+    let mut pixmap =
+        tiny_skia::Pixmap::new(width, height).ok_or_else(|| RawError::ImageDecodeError {
+            format: "SVG",
+            message: "Failed to create pixmap".to_string(),
+        })?;
+
+    resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+
+    // pixmap contains RGBA u8 data; convert to RGB u16
+    let rgba = pixmap.data();
+    let data_u16: Vec<u16> = rgba
+        .chunks_exact(4)
+        .flat_map(|chunk| {
+            [
+                chunk[0] as u16 * 257, // R
+                chunk[1] as u16 * 257, // G
+                chunk[2] as u16 * 257, // B
+            ]
+        })
+        .collect();
+
+    Ok(RgbImage::new(width, height, data_u16))
+}
+
+#[cfg(not(feature = "svg"))]
+fn decode_svg(_data: &[u8]) -> RawResult<RgbImage> {
+    Err(RawError::ImageDecodeError {
+        format: "SVG",
+        message: "SVG support requires the 'svg' feature flag".to_string(),
+    })
+}
+
+// ── APV ──────────────────────────────────────────────────────────────────────
+
+fn decode_apv(_data: &[u8]) -> RawResult<RgbImage> {
+    // APV (All-intra Predictive Video codec) is an open format developed by Samsung.
+    // No Rust decoder exists yet.
+    Err(RawError::ImageDecodeError {
+        format: "APV",
+        message: "APV codec decoding is not yet implemented. \
+                  The APV codec is an open format but no Rust decoder exists yet."
+            .to_string(),
+    })
+}
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
 /// Decode a standard (non-RAW) image to an [`RgbImage`].
@@ -432,6 +542,9 @@ pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<R
         StandardFormat::Jxl => decode_jxl(data),
         StandardFormat::Tiff => decode_tiff(data),
         StandardFormat::Avif => decode_avif(data),
+        StandardFormat::Heic => decode_heic(data),
+        StandardFormat::Svg => decode_svg(data),
+        StandardFormat::Apv => decode_apv(data),
     }
 }
 
@@ -557,6 +670,9 @@ mod tests {
             StandardFormat::Jxl,
             StandardFormat::Tiff,
             StandardFormat::Avif,
+            StandardFormat::Heic,
+            StandardFormat::Svg,
+            StandardFormat::Apv,
         ];
     }
 
@@ -747,5 +863,157 @@ mod tests {
         let result = decode_standard_image(&magic, StandardFormat::Avif);
         assert!(result.is_err());
         assert!(matches!(result, Err(RawError::UnsupportedFormat(_))));
+    }
+
+    // ── StandardFormat name (new variants) ───────────────────────────────
+
+    #[test]
+    fn standard_format_name_new_variants() {
+        assert_eq!(StandardFormat::Heic.name(), "HEIC");
+        assert_eq!(StandardFormat::Svg.name(), "SVG");
+        assert_eq!(StandardFormat::Apv.name(), "APV");
+    }
+
+    // ── HEIC detection and decode ─────────────────────────────────────────
+
+    #[test]
+    fn detect_heic_heic_brand() {
+        let mut magic = [0u8; 12];
+        magic[4..8].copy_from_slice(b"ftyp");
+        magic[8..12].copy_from_slice(b"heic");
+        assert_eq!(detect_standard_format(&magic), Some(StandardFormat::Heic));
+    }
+
+    #[test]
+    fn detect_heic_heis_brand() {
+        let mut magic = [0u8; 12];
+        magic[4..8].copy_from_slice(b"ftyp");
+        magic[8..12].copy_from_slice(b"heis");
+        assert_eq!(detect_standard_format(&magic), Some(StandardFormat::Heic));
+    }
+
+    #[test]
+    fn detect_heic_hevc_brand() {
+        let mut magic = [0u8; 12];
+        magic[4..8].copy_from_slice(b"ftyp");
+        magic[8..12].copy_from_slice(b"hevc");
+        assert_eq!(detect_standard_format(&magic), Some(StandardFormat::Heic));
+    }
+
+    #[test]
+    fn detect_heic_hevx_brand() {
+        let mut magic = [0u8; 12];
+        magic[4..8].copy_from_slice(b"ftyp");
+        magic[8..12].copy_from_slice(b"hevx");
+        assert_eq!(detect_standard_format(&magic), Some(StandardFormat::Heic));
+    }
+
+    #[test]
+    fn detect_non_heic_ftyp_cr3_returns_none_for_heic() {
+        // CR3 uses ftyp with 'crx ' brand — must NOT be detected as HEIC
+        let mut magic = [0u8; 12];
+        magic[4..8].copy_from_slice(b"ftyp");
+        magic[8..12].copy_from_slice(b"crx ");
+        assert_ne!(detect_standard_format(&magic), Some(StandardFormat::Heic));
+    }
+
+    #[test]
+    fn heic_decode_returns_error() {
+        let mut magic = [0u8; 12];
+        magic[4..8].copy_from_slice(b"ftyp");
+        magic[8..12].copy_from_slice(b"heic");
+        let result = decode_standard_image(&magic, StandardFormat::Heic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(RawError::ImageDecodeError { format: "HEIC", .. })
+        ));
+    }
+
+    // ── APV detection and decode ──────────────────────────────────────────
+
+    #[test]
+    fn detect_apv_apv1_brand() {
+        let mut magic = [0u8; 12];
+        magic[4..8].copy_from_slice(b"ftyp");
+        magic[8..12].copy_from_slice(b"apv1");
+        assert_eq!(detect_standard_format(&magic), Some(StandardFormat::Apv));
+    }
+
+    #[test]
+    fn detect_apv_apvx_brand() {
+        let mut magic = [0u8; 12];
+        magic[4..8].copy_from_slice(b"ftyp");
+        magic[8..12].copy_from_slice(b"apvx");
+        assert_eq!(detect_standard_format(&magic), Some(StandardFormat::Apv));
+    }
+
+    #[test]
+    fn apv_decode_returns_error() {
+        let mut magic = [0u8; 12];
+        magic[4..8].copy_from_slice(b"ftyp");
+        magic[8..12].copy_from_slice(b"apv1");
+        let result = decode_standard_image(&magic, StandardFormat::Apv);
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(RawError::ImageDecodeError { format: "APV", .. })
+        ));
+    }
+
+    // ── SVG detection ─────────────────────────────────────────────────────
+
+    #[test]
+    fn detect_svg_xml_prefix() {
+        let data = b"<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\"></svg>";
+        assert_eq!(detect_standard_format(data), Some(StandardFormat::Svg));
+    }
+
+    #[test]
+    fn detect_svg_bare_svg_tag() {
+        let data = b"<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>";
+        assert_eq!(detect_standard_format(data), Some(StandardFormat::Svg));
+    }
+
+    #[test]
+    fn detect_svg_xml_without_svg_tag_returns_none() {
+        // XML that contains no <svg element
+        let data = b"<?xml version=\"1.0\"?><root></root>";
+        assert_eq!(detect_standard_format(data), None);
+    }
+
+    #[test]
+    fn svg_decode_returns_error_without_feature() {
+        // Without the 'svg' feature, decode should return an error.
+        #[cfg(not(feature = "svg"))]
+        {
+            let data = b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"></svg>";
+            let result = decode_standard_image(data, StandardFormat::Svg);
+            assert!(result.is_err());
+            assert!(matches!(
+                result,
+                Err(RawError::ImageDecodeError { format: "SVG", .. })
+            ));
+        }
+        // With the svg feature enabled, the test is skipped here (covered by feature-gated tests).
+        #[cfg(feature = "svg")]
+        {
+            // Just verify the variant exists and the name is correct.
+            assert_eq!(StandardFormat::Svg.name(), "SVG");
+        }
+    }
+
+    #[cfg(feature = "svg")]
+    #[test]
+    fn svg_decode_simple_rect() {
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">
+            <rect width="4" height="4" fill="red"/>
+        </svg>"#;
+        let result = decode_standard_image(svg, StandardFormat::Svg);
+        assert!(result.is_ok());
+        let img = result.unwrap();
+        assert_eq!(img.width, 4);
+        assert_eq!(img.height, 4);
+        assert_eq!(img.data.len(), 4 * 4 * 3);
     }
 }

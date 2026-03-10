@@ -26,7 +26,8 @@ pub use crate::tiff::*;
 pub use crate::transforms::{
     BadPixelCorrectionMode, ColorSpaceTransform, ColorTemperature, apply_bad_pixel_correction,
     apply_bilateral_filter, apply_black_level, apply_ca_correction, apply_color_matrix,
-    apply_gaussian_blur, apply_tone_reproduction, apply_tonemap, apply_white_balance,
-    apply_white_balance_raw, compute_camera_to_srgb, correct_bad_pixels, detect_bad_pixels,
-    estimate_cct_from_as_shot_neutral, interpolate_color_matrix,
+    apply_gains_rgb, apply_gaussian_blur, apply_matrix_rgb, apply_tone_reproduction, apply_tonemap,
+    apply_white_balance, apply_white_balance_raw, compute_camera_to_srgb, correct_bad_pixels,
+    detect_bad_pixels, estimate_cct_from_as_shot_neutral, interpolate_color_matrix,
+    subtract_black_level_uniform,
 };
