@@ -146,7 +146,7 @@ where
                         // GBRG: G B G B. At G. Horizontal B, Vert R.
                         (
                             avg2(get_raw(x, y.saturating_sub(1)), get_raw(x, y + 1)),
-                            avg2(get_raw(x.saturating_sub(1), y), get_raw(x, y + 1)),
+                            avg2(get_raw(x.saturating_sub(1), y), get_raw(x + 1, y)),
                         )
                     }
                 } else {
@@ -155,7 +155,7 @@ where
                     if matches!(pattern, CfaPattern::Grbg) {
                         (
                             avg2(get_raw(x, y.saturating_sub(1)), get_raw(x, y + 1)),
-                            avg2(get_raw(x.saturating_sub(1), y), get_raw(x, y + 1)),
+                            avg2(get_raw(x.saturating_sub(1), y), get_raw(x + 1, y)),
                         )
                     } else {
                         // GBRG: R G R G. At G. Horizontal R, Vert B.

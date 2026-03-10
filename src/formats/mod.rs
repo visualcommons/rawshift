@@ -835,8 +835,9 @@ pub fn encode_rgb_image(
                 .set_quality(quality);
 
             let encoder = JxlSimpleEncoder::new(&data_8bit, enc_options);
-            let encoded = encoder.encode().expect("Encode JXL");
-            std::fs::write(path, encoded)?;
+            let mut encoded: Vec<u8> = Vec::new();
+            encoder.encode(&mut encoded).expect("Encode JXL");
+            std::fs::write(path, &encoded)?;
 
             if opts.embed_exif {
                 use crate::metadata::exif::ExifBuilder;

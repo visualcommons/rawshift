@@ -1,7 +1,8 @@
 use clap::Parser;
 use rawshift::formats::RawFile;
 use rawshift::prelude::export::EncodeOptions;
-use rawshift::processing::{BayerAlgorithm, DemosaicMethod, ProcessingOptions};
+use rawshift::processing::{BayerAlgorithm, DemosaicMethod, ProcessingOptions, XTransAlgorithm};
+use rawshift::transforms::BadPixelCorrectionMode;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -33,6 +34,18 @@ struct Args {
     /// Disable default color matrix (use identity)
     #[arg(long)]
     no_matrix: bool,
+
+    /// Enable bad pixel correction (median or average)
+    #[arg(long, value_enum)]
+    bad_pixel_correction: Option<BadPixelArg>,
+
+    /// Bilateral denoising spatial sigma (e.g. 2.0). Omit to disable.
+    #[arg(long)]
+    denoise_sigma: Option<f32>,
+
+    /// Chromatic aberration correction: red scale and blue scale (e.g. 0.999 1.001)
+    #[arg(long, number_of_values = 2)]
+    ca_correction: Option<Vec<f32>>,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -41,6 +54,9 @@ enum DemosaicAlgoArg {
     Amaze,
     Lmmse,
     Rcd,
+    Markesteijn,
+    Markesteijn3Pass,
+    XTransFast,
 }
 
 impl From<DemosaicAlgoArg> for DemosaicMethod {
@@ -50,6 +66,26 @@ impl From<DemosaicAlgoArg> for DemosaicMethod {
             DemosaicAlgoArg::Amaze => DemosaicMethod::Bayer(BayerAlgorithm::Amaze),
             DemosaicAlgoArg::Lmmse => DemosaicMethod::Bayer(BayerAlgorithm::Lmmse),
             DemosaicAlgoArg::Rcd => DemosaicMethod::Bayer(BayerAlgorithm::Rcd),
+            DemosaicAlgoArg::Markesteijn => DemosaicMethod::XTrans(XTransAlgorithm::Markesteijn),
+            DemosaicAlgoArg::Markesteijn3Pass => {
+                DemosaicMethod::XTrans(XTransAlgorithm::Markesteijn3Pass)
+            }
+            DemosaicAlgoArg::XTransFast => DemosaicMethod::XTrans(XTransAlgorithm::Fast),
+        }
+    }
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum BadPixelArg {
+    Median,
+    Average,
+}
+
+impl From<BadPixelArg> for BadPixelCorrectionMode {
+    fn from(arg: BadPixelArg) -> Self {
+        match arg {
+            BadPixelArg::Median => BadPixelCorrectionMode::Median,
+            BadPixelArg::Average => BadPixelCorrectionMode::Average,
         }
     }
 }
@@ -69,6 +105,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         white_balance,
         gamma,
         no_matrix,
+        bad_pixel_correction,
+        denoise_sigma,
+        ca_correction,
     } = Args::parse();
 
     let encode_options = match output.extension().and_then(|ext| ext.to_str()) {
@@ -121,6 +160,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         options = options.color_matrix(matrix);
     } else {
         println!("Color Matrix disabled");
+    }
+
+    if let Some(bpc) = bad_pixel_correction {
+        println!("Enabling bad pixel correction: {:?}", bpc);
+        options = options.bad_pixel_correction(bpc.into());
+    }
+
+    if let Some(sigma) = denoise_sigma {
+        println!("Enabling bilateral denoising: sigma={}", sigma);
+        options = options.denoise(sigma);
+    }
+
+    if let Some(ca) = ca_correction {
+        if ca.len() == 2 {
+            println!(
+                "Enabling CA correction: red_scale={}, blue_scale={}",
+                ca[0], ca[1]
+            );
+            options = options.ca_correction(ca[0], ca[1]);
+        }
     }
 
     println!("Exporting to {:?}", output);
