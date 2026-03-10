@@ -35,6 +35,7 @@ pub mod ca_correction;
 pub mod cfa;
 pub mod color;
 pub mod denoise;
+pub mod lens_correction;
 pub mod opcodes;
 pub mod tonemap;
 
@@ -49,4 +50,5 @@ pub use color::{
     interpolate_color_matrix,
 };
 pub use denoise::{apply_bilateral_filter, apply_gaussian_blur};
+pub use lens_correction::{apply_warp_rectilinear, apply_warp_rectilinear_tangential};
 pub use tonemap::{apply_tone_reproduction, apply_tonemap};

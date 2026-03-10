@@ -18,6 +18,9 @@ async fn main() -> eyre::Result<()> {
         RawFile::Cr3(_cr3) => {
             println!("Opened CR3 file");
         }
+        RawFile::Crw(_crw) => {
+            println!("Opened CRW file");
+        }
         RawFile::Dng(_dng) => {
             println!("Opened DNG file");
         }

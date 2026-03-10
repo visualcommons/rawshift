@@ -6,6 +6,7 @@
 pub mod arw;
 pub mod cr2;
 pub mod cr3;
+pub mod crw;
 pub mod dng;
 pub mod dng_export;
 pub mod export;
@@ -41,6 +42,8 @@ pub enum RawFormat {
     Cr2,
     /// Canon CR3 format
     Cr3,
+    /// Canon CRW (CIFF) format
+    Crw,
     /// Adobe DNG format (planned)
     Dng,
     /// Nikon NEF format
@@ -59,6 +62,8 @@ pub enum RawFile<R> {
     Cr2(Box<cr2::Cr2File<R>>),
     /// Canon CR3 format
     Cr3(Box<cr3::Cr3File<R>>),
+    /// Canon CRW (CIFF) format
+    Crw(Box<crw::CrwFile<R>>),
     /// Adobe DNG format
     Dng(Box<dng::DngFile<R>>),
     /// Nikon NEF format
@@ -87,6 +92,10 @@ impl<R: Read + Seek> RawFile<R> {
                 let file = cr3::Cr3File::parse(reader)?;
                 Ok(RawFile::Cr3(Box::new(file)))
             }
+            RawFormat::Crw => {
+                let file = crw::CrwFile::parse(reader)?;
+                Ok(RawFile::Crw(Box::new(file)))
+            }
             RawFormat::Dng => {
                 let file = dng::DngFile::parse(reader)?;
                 Ok(RawFile::Dng(Box::new(file)))
@@ -111,6 +120,7 @@ impl<R: Read + Seek> RawFile<R> {
             RawFile::Arw(arw) => arw.extract_metadata(),
             RawFile::Cr2(cr2) => cr2.extract_metadata(),
             RawFile::Cr3(cr3) => cr3.extract_metadata(),
+            RawFile::Crw(crw) => crw.extract_metadata(),
             RawFile::Dng(dng) => dng.extract_metadata(),
             RawFile::Nef(nef) => nef.extract_metadata(),
             RawFile::Raf(raf) => raf.extract_metadata(),
@@ -225,6 +235,7 @@ impl<R: Read + Seek> RawFile<R> {
                 RawFile::Arw(arw) => arw.decode_raw()?,
                 RawFile::Cr2(cr2) => cr2.decode_raw()?,
                 RawFile::Cr3(cr3) => cr3.decode_raw()?,
+                RawFile::Crw(crw) => crw.decode_raw()?,
                 RawFile::Dng(dng) => dng.decode_raw()?,
                 RawFile::Nef(nef) => nef.decode_raw()?,
                 RawFile::Raf(raf) => raf.decode_raw()?,
@@ -432,6 +443,7 @@ impl<R: Read + Seek> RawFile<R> {
             RawFile::Arw(_)
             | RawFile::Cr2(_)
             | RawFile::Cr3(_)
+            | RawFile::Crw(_)
             | RawFile::Nef(_)
             | RawFile::Raf(_) => false,
         }
@@ -440,7 +452,7 @@ impl<R: Read + Seek> RawFile<R> {
     /// Detect the format of the provided reader.
     fn detect_format(reader: &mut R) -> RawResult<RawFormat> {
         // Read magic bytes (16 bytes covers TIFF header + CR2 magic at offset 8,
-        // and the full RAF magic string)
+        // and the full RAF magic string). We also read up to 14 bytes for CRW.
         let start = reader.stream_position()?;
         let mut header = [0u8; 16];
         reader.read_exact(&mut header)?;
@@ -455,6 +467,13 @@ impl<R: Read + Seek> RawFile<R> {
         // (not TIFF) and would otherwise be rejected as an unsupported format.
         if cr3::is_cr3(&header) {
             return Ok(RawFormat::Cr3);
+        }
+
+        // CRW detection must come BEFORE the TIFF check. CRW uses II/MM + 0x0001
+        // (not 0x002A) and has "HEAPCCDR" at bytes 6..14. A standard TIFF parser
+        // would reject it because the magic number is wrong.
+        if crw::is_crw(&header) {
+            return Ok(RawFormat::Crw);
         }
 
         // Check for TIFF magic (II or MM at offset 0)

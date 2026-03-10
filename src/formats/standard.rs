@@ -16,6 +16,8 @@ use crate::error::{RawError, RawResult};
 /// Supported standard (non-RAW) image formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StandardFormat {
+    /// GIF (Graphics Interchange Format)
+    Gif,
     /// JPEG / JFIF
     Jpeg,
     /// PNG (Portable Network Graphics)
@@ -34,6 +36,7 @@ impl StandardFormat {
     /// Human-readable name of the format.
     pub fn name(self) -> &'static str {
         match self {
+            StandardFormat::Gif => "GIF",
             StandardFormat::Jpeg => "JPEG",
             StandardFormat::Png => "PNG",
             StandardFormat::WebP => "WebP",
@@ -52,6 +55,10 @@ pub fn detect_standard_format(data: &[u8]) -> Option<StandardFormat> {
         return None;
     }
     match data {
+        // GIF87a / GIF89a
+        d if d.len() >= 6 && (&d[0..6] == b"GIF87a" || &d[0..6] == b"GIF89a") => {
+            Some(StandardFormat::Gif)
+        }
         // JPEG: FF D8 FF
         d if d[0] == 0xFF && d[1] == 0xD8 && d[2] == 0xFF => Some(StandardFormat::Jpeg),
         // PNG: 89 50 4E 47 0D 0A 1A 0A
@@ -88,6 +95,80 @@ pub fn detect_standard_format(data: &[u8]) -> Option<StandardFormat> {
 #[inline(always)]
 fn u8_to_u16(v: u8) -> u16 {
     (v as u16) * 257
+}
+
+// ── GIF ──────────────────────────────────────────────────────────────────────
+
+fn decode_gif(data: &[u8]) -> RawResult<RgbImage> {
+    use gif::{ColorOutput, DecodeOptions};
+
+    let mut opts = DecodeOptions::new();
+    opts.set_color_output(ColorOutput::RGBA);
+    let mut decoder =
+        opts.read_info(Cursor::new(data))
+            .map_err(|e| RawError::ImageDecodeError {
+                format: "GIF",
+                message: e.to_string(),
+            })?;
+
+    let canvas_width = decoder.width() as u32;
+    let canvas_height = decoder.height() as u32;
+
+    let frame = decoder
+        .read_next_frame()
+        .map_err(|e| RawError::ImageDecodeError {
+            format: "GIF",
+            message: e.to_string(),
+        })?
+        .ok_or_else(|| RawError::ImageDecodeError {
+            format: "GIF",
+            message: "no frames in GIF".to_string(),
+        })?;
+
+    let frame_width = frame.width as usize;
+    let frame_height = frame.height as usize;
+    let frame_left = frame.left as usize;
+    let frame_top = frame.top as usize;
+
+    // Allocate a black canvas and composite the frame (RGBA → RGB, drop alpha).
+    let mut out = vec![0u16; (canvas_width as usize) * (canvas_height as usize) * 3];
+
+    let buf = &frame.buffer[..];
+    // With ColorOutput::RGBA the buffer contains 4 bytes per pixel.
+    let expected_rgba = frame_width * frame_height * 4;
+    if buf.len() < expected_rgba {
+        return Err(RawError::ImageDecodeError {
+            format: "GIF",
+            message: format!(
+                "frame buffer too small: got {} bytes, expected {} ({}x{}x4)",
+                buf.len(),
+                expected_rgba,
+                frame_width,
+                frame_height,
+            ),
+        });
+    }
+
+    for row in 0..frame_height {
+        let canvas_y = frame_top + row;
+        if canvas_y >= canvas_height as usize {
+            break;
+        }
+        for col in 0..frame_width {
+            let canvas_x = frame_left + col;
+            if canvas_x >= canvas_width as usize {
+                continue;
+            }
+            let src = (row * frame_width + col) * 4;
+            let dst = (canvas_y * canvas_width as usize + canvas_x) * 3;
+            out[dst] = u8_to_u16(buf[src]);
+            out[dst + 1] = u8_to_u16(buf[src + 1]);
+            out[dst + 2] = u8_to_u16(buf[src + 2]);
+            // Alpha channel (buf[src + 3]) is intentionally dropped.
+        }
+    }
+
+    Ok(RgbImage::new(canvas_width, canvas_height, out))
 }
 
 // ── JPEG ─────────────────────────────────────────────────────────────────────
@@ -344,6 +425,7 @@ fn decode_avif(_data: &[u8]) -> RawResult<RgbImage> {
 /// [`RawError::UnsupportedFormat`] for formats without a decoder.
 pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<RgbImage> {
     match format {
+        StandardFormat::Gif => decode_gif(data),
         StandardFormat::Jpeg => decode_jpeg(data),
         StandardFormat::Png => decode_png(data),
         StandardFormat::WebP => decode_webp(data),
@@ -360,6 +442,24 @@ mod tests {
     use super::*;
 
     // ── detect_standard_format ────────────────────────────────────────────
+
+    #[test]
+    fn detect_gif89a() {
+        let magic = *b"GIF89a\x01\x00";
+        assert_eq!(detect_standard_format(&magic), Some(StandardFormat::Gif));
+    }
+
+    #[test]
+    fn detect_gif87a() {
+        let magic = *b"GIF87a\x01\x00";
+        assert_eq!(detect_standard_format(&magic), Some(StandardFormat::Gif));
+    }
+
+    #[test]
+    fn detect_gif_non_gif_returns_none() {
+        let magic = *b"GIF99z\x01\x00";
+        assert_ne!(detect_standard_format(&magic), Some(StandardFormat::Gif));
+    }
 
     #[test]
     fn detect_jpeg() {
@@ -438,6 +538,7 @@ mod tests {
 
     #[test]
     fn standard_format_name() {
+        assert_eq!(StandardFormat::Gif.name(), "GIF");
         assert_eq!(StandardFormat::Jpeg.name(), "JPEG");
         assert_eq!(StandardFormat::Png.name(), "PNG");
         assert_eq!(StandardFormat::WebP.name(), "WebP");
@@ -449,6 +550,7 @@ mod tests {
     #[test]
     fn standard_format_variants_exist() {
         let _variants = [
+            StandardFormat::Gif,
             StandardFormat::Jpeg,
             StandardFormat::Png,
             StandardFormat::WebP,
@@ -540,6 +642,90 @@ mod tests {
         let img = decode_standard_image(&encoded, fmt.unwrap()).unwrap();
         assert_eq!(img.width, W as u32);
         assert_eq!(img.height, H as u32);
+    }
+
+    // ── GIF decode ────────────────────────────────────────────────────────
+
+    /// Build a minimal but valid GIF89a file in memory.
+    ///
+    /// Creates a 2×2 image with 4 palette entries and distinct pixel colours:
+    ///   index 0 → red  (255, 0, 0)
+    ///   index 1 → green (0, 255, 0)
+    ///   index 2 → blue  (0, 0, 255)
+    ///   index 3 → white (255, 255, 255)
+    fn make_minimal_gif() -> Vec<u8> {
+        // We hand-craft the GIF binary so we don't need a separate encoder crate.
+        // The LZW-compressed pixel data for indices [0, 1, 2, 3] with min_code_size=2
+        // was pre-computed. This is a known-good 2×2 GIF.
+        use gif::{Encoder, Frame, Repeat};
+        use std::borrow::Cow;
+
+        let palette: &[u8] = &[
+            255, 0, 0, // 0: red
+            0, 255, 0, // 1: green
+            0, 0, 255, // 2: blue
+            255, 255, 255, // 3: white
+            0, 0, 0, // 4: black (padding to a power of 2)
+            0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+
+        let mut out: Vec<u8> = Vec::new();
+        let mut encoder = Encoder::new(&mut out, 2, 2, palette).expect("gif encoder init");
+        encoder.set_repeat(Repeat::Finite(0)).expect("set repeat");
+
+        let mut frame = Frame::<'static>::default();
+        frame.width = 2;
+        frame.height = 2;
+        // Pixel indices row-major: top-left=0, top-right=1, bottom-left=2, bottom-right=3
+        frame.buffer = Cow::Owned(vec![0u8, 1, 2, 3]);
+        encoder.write_frame(&frame).expect("write gif frame");
+        drop(encoder);
+        out
+    }
+
+    #[test]
+    fn gif_decode_dimensions() {
+        let gif_data = make_minimal_gif();
+        let img =
+            decode_standard_image(&gif_data, StandardFormat::Gif).expect("GIF decode must succeed");
+        assert_eq!(img.width, 2, "decoded width must be 2");
+        assert_eq!(img.height, 2, "decoded height must be 2");
+        assert_eq!(
+            img.data.len(),
+            2 * 2 * 3,
+            "must have 12 u16 samples (2×2×3)"
+        );
+    }
+
+    #[test]
+    fn gif_decode_detect_then_decode() {
+        let gif_data = make_minimal_gif();
+        let fmt = detect_standard_format(&gif_data);
+        assert_eq!(
+            fmt,
+            Some(StandardFormat::Gif),
+            "format detection must return GIF"
+        );
+        let img = decode_standard_image(&gif_data, fmt.unwrap()).unwrap();
+        assert_eq!(img.width, 2);
+        assert_eq!(img.height, 2);
+    }
+
+    #[test]
+    fn gif_decode_first_pixel_is_red() {
+        let gif_data = make_minimal_gif();
+        let img = decode_standard_image(&gif_data, StandardFormat::Gif).unwrap();
+        // Index 0 → red (255, 0, 0) → scaled to u16: (255*257, 0, 0)
+        assert_eq!(img.data[0], u8_to_u16(255), "R of top-left pixel");
+        assert_eq!(img.data[1], u8_to_u16(0), "G of top-left pixel");
+        assert_eq!(img.data[2], u8_to_u16(0), "B of top-left pixel");
+    }
+
+    #[test]
+    fn gif_decode_invalid_data_returns_error() {
+        let junk = vec![0u8; 32];
+        let result = decode_standard_image(&junk, StandardFormat::Gif);
+        assert!(result.is_err(), "junk data must return an error");
     }
 
     // ── stub error paths ──────────────────────────────────────────────────
