@@ -476,8 +476,300 @@ impl Demosaic for Amaze {
 pub struct Lmmse;
 
 impl Demosaic for Lmmse {
-    fn demosaic_into(&self, _raw: &RawImage, _output: &mut [u16]) -> Result<(), DemosaicError> {
-        Err(DemosaicError::UnsupportedAlgorithm("LMMSE"))
+    fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
+        let width = raw.active_area.size.width as usize;
+        let height = raw.active_area.size.height as usize;
+        let x_off = raw.active_area.origin.x as usize;
+        let y_off = raw.active_area.origin.y as usize;
+        let raw_w = raw.size.width as usize;
+
+        let expected_size = width * height * 3;
+        if output.len() != expected_size {
+            return Err(DemosaicError::BufferSizeMismatch {
+                expected: expected_size,
+                actual: output.len(),
+            });
+        }
+
+        if width < 6 || height < 6 {
+            return Err(DemosaicError::InvalidDimensions);
+        }
+
+        let white = raw.white_level as f32;
+
+        // CFA color at each active-area position
+        let fc = |x: usize, y: usize| -> u8 {
+            let ax = x + x_off;
+            let ay = y + y_off;
+            match raw.cfa_pattern {
+                CfaPattern::Rggb => match (ax % 2, ay % 2) {
+                    (0, 0) => 0,
+                    (1, 0) => 1,
+                    (0, 1) => 3,
+                    _ => 2,
+                },
+                CfaPattern::Grbg => match (ax % 2, ay % 2) {
+                    (0, 0) => 1,
+                    (1, 0) => 0,
+                    (0, 1) => 2,
+                    _ => 3,
+                },
+                CfaPattern::Gbrg => match (ax % 2, ay % 2) {
+                    (0, 0) => 3,
+                    (1, 0) => 2,
+                    (0, 1) => 0,
+                    _ => 1,
+                },
+                CfaPattern::Bggr => match (ax % 2, ay % 2) {
+                    (0, 0) => 2,
+                    (1, 0) => 3,
+                    (0, 1) => 1,
+                    _ => 0,
+                },
+            }
+        };
+
+        // Mirror-padded accessor into the raw data (active area coordinates)
+        let get = |x: isize, y: isize| -> f32 {
+            let cx = x.clamp(0, (width as isize) - 1) as usize;
+            let cy = y.clamp(0, (height as isize) - 1) as usize;
+            raw.data[(cy + y_off) * raw_w + (cx + x_off)] as f32
+        };
+
+        // ── Step 1: Compute horizontal and vertical green estimates ──
+
+        let mut gh = vec![0.0f32; width * height];
+        let mut gv = vec![0.0f32; width * height];
+
+        for y in 0..height {
+            for x in 0..width {
+                let color = fc(x, y);
+                let ix = x as isize;
+                let iy = y as isize;
+
+                if color == 1 || color == 3 {
+                    // Green pixel — copy to both directional planes
+                    let val = get(ix, iy);
+                    gh[y * width + x] = val;
+                    gv[y * width + x] = val;
+                } else {
+                    // Non-green pixel — LMMSE horizontal estimate
+                    // gh = 0.5*(G[x-1]+G[x+1]) + 0.25*(2*raw[x]-raw[x-2]-raw[x+2])
+                    let est_h = 0.5 * (get(ix - 1, iy) + get(ix + 1, iy))
+                        + 0.25 * (2.0 * get(ix, iy) - get(ix - 2, iy) - get(ix + 2, iy));
+                    gh[y * width + x] = est_h.clamp(0.0, white);
+
+                    // LMMSE vertical estimate
+                    let est_v = 0.5 * (get(ix, iy - 1) + get(ix, iy + 1))
+                        + 0.25 * (2.0 * get(ix, iy) - get(ix, iy - 2) - get(ix, iy + 2));
+                    gv[y * width + x] = est_v.clamp(0.0, white);
+                }
+            }
+        }
+
+        // ── Step 2: Variance-based adaptive blending of green estimates ──
+
+        let mut green = vec![0.0f32; width * height];
+        let eps = 1e-5f32;
+        let half_win = 2usize; // 5-pixel window radius
+
+        for y in 0..height {
+            for x in 0..width {
+                let color = fc(x, y);
+                if color == 1 || color == 3 {
+                    green[y * width + x] = gh[y * width + x]; // already the raw value
+                    continue;
+                }
+
+                // Compute local variance of (raw - green_est) along each direction
+                let mut sum_h = 0.0f32;
+                let mut sum_sq_h = 0.0f32;
+                let mut sum_v = 0.0f32;
+                let mut sum_sq_v = 0.0f32;
+                let mut n = 0.0f32;
+
+                for dy in -(half_win as isize)..=(half_win as isize) {
+                    for dx in -(half_win as isize)..=(half_win as isize) {
+                        let nx = (x as isize + dx).clamp(0, (width as isize) - 1) as usize;
+                        let ny = (y as isize + dy).clamp(0, (height as isize) - 1) as usize;
+                        let nidx = ny * width + nx;
+                        let raw_val = get(nx as isize, ny as isize);
+                        let dh = raw_val - gh[nidx];
+                        let dv = raw_val - gv[nidx];
+                        sum_h += dh;
+                        sum_sq_h += dh * dh;
+                        sum_v += dv;
+                        sum_sq_v += dv * dv;
+                        n += 1.0;
+                    }
+                }
+
+                let var_h = (sum_sq_h - sum_h * sum_h / n) / n;
+                let var_v = (sum_sq_v - sum_v * sum_v / n) / n;
+
+                // Weight inversely proportional to variance
+                let wh = 1.0 / (var_h + eps);
+                let wv = 1.0 / (var_v + eps);
+
+                let idx = y * width + x;
+                green[idx] = ((wh * gh[idx] + wv * gv[idx]) / (wh + wv)).clamp(0.0, white);
+            }
+        }
+
+        drop(gh);
+        drop(gv);
+
+        // ── Step 3: R/B interpolation via color-difference bilinear ──
+
+        // Compute color differences at known positions, then interpolate.
+        let mut cd_rg = vec![0.0f32; width * height]; // R - G at R pixels
+        let mut cd_bg = vec![0.0f32; width * height]; // B - G at B pixels
+
+        for y in 0..height {
+            for x in 0..width {
+                let idx = y * width + x;
+                match fc(x, y) {
+                    0 => cd_rg[idx] = get(x as isize, y as isize) - green[idx],
+                    2 => cd_bg[idx] = get(x as isize, y as isize) - green[idx],
+                    _ => {}
+                }
+            }
+        }
+
+        let mut red = vec![0.0f32; width * height];
+        let mut blue = vec![0.0f32; width * height];
+
+        for y in 0..height {
+            for x in 0..width {
+                let idx = y * width + x;
+                let color = fc(x, y);
+                let ix = x as isize;
+                let iy = y as isize;
+
+                match color {
+                    0 => {
+                        // Red pixel — R is known, need B from diagonal bilinear
+                        red[idx] = get(ix, iy);
+                        let mut sum = 0.0f32;
+                        let mut cnt = 0.0f32;
+                        for &(dx, dy) in &[(-1i32, -1i32), (1, -1), (-1, 1), (1, 1)] {
+                            let nx = ix + dx as isize;
+                            let ny = iy + dy as isize;
+                            if nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize {
+                                let nidx = ny as usize * width + nx as usize;
+                                if fc(nx as usize, ny as usize) == 2 {
+                                    sum += cd_bg[nidx];
+                                    cnt += 1.0;
+                                }
+                            }
+                        }
+                        blue[idx] = (green[idx] + if cnt > 0.0 { sum / cnt } else { 0.0 })
+                            .clamp(0.0, white);
+                    }
+                    2 => {
+                        // Blue pixel — B is known, need R from diagonal bilinear
+                        blue[idx] = get(ix, iy);
+                        let mut sum = 0.0f32;
+                        let mut cnt = 0.0f32;
+                        for &(dx, dy) in &[(-1i32, -1i32), (1, -1), (-1, 1), (1, 1)] {
+                            let nx = ix + dx as isize;
+                            let ny = iy + dy as isize;
+                            if nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize {
+                                let nidx = ny as usize * width + nx as usize;
+                                if fc(nx as usize, ny as usize) == 0 {
+                                    sum += cd_rg[nidx];
+                                    cnt += 1.0;
+                                }
+                            }
+                        }
+                        red[idx] = (green[idx] + if cnt > 0.0 { sum / cnt } else { 0.0 })
+                            .clamp(0.0, white);
+                    }
+                    1 => {
+                        // Green on R-row: R from horizontal neighbors, B from vertical
+                        let mut sr = 0.0f32;
+                        let mut cr = 0.0f32;
+                        for &dx in &[-1i32, 1] {
+                            let nx = ix + dx as isize;
+                            if nx >= 0 && nx < width as isize {
+                                let nidx = y * width + nx as usize;
+                                if fc(nx as usize, y) == 0 {
+                                    sr += cd_rg[nidx];
+                                    cr += 1.0;
+                                }
+                            }
+                        }
+                        red[idx] =
+                            (green[idx] + if cr > 0.0 { sr / cr } else { 0.0 }).clamp(0.0, white);
+
+                        let mut sb = 0.0f32;
+                        let mut cb = 0.0f32;
+                        for &dy in &[-1i32, 1] {
+                            let ny = iy + dy as isize;
+                            if ny >= 0 && ny < height as isize {
+                                let nidx = ny as usize * width + x;
+                                if fc(x, ny as usize) == 2 {
+                                    sb += cd_bg[nidx];
+                                    cb += 1.0;
+                                }
+                            }
+                        }
+                        blue[idx] =
+                            (green[idx] + if cb > 0.0 { sb / cb } else { 0.0 }).clamp(0.0, white);
+                    }
+                    3 => {
+                        // Green on B-row: B from horizontal neighbors, R from vertical
+                        let mut sb = 0.0f32;
+                        let mut cb = 0.0f32;
+                        for &dx in &[-1i32, 1] {
+                            let nx = ix + dx as isize;
+                            if nx >= 0 && nx < width as isize {
+                                let nidx = y * width + nx as usize;
+                                if fc(nx as usize, y) == 2 {
+                                    sb += cd_bg[nidx];
+                                    cb += 1.0;
+                                }
+                            }
+                        }
+                        blue[idx] =
+                            (green[idx] + if cb > 0.0 { sb / cb } else { 0.0 }).clamp(0.0, white);
+
+                        let mut sr = 0.0f32;
+                        let mut cr = 0.0f32;
+                        for &dy in &[-1i32, 1] {
+                            let ny = iy + dy as isize;
+                            if ny >= 0 && ny < height as isize {
+                                let nidx = ny as usize * width + x;
+                                if fc(x, ny as usize) == 0 {
+                                    sr += cd_rg[nidx];
+                                    cr += 1.0;
+                                }
+                            }
+                        }
+                        red[idx] =
+                            (green[idx] + if cr > 0.0 { sr / cr } else { 0.0 }).clamp(0.0, white);
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        // ── Step 4: Write interleaved RGB output ──────────────────────
+
+        output
+            .par_chunks_mut(width * 3)
+            .enumerate()
+            .for_each(|(y, row)| {
+                for x in 0..width {
+                    let idx = y * width + x;
+                    let out = x * 3;
+                    row[out] = red[idx].round().clamp(0.0, white) as u16;
+                    row[out + 1] = green[idx].round().clamp(0.0, white) as u16;
+                    row[out + 2] = blue[idx].round().clamp(0.0, white) as u16;
+                }
+            });
+
+        Ok(())
     }
 }
 
@@ -492,8 +784,258 @@ impl Demosaic for Lmmse {
 pub struct Rcd;
 
 impl Demosaic for Rcd {
-    fn demosaic_into(&self, _raw: &RawImage, _output: &mut [u16]) -> Result<(), DemosaicError> {
-        Err(DemosaicError::UnsupportedAlgorithm("RCD"))
+    fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
+        let width = raw.active_area.size.width as usize;
+        let height = raw.active_area.size.height as usize;
+        let x_off = raw.active_area.origin.x as usize;
+        let y_off = raw.active_area.origin.y as usize;
+        let raw_w = raw.size.width as usize;
+
+        let expected_size = width * height * 3;
+        if output.len() != expected_size {
+            return Err(DemosaicError::BufferSizeMismatch {
+                expected: expected_size,
+                actual: output.len(),
+            });
+        }
+
+        if width < 6 || height < 6 {
+            return Err(DemosaicError::InvalidDimensions);
+        }
+
+        let white = raw.white_level as f32;
+
+        // CFA color at each active-area position
+        let fc = |x: usize, y: usize| -> u8 {
+            let ax = x + x_off;
+            let ay = y + y_off;
+            match raw.cfa_pattern {
+                CfaPattern::Rggb => match (ax % 2, ay % 2) {
+                    (0, 0) => 0,
+                    (1, 0) => 1,
+                    (0, 1) => 3,
+                    _ => 2,
+                },
+                CfaPattern::Grbg => match (ax % 2, ay % 2) {
+                    (0, 0) => 1,
+                    (1, 0) => 0,
+                    (0, 1) => 2,
+                    _ => 3,
+                },
+                CfaPattern::Gbrg => match (ax % 2, ay % 2) {
+                    (0, 0) => 3,
+                    (1, 0) => 2,
+                    (0, 1) => 0,
+                    _ => 1,
+                },
+                CfaPattern::Bggr => match (ax % 2, ay % 2) {
+                    (0, 0) => 2,
+                    (1, 0) => 3,
+                    (0, 1) => 1,
+                    _ => 0,
+                },
+            }
+        };
+
+        // Mirror-padded accessor
+        let get = |x: isize, y: isize| -> f32 {
+            let cx = x.clamp(0, (width as isize) - 1) as usize;
+            let cy = y.clamp(0, (height as isize) - 1) as usize;
+            raw.data[(cy + y_off) * raw_w + (cx + x_off)] as f32
+        };
+
+        // ── Step 1: Green channel interpolation (adaptive directional) ──
+
+        let mut green = vec![0.0f32; width * height];
+
+        for y in 0..height {
+            for x in 0..width {
+                let color = fc(x, y);
+                let ix = x as isize;
+                let iy = y as isize;
+
+                if color == 1 || color == 3 {
+                    green[y * width + x] = get(ix, iy);
+                } else {
+                    // RCD uses same adaptive directional green interpolation as AMaZE
+                    let dh = (get(ix - 1, iy) - get(ix + 1, iy)).abs()
+                        + (2.0 * get(ix, iy) - get(ix - 2, iy) - get(ix + 2, iy)).abs();
+                    let dv = (get(ix, iy - 1) - get(ix, iy + 1)).abs()
+                        + (2.0 * get(ix, iy) - get(ix, iy - 2) - get(ix, iy + 2)).abs();
+
+                    let gh = (get(ix - 1, iy) + get(ix + 1, iy)) * 0.5
+                        + (2.0 * get(ix, iy) - get(ix - 2, iy) - get(ix + 2, iy)) * 0.25;
+                    let gv = (get(ix, iy - 1) + get(ix, iy + 1)) * 0.5
+                        + (2.0 * get(ix, iy) - get(ix, iy - 2) - get(ix, iy + 2)) * 0.25;
+
+                    let eps = 1e-5f32;
+                    let g = if dh < dv * 0.5 {
+                        gh
+                    } else if dv < dh * 0.5 {
+                        gv
+                    } else {
+                        let wh = 1.0 / (dh + eps);
+                        let wv = 1.0 / (dv + eps);
+                        (wh * gh + wv * gv) / (wh + wv)
+                    };
+                    green[y * width + x] = g.max(0.0);
+                }
+            }
+        }
+
+        // ── Step 2: R/B reconstruction using color ratios ─────────────
+
+        // The RCD insight: R/G and B/G ratios are smoother than R-G differences.
+        // We interpolate ratios and then multiply back by the interpolated green.
+
+        // First build ratio planes at known positions.
+        // ratio_rg[idx] = R[idx] / G[idx] at R pixels (else 1.0 placeholder)
+        // ratio_bg[idx] = B[idx] / G[idx] at B pixels (else 1.0 placeholder)
+        let mut ratio_rg = vec![1.0f32; width * height];
+        let mut ratio_bg = vec![1.0f32; width * height];
+
+        for y in 0..height {
+            for x in 0..width {
+                let idx = y * width + x;
+                let g = green[idx].max(1.0); // avoid division by zero
+                match fc(x, y) {
+                    0 => ratio_rg[idx] = get(x as isize, y as isize) / g,
+                    2 => ratio_bg[idx] = get(x as isize, y as isize) / g,
+                    _ => {}
+                }
+            }
+        }
+
+        let mut red = vec![0.0f32; width * height];
+        let mut blue = vec![0.0f32; width * height];
+
+        for y in 0..height {
+            for x in 0..width {
+                let idx = y * width + x;
+                let color = fc(x, y);
+                let ix = x as isize;
+                let iy = y as isize;
+
+                match color {
+                    0 => {
+                        // R pixel — R is known; B interpolated from diagonal ratio bilinear
+                        red[idx] = get(ix, iy);
+                        let mut sum_ratio = 0.0f32;
+                        let mut cnt = 0.0f32;
+                        for &(dx, dy) in &[(-1i32, -1i32), (1, -1), (-1, 1), (1, 1)] {
+                            let nx = ix + dx as isize;
+                            let ny = iy + dy as isize;
+                            if nx >= 0
+                                && nx < width as isize
+                                && ny >= 0
+                                && ny < height as isize
+                                && fc(nx as usize, ny as usize) == 2
+                            {
+                                sum_ratio += ratio_bg[ny as usize * width + nx as usize];
+                                cnt += 1.0;
+                            }
+                        }
+                        let r = if cnt > 0.0 { sum_ratio / cnt } else { 1.0 };
+                        blue[idx] = (green[idx] * r).clamp(0.0, white);
+                    }
+                    2 => {
+                        // B pixel — B is known; R interpolated from diagonal ratio bilinear
+                        blue[idx] = get(ix, iy);
+                        let mut sum_ratio = 0.0f32;
+                        let mut cnt = 0.0f32;
+                        for &(dx, dy) in &[(-1i32, -1i32), (1, -1), (-1, 1), (1, 1)] {
+                            let nx = ix + dx as isize;
+                            let ny = iy + dy as isize;
+                            if nx >= 0
+                                && nx < width as isize
+                                && ny >= 0
+                                && ny < height as isize
+                                && fc(nx as usize, ny as usize) == 0
+                            {
+                                sum_ratio += ratio_rg[ny as usize * width + nx as usize];
+                                cnt += 1.0;
+                            }
+                        }
+                        let r = if cnt > 0.0 { sum_ratio / cnt } else { 1.0 };
+                        red[idx] = (green[idx] * r).clamp(0.0, white);
+                    }
+                    1 => {
+                        // Green on R-row:
+                        // R from horizontal R/G ratio pairs
+                        // B from vertical B/G ratio pairs
+                        let mut sr = 0.0f32;
+                        let mut cr = 0.0f32;
+                        for &dx in &[-1i32, 1] {
+                            let nx = ix + dx as isize;
+                            if nx >= 0 && nx < width as isize && fc(nx as usize, y) == 0 {
+                                sr += ratio_rg[y * width + nx as usize];
+                                cr += 1.0;
+                            }
+                        }
+                        let rr = if cr > 0.0 { sr / cr } else { 1.0 };
+                        red[idx] = (green[idx] * rr).clamp(0.0, white);
+
+                        let mut sb = 0.0f32;
+                        let mut cb = 0.0f32;
+                        for &dy in &[-1i32, 1] {
+                            let ny = iy + dy as isize;
+                            if ny >= 0 && ny < height as isize && fc(x, ny as usize) == 2 {
+                                sb += ratio_bg[ny as usize * width + x];
+                                cb += 1.0;
+                            }
+                        }
+                        let rb = if cb > 0.0 { sb / cb } else { 1.0 };
+                        blue[idx] = (green[idx] * rb).clamp(0.0, white);
+                    }
+                    3 => {
+                        // Green on B-row:
+                        // B from horizontal B/G ratio pairs
+                        // R from vertical R/G ratio pairs
+                        let mut sb = 0.0f32;
+                        let mut cb = 0.0f32;
+                        for &dx in &[-1i32, 1] {
+                            let nx = ix + dx as isize;
+                            if nx >= 0 && nx < width as isize && fc(nx as usize, y) == 2 {
+                                sb += ratio_bg[y * width + nx as usize];
+                                cb += 1.0;
+                            }
+                        }
+                        let rb = if cb > 0.0 { sb / cb } else { 1.0 };
+                        blue[idx] = (green[idx] * rb).clamp(0.0, white);
+
+                        let mut sr = 0.0f32;
+                        let mut cr = 0.0f32;
+                        for &dy in &[-1i32, 1] {
+                            let ny = iy + dy as isize;
+                            if ny >= 0 && ny < height as isize && fc(x, ny as usize) == 0 {
+                                sr += ratio_rg[ny as usize * width + x];
+                                cr += 1.0;
+                            }
+                        }
+                        let rr = if cr > 0.0 { sr / cr } else { 1.0 };
+                        red[idx] = (green[idx] * rr).clamp(0.0, white);
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        // ── Step 3: Write interleaved RGB output ──────────────────────
+
+        output
+            .par_chunks_mut(width * 3)
+            .enumerate()
+            .for_each(|(y, row)| {
+                for x in 0..width {
+                    let idx = y * width + x;
+                    let out = x * 3;
+                    row[out] = red[idx].round().clamp(0.0, white) as u16;
+                    row[out + 1] = green[idx].round().clamp(0.0, white) as u16;
+                    row[out + 2] = blue[idx].round().clamp(0.0, white) as u16;
+                }
+            });
+
+        Ok(())
     }
 }
 
@@ -510,6 +1052,7 @@ mod tests {
             active_area,
             bit_depth: 14,
             cfa_pattern: pattern,
+            xtrans_pattern: None,
             black_levels: [0; 4],
             white_level: 16383,
             data: vec![value; (width * height) as usize],
@@ -535,6 +1078,7 @@ mod tests {
             active_area,
             bit_depth: 14,
             cfa_pattern: pattern,
+            xtrans_pattern: None,
             black_levels: [0; 4],
             white_level: 16383,
             data,
@@ -678,6 +1222,250 @@ mod tests {
         let mut raw = create_test_raw(30, 30, CfaPattern::Rggb, 4000);
         raw.active_area = Rect::from_coords(5, 5, 20, 20);
         let rgb = Amaze.demosaic(&raw);
+        assert_eq!(rgb.width, 20);
+        assert_eq!(rgb.height, 20);
+        assert_eq!(rgb.data.len(), 20 * 20 * 3);
+    }
+
+    // ── LMMSE tests ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_lmmse_correct_output_size() {
+        let raw = create_test_raw(20, 20, CfaPattern::Rggb, 5000);
+        let mut output = vec![0u16; 20 * 20 * 3];
+        assert!(Lmmse.demosaic_into(&raw, &mut output).is_ok());
+    }
+
+    #[test]
+    fn test_lmmse_wrong_buffer_size() {
+        let raw = create_test_raw(20, 20, CfaPattern::Rggb, 5000);
+        let mut output = vec![0u16; 50];
+        assert!(matches!(
+            Lmmse.demosaic_into(&raw, &mut output),
+            Err(DemosaicError::BufferSizeMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_lmmse_too_small_image() {
+        let raw = create_test_raw(4, 4, CfaPattern::Rggb, 5000);
+        let mut output = vec![0u16; 4 * 4 * 3];
+        assert!(matches!(
+            Lmmse.demosaic_into(&raw, &mut output),
+            Err(DemosaicError::InvalidDimensions)
+        ));
+    }
+
+    #[test]
+    fn test_lmmse_uniform_produces_uniform() {
+        let raw = create_test_raw(20, 20, CfaPattern::Rggb, 5000);
+        let rgb = Lmmse.demosaic(&raw);
+
+        for y in 4..16 {
+            for x in 4..16 {
+                let idx = (y * 20 + x) * 3;
+                for c in 0..3 {
+                    let val = rgb.data[idx + c];
+                    assert!(
+                        (val as i32 - 5000).abs() < 500,
+                        "LMMSE pixel ({},{}) ch {} = {}, expected ~5000",
+                        x,
+                        y,
+                        c,
+                        val
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_lmmse_all_cfa_patterns() {
+        for pattern in [
+            CfaPattern::Rggb,
+            CfaPattern::Grbg,
+            CfaPattern::Gbrg,
+            CfaPattern::Bggr,
+        ] {
+            let raw = create_test_raw(20, 20, pattern, 3000);
+            let rgb = Lmmse.demosaic(&raw);
+            assert_eq!(rgb.width, 20);
+            assert_eq!(rgb.height, 20);
+            assert_eq!(rgb.data.len(), 20 * 20 * 3);
+
+            for val in &rgb.data {
+                assert!(
+                    *val <= 16383,
+                    "LMMSE pattern {:?}: value {} too high",
+                    pattern,
+                    val
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_lmmse_gradient_smooth() {
+        let raw = create_gradient_raw(40, 40, CfaPattern::Rggb);
+        let rgb = Lmmse.demosaic(&raw);
+
+        for y in 5..35 {
+            for x in 5..35 {
+                let idx = (y * 40 + x) * 3;
+                let idx_right = (y * 40 + x + 1) * 3;
+                let idx_down = ((y + 1) * 40 + x) * 3;
+
+                for c in 0..3 {
+                    let diff_h = (rgb.data[idx + c] as i32 - rgb.data[idx_right + c] as i32).abs();
+                    let diff_v = (rgb.data[idx + c] as i32 - rgb.data[idx_down + c] as i32).abs();
+                    assert!(
+                        diff_h < 1000,
+                        "LMMSE horizontal jump at ({},{}) ch {}: {}",
+                        x,
+                        y,
+                        c,
+                        diff_h
+                    );
+                    assert!(
+                        diff_v < 1000,
+                        "LMMSE vertical jump at ({},{}) ch {}: {}",
+                        x,
+                        y,
+                        c,
+                        diff_v
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_lmmse_with_active_area() {
+        let mut raw = create_test_raw(30, 30, CfaPattern::Rggb, 4000);
+        raw.active_area = Rect::from_coords(5, 5, 20, 20);
+        let rgb = Lmmse.demosaic(&raw);
+        assert_eq!(rgb.width, 20);
+        assert_eq!(rgb.height, 20);
+        assert_eq!(rgb.data.len(), 20 * 20 * 3);
+    }
+
+    // ── RCD tests ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_rcd_correct_output_size() {
+        let raw = create_test_raw(20, 20, CfaPattern::Rggb, 5000);
+        let mut output = vec![0u16; 20 * 20 * 3];
+        assert!(Rcd.demosaic_into(&raw, &mut output).is_ok());
+    }
+
+    #[test]
+    fn test_rcd_wrong_buffer_size() {
+        let raw = create_test_raw(20, 20, CfaPattern::Rggb, 5000);
+        let mut output = vec![0u16; 50];
+        assert!(matches!(
+            Rcd.demosaic_into(&raw, &mut output),
+            Err(DemosaicError::BufferSizeMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_rcd_too_small_image() {
+        let raw = create_test_raw(4, 4, CfaPattern::Rggb, 5000);
+        let mut output = vec![0u16; 4 * 4 * 3];
+        assert!(matches!(
+            Rcd.demosaic_into(&raw, &mut output),
+            Err(DemosaicError::InvalidDimensions)
+        ));
+    }
+
+    #[test]
+    fn test_rcd_uniform_produces_uniform() {
+        let raw = create_test_raw(20, 20, CfaPattern::Rggb, 5000);
+        let rgb = Rcd.demosaic(&raw);
+
+        for y in 4..16 {
+            for x in 4..16 {
+                let idx = (y * 20 + x) * 3;
+                for c in 0..3 {
+                    let val = rgb.data[idx + c];
+                    assert!(
+                        (val as i32 - 5000).abs() < 500,
+                        "RCD pixel ({},{}) ch {} = {}, expected ~5000",
+                        x,
+                        y,
+                        c,
+                        val
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_rcd_all_cfa_patterns() {
+        for pattern in [
+            CfaPattern::Rggb,
+            CfaPattern::Grbg,
+            CfaPattern::Gbrg,
+            CfaPattern::Bggr,
+        ] {
+            let raw = create_test_raw(20, 20, pattern, 3000);
+            let rgb = Rcd.demosaic(&raw);
+            assert_eq!(rgb.width, 20);
+            assert_eq!(rgb.height, 20);
+            assert_eq!(rgb.data.len(), 20 * 20 * 3);
+
+            for val in &rgb.data {
+                assert!(
+                    *val <= 16383,
+                    "RCD pattern {:?}: value {} too high",
+                    pattern,
+                    val
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_rcd_gradient_smooth() {
+        let raw = create_gradient_raw(40, 40, CfaPattern::Rggb);
+        let rgb = Rcd.demosaic(&raw);
+
+        for y in 5..35 {
+            for x in 5..35 {
+                let idx = (y * 40 + x) * 3;
+                let idx_right = (y * 40 + x + 1) * 3;
+                let idx_down = ((y + 1) * 40 + x) * 3;
+
+                for c in 0..3 {
+                    let diff_h = (rgb.data[idx + c] as i32 - rgb.data[idx_right + c] as i32).abs();
+                    let diff_v = (rgb.data[idx + c] as i32 - rgb.data[idx_down + c] as i32).abs();
+                    assert!(
+                        diff_h < 1000,
+                        "RCD horizontal jump at ({},{}) ch {}: {}",
+                        x,
+                        y,
+                        c,
+                        diff_h
+                    );
+                    assert!(
+                        diff_v < 1000,
+                        "RCD vertical jump at ({},{}) ch {}: {}",
+                        x,
+                        y,
+                        c,
+                        diff_v
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_rcd_with_active_area() {
+        let mut raw = create_test_raw(30, 30, CfaPattern::Rggb, 4000);
+        raw.active_area = Rect::from_coords(5, 5, 20, 20);
+        let rgb = Rcd.demosaic(&raw);
         assert_eq!(rgb.width, 20);
         assert_eq!(rgb.height, 20);
         assert_eq!(rgb.data.len(), 20 * 20 * 3);
