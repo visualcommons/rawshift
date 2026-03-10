@@ -15,11 +15,17 @@ async fn main() -> eyre::Result<()> {
         RawFile::Cr2(_cr2) => {
             println!("Opened CR2 file");
         }
+        RawFile::Cr3(_cr3) => {
+            println!("Opened CR3 file");
+        }
         RawFile::Dng(_dng) => {
             println!("Opened DNG file");
         }
         RawFile::Nef(_nef) => {
             println!("Opened NEF file");
+        }
+        RawFile::Raf(_raf) => {
+            println!("Opened RAF file");
         }
     }
 

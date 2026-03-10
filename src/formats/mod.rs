@@ -5,12 +5,16 @@
 
 pub mod arw;
 pub mod cr2;
+pub mod cr3;
 pub mod dng;
 pub mod dng_export;
 pub mod export;
 pub mod nef;
+pub mod raf;
+pub mod standard;
 
 pub use dng_export::{DngExportConfig, export_dng};
+pub use standard::{StandardFormat, decode_standard_image, detect_standard_format};
 
 use std::io::{Read, Seek, SeekFrom};
 
@@ -35,10 +39,14 @@ pub enum RawFormat {
     Arw,
     /// Canon CR2 format
     Cr2,
+    /// Canon CR3 format
+    Cr3,
     /// Adobe DNG format (planned)
     Dng,
     /// Nikon NEF format
     Nef,
+    /// Fujifilm RAF format
+    Raf,
 }
 
 /// Common entry point for parsing RAW files.
@@ -49,10 +57,14 @@ pub enum RawFile<R> {
     Arw(Box<arw::ArwFile<R>>),
     /// Canon CR2 format
     Cr2(Box<cr2::Cr2File<R>>),
+    /// Canon CR3 format
+    Cr3(Box<cr3::Cr3File<R>>),
     /// Adobe DNG format
     Dng(Box<dng::DngFile<R>>),
     /// Nikon NEF format
     Nef(Box<nef::NefFile<R>>),
+    /// Fujifilm RAF format
+    Raf(Box<raf::RafFile<R>>),
 }
 
 impl<R: Read + Seek> RawFile<R> {
@@ -71,6 +83,10 @@ impl<R: Read + Seek> RawFile<R> {
                 let file = cr2::Cr2File::parse(reader)?;
                 Ok(RawFile::Cr2(Box::new(file)))
             }
+            RawFormat::Cr3 => {
+                let file = cr3::Cr3File::parse(reader)?;
+                Ok(RawFile::Cr3(Box::new(file)))
+            }
             RawFormat::Dng => {
                 let file = dng::DngFile::parse(reader)?;
                 Ok(RawFile::Dng(Box::new(file)))
@@ -78,6 +94,10 @@ impl<R: Read + Seek> RawFile<R> {
             RawFormat::Nef => {
                 let file = nef::NefFile::parse(reader)?;
                 Ok(RawFile::Nef(Box::new(file)))
+            }
+            RawFormat::Raf => {
+                let file = raf::RafFile::parse(reader)?;
+                Ok(RawFile::Raf(Box::new(file)))
             }
         }
     }
@@ -90,8 +110,10 @@ impl<R: Read + Seek> RawFile<R> {
         match self {
             RawFile::Arw(arw) => arw.extract_metadata(),
             RawFile::Cr2(cr2) => cr2.extract_metadata(),
+            RawFile::Cr3(cr3) => cr3.extract_metadata(),
             RawFile::Dng(dng) => dng.extract_metadata(),
             RawFile::Nef(nef) => nef.extract_metadata(),
+            RawFile::Raf(raf) => raf.extract_metadata(),
         }
     }
 
@@ -202,8 +224,10 @@ impl<R: Read + Seek> RawFile<R> {
             let mut raw_image = match self {
                 RawFile::Arw(arw) => arw.decode_raw()?,
                 RawFile::Cr2(cr2) => cr2.decode_raw()?,
+                RawFile::Cr3(cr3) => cr3.decode_raw()?,
                 RawFile::Dng(dng) => dng.decode_raw()?,
                 RawFile::Nef(nef) => nef.decode_raw()?,
+                RawFile::Raf(raf) => raf.decode_raw()?,
             };
 
             // Per-channel black level subtraction
@@ -405,17 +429,33 @@ impl<R: Read + Seek> RawFile<R> {
     pub fn is_linear_raw_dng(&self) -> bool {
         match self {
             RawFile::Dng(dng) => dng.metadata().map(|m| m.is_linear_raw).unwrap_or(false),
-            RawFile::Arw(_) | RawFile::Cr2(_) | RawFile::Nef(_) => false,
+            RawFile::Arw(_)
+            | RawFile::Cr2(_)
+            | RawFile::Cr3(_)
+            | RawFile::Nef(_)
+            | RawFile::Raf(_) => false,
         }
     }
 
     /// Detect the format of the provided reader.
     fn detect_format(reader: &mut R) -> RawResult<RawFormat> {
-        // Read magic bytes (16 bytes covers TIFF header + CR2 magic at offset 8)
+        // Read magic bytes (16 bytes covers TIFF header + CR2 magic at offset 8,
+        // and the full RAF magic string)
         let start = reader.stream_position()?;
         let mut header = [0u8; 16];
         reader.read_exact(&mut header)?;
         reader.seek(SeekFrom::Start(start))?;
+
+        // Check for Fujifilm RAF magic first (not TIFF-based)
+        if raf::is_raf(&header) {
+            return Ok(RawFormat::Raf);
+        }
+
+        // CR3 detection must come BEFORE the TIFF check because CR3 uses ISOBMFF
+        // (not TIFF) and would otherwise be rejected as an unsupported format.
+        if cr3::is_cr3(&header) {
+            return Ok(RawFormat::Cr3);
+        }
 
         // Check for TIFF magic (II or MM at offset 0)
         let is_tiff = (header[0] == b'I' && header[1] == b'I' && header[2] == 42 && header[3] == 0)
