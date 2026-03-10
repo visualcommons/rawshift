@@ -227,21 +227,20 @@ mod tests {
         apply_white_balance_raw(&mut image, (2.0, 1.0, 0.5));
 
         // RGGB: row 0: R G R G, row 1: G B G B, ...
-        let w = 4usize;
         // (0,0) = R -> 2000
-        assert_eq!(image.data[0 * w + 0], 2000);
+        assert_eq!(image.data[0], 2000);
         // (1,0) = G -> 1000
-        assert_eq!(image.data[0 * w + 1], 1000);
+        assert_eq!(image.data[1], 1000);
         // (2,0) = R -> 2000
-        assert_eq!(image.data[0 * w + 2], 2000);
+        assert_eq!(image.data[2], 2000);
         // (0,1) = G -> 1000
-        assert_eq!(image.data[1 * w + 0], 1000);
+        assert_eq!(image.data[4], 1000);
         // (1,1) = B -> 500
-        assert_eq!(image.data[1 * w + 1], 500);
+        assert_eq!(image.data[5], 500);
         // (2,1) = G -> 1000
-        assert_eq!(image.data[1 * w + 2], 1000);
+        assert_eq!(image.data[6], 1000);
         // (3,1) = B -> 500
-        assert_eq!(image.data[1 * w + 3], 500);
+        assert_eq!(image.data[7], 500);
     }
 
     #[test]

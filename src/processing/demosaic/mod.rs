@@ -70,8 +70,8 @@ impl DemosaicMethod {
     pub fn to_demosaic(&self) -> Box<dyn Demosaic + Send + Sync> {
         match self {
             DemosaicMethod::Auto => {
-                // Default to Bilinear for now (AMaZE not yet implemented)
-                Box::new(Bilinear)
+                // Default to AMaZE for Bayer sensors (best quality)
+                Box::new(bayer::Amaze)
             }
             DemosaicMethod::Bayer(algo) => algo.to_demosaic(),
             DemosaicMethod::XTrans(algo) => algo.to_demosaic(),
