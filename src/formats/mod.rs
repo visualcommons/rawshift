@@ -4,9 +4,11 @@
 //! Use `RawFile::open()` as the common entry point for automatic format detection.
 
 pub mod arw;
+pub mod cr2;
 pub mod dng;
 pub mod dng_export;
 pub mod export;
+pub mod nef;
 
 pub use dng_export::{DngExportConfig, export_dng};
 
@@ -31,8 +33,12 @@ use tracing::instrument;
 pub enum RawFormat {
     /// Sony ARW format
     Arw,
+    /// Canon CR2 format
+    Cr2,
     /// Adobe DNG format (planned)
     Dng,
+    /// Nikon NEF format
+    Nef,
 }
 
 /// Common entry point for parsing RAW files.
@@ -41,8 +47,12 @@ pub enum RawFormat {
 pub enum RawFile<R> {
     /// Sony ARW format
     Arw(Box<arw::ArwFile<R>>),
+    /// Canon CR2 format
+    Cr2(Box<cr2::Cr2File<R>>),
     /// Adobe DNG format
     Dng(Box<dng::DngFile<R>>),
+    /// Nikon NEF format
+    Nef(Box<nef::NefFile<R>>),
 }
 
 impl<R: Read + Seek> RawFile<R> {
@@ -57,9 +67,17 @@ impl<R: Read + Seek> RawFile<R> {
                 let file = arw::ArwFile::parse(reader)?;
                 Ok(RawFile::Arw(Box::new(file)))
             }
+            RawFormat::Cr2 => {
+                let file = cr2::Cr2File::parse(reader)?;
+                Ok(RawFile::Cr2(Box::new(file)))
+            }
             RawFormat::Dng => {
                 let file = dng::DngFile::parse(reader)?;
                 Ok(RawFile::Dng(Box::new(file)))
+            }
+            RawFormat::Nef => {
+                let file = nef::NefFile::parse(reader)?;
+                Ok(RawFile::Nef(Box::new(file)))
             }
         }
     }
@@ -71,7 +89,9 @@ impl<R: Read + Seek> RawFile<R> {
         use crate::core::MetadataExtractor;
         match self {
             RawFile::Arw(arw) => arw.extract_metadata(),
+            RawFile::Cr2(cr2) => cr2.extract_metadata(),
             RawFile::Dng(dng) => dng.extract_metadata(),
+            RawFile::Nef(nef) => nef.extract_metadata(),
         }
     }
 
@@ -181,7 +201,9 @@ impl<R: Read + Seek> RawFile<R> {
 
             let mut raw_image = match self {
                 RawFile::Arw(arw) => arw.decode_raw()?,
+                RawFile::Cr2(cr2) => cr2.decode_raw()?,
                 RawFile::Dng(dng) => dng.decode_raw()?,
+                RawFile::Nef(nef) => nef.decode_raw()?,
             };
 
             // Per-channel black level subtraction
@@ -383,13 +405,13 @@ impl<R: Read + Seek> RawFile<R> {
     pub fn is_linear_raw_dng(&self) -> bool {
         match self {
             RawFile::Dng(dng) => dng.metadata().map(|m| m.is_linear_raw).unwrap_or(false),
-            _ => false,
+            RawFile::Arw(_) | RawFile::Cr2(_) | RawFile::Nef(_) => false,
         }
     }
 
     /// Detect the format of the provided reader.
     fn detect_format(reader: &mut R) -> RawResult<RawFormat> {
-        // Read magic bytes
+        // Read magic bytes (16 bytes covers TIFF header + CR2 magic at offset 8)
         let start = reader.stream_position()?;
         let mut header = [0u8; 16];
         reader.read_exact(&mut header)?;
@@ -403,6 +425,12 @@ impl<R: Read + Seek> RawFile<R> {
             return Err(RawError::UnsupportedFormat(
                 "Not a TIFF-based RAW file".to_string(),
             ));
+        }
+
+        // CR2 detection via magic bytes at offset 8: "CR" + 0x02
+        // This is faster than parsing IFDs and more reliable.
+        if cr2::is_cr2(&header) {
+            return Ok(RawFormat::Cr2);
         }
 
         // Parse as TIFF to inspect Make tag for format detection
@@ -423,8 +451,9 @@ impl<R: Read + Seek> RawFile<R> {
                         return Ok(RawFormat::Arw);
                     }
                     // Add more manufacturers here as we add support
-                    // if make_lower.contains("canon") { return Ok(RawFormat::Cr2); }
-                    // if make_lower.contains("nikon") { return Ok(RawFormat::Nef); }
+                    if make_lower.contains("nikon") {
+                        return Ok(RawFormat::Nef);
+                    }
                 }
             }
         }
