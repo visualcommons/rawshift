@@ -3,6 +3,20 @@
 //! This module defines the fundamental structures for representing
 //! image dimensions, coordinates, and raw image data.
 
+/// Compute the maximum pixel value (white level) for a given bit depth, clamped to `u16`.
+///
+/// Returns `u16::MAX` when `bit_depth >= 16`, and `(1 << bit_depth) - 1` otherwise.
+#[inline]
+pub fn white_level_from_bit_depth(bit_depth: u8) -> u16 {
+    if bit_depth >= 16 {
+        u16::MAX
+    } else if bit_depth == 0 {
+        0
+    } else {
+        (1u16 << bit_depth) - 1
+    }
+}
+
 /// Image dimensions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Size {
@@ -209,7 +223,7 @@ impl RawImage {
             cfa_pattern,
             xtrans_pattern: None,
             black_levels: [0; 4],
-            white_level: (1u16 << bit_depth) - 1,
+            white_level: white_level_from_bit_depth(bit_depth),
             data: vec![0u16; pixel_count],
             baseline_exposure: None,
             default_crop: None,
@@ -266,6 +280,20 @@ impl RgbImage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_white_level_from_bit_depth() {
+        assert_eq!(white_level_from_bit_depth(0), 0);
+        assert_eq!(white_level_from_bit_depth(1), 1);
+        assert_eq!(white_level_from_bit_depth(8), 255);
+        assert_eq!(white_level_from_bit_depth(12), 4095);
+        assert_eq!(white_level_from_bit_depth(14), 16383);
+        assert_eq!(white_level_from_bit_depth(15), 32767);
+        // bit_depth >= 16 clamps to u16::MAX
+        assert_eq!(white_level_from_bit_depth(16), u16::MAX);
+        assert_eq!(white_level_from_bit_depth(32), u16::MAX);
+        assert_eq!(white_level_from_bit_depth(255), u16::MAX);
+    }
 
     #[test]
     fn test_size() {

@@ -23,7 +23,7 @@ use std::io::{Cursor, Read, Seek, SeekFrom};
 
 use tracing::instrument;
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size};
+use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
 use crate::error::{RawError, RawResult};
 use crate::tiff::{TiffParser, TiffTag, TiffValue};
 
@@ -283,7 +283,7 @@ impl<R: Read + Seek> Cr3File<R> {
 
         // Choose sensible defaults
         let bit_depth: u8 = 14;
-        let white_level = (1u32 << bit_depth) as u16 - 1;
+        let white_level = white_level_from_bit_depth(bit_depth);
 
         let sensor_size = sensor_size_opt.unwrap_or(Size::new(0, 0));
         let active_area = Rect::from_coords(0, 0, sensor_size.width, sensor_size.height);

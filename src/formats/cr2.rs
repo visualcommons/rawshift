@@ -18,7 +18,7 @@
 
 use std::io::{Read, Seek};
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size};
+use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
 use crate::error::{RawError, RawResult};
 use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
@@ -266,7 +266,7 @@ impl<R: Read + Seek> Cr2File<R> {
         };
 
         // Synthesize white level from bit depth
-        let white_level = (1u32 << bit_depth) as u16 - 1;
+        let white_level = white_level_from_bit_depth(bit_depth);
 
         // Get raw data location from StripOffsets / StripByteCounts
         let (raw_data_offset, raw_data_size) = if let (Some(offset_entry), Some(count_entry)) = (
@@ -526,14 +526,13 @@ mod tests {
     #[test]
     fn test_cr2_metadata_white_level_calculation() {
         // 14-bit: max = (1 << 14) - 1 = 16383
-        let bit_depth: u8 = 14;
-        let white_level = (1u32 << bit_depth) as u16 - 1;
-        assert_eq!(white_level, 16383);
+        assert_eq!(white_level_from_bit_depth(14), 16383);
 
         // 12-bit: max = (1 << 12) - 1 = 4095
-        let bit_depth: u8 = 12;
-        let white_level = (1u32 << bit_depth) as u16 - 1;
-        assert_eq!(white_level, 4095);
+        assert_eq!(white_level_from_bit_depth(12), 4095);
+
+        // 16-bit: should clamp to u16::MAX
+        assert_eq!(white_level_from_bit_depth(16), u16::MAX);
     }
 
     // -------------------------------------------------------------------------

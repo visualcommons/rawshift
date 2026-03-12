@@ -18,7 +18,7 @@
 
 use std::io::{Read, Seek};
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size};
+use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
 use crate::error::{RawError, RawResult};
 
 // ── CIFF signature ────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ impl<R: Read + Seek> CrwFile<R> {
         let sensor_size = Size::new(5616, 3744);
         let active_area = Rect::from_coords(0, 0, 5616, 3744);
         let bit_depth: u8 = 12;
-        let white_level: u16 = (1u32 << bit_depth) as u16 - 1;
+        let white_level: u16 = white_level_from_bit_depth(bit_depth);
 
         let metadata = CrwMetadata {
             make: "Canon".to_string(),

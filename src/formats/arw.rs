@@ -5,7 +5,7 @@
 
 use std::io::{Read, Seek};
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size};
+use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
 use crate::error::{RawError, RawResult};
 use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
@@ -274,9 +274,11 @@ impl<R: Read + Seek> ArwFile<R> {
         // Extract white level
         let white_level = if let Some(entry) = raw_ifd.get(TiffTag::WhiteLevel) {
             let value = self.parser.read_value(entry)?;
-            value.as_u32().unwrap_or((1 << bit_depth) - 1) as u16
+            value
+                .as_u32()
+                .unwrap_or(white_level_from_bit_depth(bit_depth) as u32) as u16
         } else {
-            (1u16 << bit_depth) - 1
+            white_level_from_bit_depth(bit_depth)
         };
 
         // Get raw data location from strips

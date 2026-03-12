@@ -5,7 +5,7 @@
 
 use std::io::{Read, Seek};
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size};
+use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
 use crate::error::{RawError, RawResult};
 use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
@@ -220,11 +220,12 @@ impl<R: Read + Seek> NefFile<R> {
         // Extract black levels
         // Nikon stores black levels in MakerNote (tag 0x0004), but we use a reasonable default.
         // Per the spec: use bit-depth-based default: (0.02 * (1 << bit_depth)) as u16
-        let default_black = (0.02_f32 * (1u32 << bit_depth) as f32) as u16;
+        let default_black =
+            (0.02_f32 * 1u32.checked_shl(bit_depth as u32).unwrap_or(u32::MAX) as f32) as u16;
         let black_levels = [default_black, default_black, default_black, default_black];
 
         // Extract white level: (1 << bit_depth) - 1
-        let white_level = (1u16 << bit_depth).saturating_sub(1);
+        let white_level = white_level_from_bit_depth(bit_depth);
 
         // Get raw data location from strips
         let (raw_data_offset, raw_data_size) = if let (Some(offset_entry), Some(count_entry)) = (
@@ -652,10 +653,13 @@ mod tests {
     #[test]
     fn test_white_level_calculation() {
         // White level is (1 << bit_depth) - 1
-        let white_12 = (1u16 << 12u8).saturating_sub(1);
-        let white_14 = (1u16 << 14u8).saturating_sub(1);
+        assert_eq!(white_level_from_bit_depth(12), 4095);
+        assert_eq!(white_level_from_bit_depth(14), 16383);
 
-        assert_eq!(white_12, 4095);
-        assert_eq!(white_14, 16383);
+        // Edge cases: should not panic
+        assert_eq!(white_level_from_bit_depth(0), 0);
+        assert_eq!(white_level_from_bit_depth(16), u16::MAX);
+        assert_eq!(white_level_from_bit_depth(32), u16::MAX);
+        assert_eq!(white_level_from_bit_depth(255), u16::MAX);
     }
 }

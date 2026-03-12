@@ -433,7 +433,12 @@ impl<R: Read + Seek> DngFile<R> {
             let value = self.parser.read_value(entry)?;
             value.as_u32_vec().unwrap_or_default()
         } else {
-            vec![(1u32 << bit_depth) - 1; samples_per_pixel as usize]
+            vec![
+                1u32.checked_shl(bit_depth as u32)
+                    .unwrap_or(0)
+                    .wrapping_sub(1);
+                samples_per_pixel as usize
+            ]
         };
 
         // Extract CFA pattern (only for non-LinearRaw)
