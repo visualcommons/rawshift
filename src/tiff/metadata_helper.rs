@@ -57,7 +57,7 @@ fn read_urational_tag<R: Read + Seek>(
     let entry = ifd.get(tag)?;
     let value = parser.read_value(entry).ok()?;
     match &value {
-        TiffValue::Rationals(v) if !v.is_empty() => Some((v[0].numerator, v[0].denominator)),
+        TiffValue::Rationals(v) if !v.is_empty() => Some(v[0]),
         _ => None,
     }
 }
@@ -70,7 +70,7 @@ fn read_srational_tag<R: Read + Seek>(
     let entry = ifd.get(tag)?;
     let value = parser.read_value(entry).ok()?;
     match &value {
-        TiffValue::SRationals(v) if !v.is_empty() => Some((v[0].numerator, v[0].denominator)),
+        TiffValue::SRationals(v) if !v.is_empty() => Some(v[0]),
         _ => None,
     }
 }
@@ -83,11 +83,7 @@ fn read_urational3_tag<R: Read + Seek>(
     let entry = ifd.get(tag)?;
     let value = parser.read_value(entry).ok()?;
     match &value {
-        TiffValue::Rationals(v) if v.len() >= 3 => Some([
-            (v[0].numerator, v[0].denominator),
-            (v[1].numerator, v[1].denominator),
-            (v[2].numerator, v[2].denominator),
-        ]),
+        TiffValue::Rationals(v) if v.len() >= 3 => Some([v[0], v[1], v[2]]),
         _ => None,
     }
 }

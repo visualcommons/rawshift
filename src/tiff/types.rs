@@ -157,6 +157,7 @@ impl TiffType {
 
 /// Unsigned rational number (two 32-bit unsigned integers).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, BinRead, BinWrite)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rational {
     /// Numerator
     pub numerator: u32,
@@ -187,6 +188,15 @@ impl Rational {
     }
 }
 
+impl From<(u32, u32)> for Rational {
+    fn from((numerator, denominator): (u32, u32)) -> Self {
+        Self {
+            numerator,
+            denominator,
+        }
+    }
+}
+
 impl fmt::Display for Rational {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.numerator, self.denominator)
@@ -195,6 +205,7 @@ impl fmt::Display for Rational {
 
 /// Signed rational number (two 32-bit signed integers).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, BinRead, BinWrite)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SRational {
     /// Numerator
     pub numerator: i32,
@@ -223,6 +234,15 @@ impl SRational {
             }
         } else {
             self.numerator as f64 / self.denominator as f64
+        }
+    }
+}
+
+impl From<(i32, i32)> for SRational {
+    fn from((numerator, denominator): (i32, i32)) -> Self {
+        Self {
+            numerator,
+            denominator,
         }
     }
 }

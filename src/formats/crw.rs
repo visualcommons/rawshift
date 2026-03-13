@@ -19,7 +19,7 @@
 use std::io::{Read, Seek};
 
 use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
-use crate::error::{RawError, RawResult};
+use crate::error::{FormatError, RawError, RawResult};
 
 // ── CIFF signature ────────────────────────────────────────────────────────────
 
@@ -84,15 +84,15 @@ impl<R: Read + Seek> CrwFile<R> {
     pub fn parse(mut reader: R) -> RawResult<Self> {
         // Read the CIFF header (first 26 bytes are sufficient).
         let mut header = [0u8; 26];
-        reader
-            .read_exact(&mut header)
-            .map_err(|e| RawError::CrwError(format!("failed to read CIFF header: {e}")))?;
+        reader.read_exact(&mut header).map_err(|e| {
+            RawError::Format(FormatError::Crw(format!("failed to read CIFF header: {e}")))
+        })?;
 
         // Validate the magic bytes.
         if !is_crw(&header) {
-            return Err(RawError::CrwError(
+            return Err(RawError::Format(FormatError::Crw(
                 "not a CRW file (CIFF signature mismatch)".to_string(),
-            ));
+            )));
         }
 
         // Determine endianness.
@@ -116,9 +116,9 @@ impl<R: Read + Seek> CrwFile<R> {
         // Validate CIFF type field (bytes 2..4).
         let ciff_type = read_u16(&header, 2);
         if ciff_type != CIFF_TYPE {
-            return Err(RawError::CrwError(format!(
+            return Err(RawError::Format(FormatError::Crw(format!(
                 "unexpected CIFF type field: 0x{ciff_type:04X}"
-            )));
+            ))));
         }
 
         // Heap offset / size from header bytes 14..18 and 18..22.
@@ -157,13 +157,21 @@ impl<R: Read + Seek> CrwFile<R> {
     }
 
     /// Decode the raw pixel data.
+    /// Extract the embedded JPEG thumbnail.
+    ///
+    /// CRW thumbnail extraction from CIFF heap is not yet implemented.
+    pub fn thumbnail(&mut self) -> RawResult<Option<Vec<u8>>> {
+        Ok(None)
+    }
+
+    /// Decode the raw image data.
     ///
     /// Full CRW/CIFF pixel decoding requires a complete CIFF heap parser and a
     /// Canon-specific RAW decompressor, which are not yet implemented. This
     /// method returns [`RawError::UnsupportedOperation`] until that work is
     /// done.
     pub fn decode_raw(&mut self) -> RawResult<RawImage> {
-        Err(RawError::UnsupportedOperation(
+        Err(RawError::Unsupported(
             "CRW pixel decode is not yet implemented; \
              full CIFF heap parsing and Canon RAW decompression are required"
                 .to_string(),
@@ -360,7 +368,7 @@ mod tests {
         let cursor = Cursor::new(data);
         let result = CrwFile::parse(cursor);
         assert!(
-            matches!(result, Err(RawError::CrwError(_))),
+            matches!(result, Err(RawError::Format(FormatError::Crw(_)))),
             "non-CRW data should produce CrwError"
         );
     }
@@ -374,7 +382,7 @@ mod tests {
         data[2] = 0xFF;
         let cursor = Cursor::new(data);
         let result = CrwFile::parse(cursor);
-        assert!(matches!(result, Err(RawError::CrwError(_))));
+        assert!(matches!(result, Err(RawError::Format(FormatError::Crw(_)))));
     }
 
     // ── CrwFile::parse on valid CRW magic ─────────────────────────────────
@@ -399,7 +407,7 @@ mod tests {
         let mut file = CrwFile::parse(cursor).expect("parse should succeed");
         let result = file.decode_raw();
         assert!(
-            matches!(result, Err(RawError::UnsupportedOperation(_))),
+            matches!(result, Err(RawError::Unsupported(_))),
             "decode_raw should return UnsupportedOperation"
         );
     }

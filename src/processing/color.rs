@@ -20,7 +20,7 @@ use crate::core::image::{RawImage, RgbImage};
 /// * `coeffs` - (red_scale, green_scale, blue_scale) multipliers
 pub fn apply_white_balance_raw(image: &mut RawImage, coeffs: (f32, f32, f32)) {
     let (r_scale, g_scale, b_scale) = coeffs;
-    let pattern = image.cfa_pattern.to_array();
+    let pattern = image.cfa_pattern().to_array();
 
     // Build a 2x2 gain lookup from the CFA pattern.
     // Pattern values: 0=Red, 1=Green, 2=Blue
@@ -38,7 +38,7 @@ pub fn apply_white_balance_raw(image: &mut RawImage, coeffs: (f32, f32, f32)) {
         scale_for(pattern[3]),
     ];
 
-    let width = image.size.width as usize;
+    let width = image.width() as usize;
     for (idx, pixel) in image.data.iter_mut().enumerate() {
         let x = idx % width;
         let y = idx / width;
@@ -308,13 +308,7 @@ mod tests {
             data.push(g);
             data.push(b);
         }
-        RgbImage {
-            width,
-            height,
-            data,
-            baseline_exposure: None,
-            default_crop: None,
-        }
+        RgbImage::new(width, height, data)
     }
 
     #[test]

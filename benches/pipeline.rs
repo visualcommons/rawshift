@@ -13,29 +13,16 @@ fn create_test_raw(width: u32, height: u32) -> RawImage {
     let pixel_count = (width * height) as usize;
     let data = vec![5000u16; pixel_count];
 
-    RawImage {
-        size,
-        active_area: area,
-        bit_depth: 14,
-        cfa_pattern: CfaPattern::Rggb,
-        xtrans_pattern: None,
-        black_levels: [512; 4],
-        white_level: 16383,
-        data,
-        baseline_exposure: None,
-        default_crop: None,
-    }
+    RawImage::builder(size, area, 14, CfaPattern::Rggb)
+        .black_levels([512; 4])
+        .white_level(16383)
+        .data(data)
+        .build()
 }
 
 fn create_test_rgb(width: u32, height: u32) -> RgbImage {
     let data = vec![5000u16; (width * height * 3) as usize];
-    RgbImage {
-        width,
-        height,
-        data,
-        baseline_exposure: None,
-        default_crop: None,
-    }
+    RgbImage::new(width, height, data)
 }
 
 fn bench_black_level(c: &mut Criterion) {

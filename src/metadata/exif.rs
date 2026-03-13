@@ -79,22 +79,22 @@ impl<'a> ExifBuilder<'a> {
         if let Some(iso) = self.metadata.exif.iso {
             exif.set_tag(ExifTag::ISO(vec![iso as u16]));
         }
-        if let Some((num, denom)) = self.metadata.exif.exposure_time {
+        if let Some(r) = self.metadata.exif.exposure_time {
             exif.set_tag(ExifTag::ExposureTime(vec![uR64 {
-                nominator: num,
-                denominator: denom,
+                nominator: r.numerator,
+                denominator: r.denominator,
             }]));
         }
-        if let Some((num, denom)) = self.metadata.exif.f_number {
+        if let Some(r) = self.metadata.exif.f_number {
             exif.set_tag(ExifTag::FNumber(vec![uR64 {
-                nominator: num,
-                denominator: denom,
+                nominator: r.numerator,
+                denominator: r.denominator,
             }]));
         }
-        if let Some((num, denom)) = self.metadata.exif.focal_length {
+        if let Some(r) = self.metadata.exif.focal_length {
             exif.set_tag(ExifTag::FocalLength(vec![uR64 {
-                nominator: num,
-                denominator: denom,
+                nominator: r.numerator,
+                denominator: r.denominator,
             }]));
         }
         if let Some(fl_35mm) = self.metadata.exif.focal_length_35mm {
@@ -109,22 +109,22 @@ impl<'a> ExifBuilder<'a> {
         if let Some(flash) = self.metadata.exif.flash {
             exif.set_tag(ExifTag::Flash(vec![flash]));
         }
-        if let Some((num, denom)) = self.metadata.exif.exposure_compensation {
+        if let Some(r) = self.metadata.exif.exposure_compensation {
             exif.set_tag(ExifTag::ExposureCompensation(vec![iR64 {
-                nominator: num,
-                denominator: denom,
+                nominator: r.numerator,
+                denominator: r.denominator,
             }]));
         }
-        if let Some((num, denom)) = self.metadata.exif.max_aperture {
+        if let Some(r) = self.metadata.exif.max_aperture {
             exif.set_tag(ExifTag::MaxApertureValue(vec![uR64 {
-                nominator: num,
-                denominator: denom,
+                nominator: r.numerator,
+                denominator: r.denominator,
             }]));
         }
-        if let Some((num, denom)) = self.metadata.exif.brightness_value {
+        if let Some(r) = self.metadata.exif.brightness_value {
             exif.set_tag(ExifTag::BrightnessValue(vec![iR64 {
-                nominator: num,
-                denominator: denom,
+                nominator: r.numerator,
+                denominator: r.denominator,
             }]));
         }
 
@@ -163,9 +163,9 @@ impl<'a> ExifBuilder<'a> {
         if let Some(lat) = gps.latitude {
             let lat_vec: Vec<uR64> = lat
                 .iter()
-                .map(|&(n, d)| uR64 {
-                    nominator: n,
-                    denominator: d,
+                .map(|r| uR64 {
+                    nominator: r.numerator,
+                    denominator: r.denominator,
                 })
                 .collect();
             exif.set_tag(ExifTag::GPSLatitude(lat_vec));
@@ -176,9 +176,9 @@ impl<'a> ExifBuilder<'a> {
         if let Some(lon) = gps.longitude {
             let lon_vec: Vec<uR64> = lon
                 .iter()
-                .map(|&(n, d)| uR64 {
-                    nominator: n,
-                    denominator: d,
+                .map(|r| uR64 {
+                    nominator: r.numerator,
+                    denominator: r.denominator,
                 })
                 .collect();
             exif.set_tag(ExifTag::GPSLongitude(lon_vec));
@@ -186,10 +186,10 @@ impl<'a> ExifBuilder<'a> {
         if let Some(lon_ref) = gps.longitude_ref {
             exif.set_tag(ExifTag::GPSLongitudeRef(lon_ref.to_string()));
         }
-        if let Some((num, denom)) = gps.altitude {
+        if let Some(r) = gps.altitude {
             exif.set_tag(ExifTag::GPSAltitude(vec![uR64 {
-                nominator: num,
-                denominator: denom,
+                nominator: r.numerator,
+                denominator: r.denominator,
             }]));
         }
         if let Some(alt_ref) = gps.altitude_ref {
@@ -198,9 +198,9 @@ impl<'a> ExifBuilder<'a> {
         if let Some(timestamp) = gps.timestamp {
             let ts_vec: Vec<uR64> = timestamp
                 .iter()
-                .map(|&(n, d)| uR64 {
-                    nominator: n,
-                    denominator: d,
+                .map(|r| uR64 {
+                    nominator: r.numerator,
+                    denominator: r.denominator,
                 })
                 .collect();
             exif.set_tag(ExifTag::GPSTimeStamp(ts_vec));
@@ -208,16 +208,16 @@ impl<'a> ExifBuilder<'a> {
         if let Some(ref datestamp) = gps.datestamp {
             exif.set_tag(ExifTag::GPSDateStamp(datestamp.clone()));
         }
-        if let Some((num, denom)) = gps.speed {
+        if let Some(r) = gps.speed {
             exif.set_tag(ExifTag::GPSSpeed(vec![uR64 {
-                nominator: num,
-                denominator: denom,
+                nominator: r.numerator,
+                denominator: r.denominator,
             }]));
         }
-        if let Some((num, denom)) = gps.img_direction {
+        if let Some(r) = gps.img_direction {
             exif.set_tag(ExifTag::GPSImgDirection(vec![uR64 {
-                nominator: num,
-                denominator: denom,
+                nominator: r.numerator,
+                denominator: r.denominator,
             }]));
         }
     }
@@ -268,6 +268,7 @@ impl<'a> ExifBuilder<'a> {
     /// Append EXIF metadata to existing AVIF file.
     ///
     /// Uses little_exif's native HEIF support (AVIF uses the HEIF/ISOBMFF container).
+    #[allow(dead_code)]
     pub fn append_to_avif_file(&self, path: &std::path::Path) -> Result<(), ExifError> {
         let exif = self.build();
         exif.write_to_file(path)
@@ -277,6 +278,7 @@ impl<'a> ExifBuilder<'a> {
     /// Append EXIF metadata to existing JXL file.
     ///
     /// Uses little_exif's native JXL support.
+    #[allow(dead_code)]
     pub fn append_to_jxl_file(&self, path: &std::path::Path) -> Result<(), ExifError> {
         let exif = self.build();
         exif.write_to_file(path)
@@ -299,9 +301,9 @@ mod tests {
             },
             exif: ExifInfo {
                 iso: Some(800),
-                exposure_time: Some((1, 250)),
-                f_number: Some((56, 10)),
-                focal_length: Some((35, 1)),
+                exposure_time: Some(URational::new(1, 250)),
+                f_number: Some(URational::new(56, 10)),
+                focal_length: Some(URational::new(35, 1)),
                 focal_length_35mm: Some(52),
                 exposure_program: Some(3), // Aperture priority
                 metering_mode: Some(5),    // Pattern
@@ -312,9 +314,17 @@ mod tests {
                 ..Default::default()
             },
             gps: GpsInfo {
-                latitude: Some([(40, 1), (44, 1), (0, 1)]),
+                latitude: Some([
+                    URational::new(40, 1),
+                    URational::new(44, 1),
+                    URational::new(0, 1),
+                ]),
                 latitude_ref: Some('N'),
-                longitude: Some([(73, 1), (59, 1), (0, 1)]),
+                longitude: Some([
+                    URational::new(73, 1),
+                    URational::new(59, 1),
+                    URational::new(0, 1),
+                ]),
                 longitude_ref: Some('W'),
                 ..Default::default()
             },

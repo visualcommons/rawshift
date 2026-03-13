@@ -22,11 +22,11 @@ pub struct Markesteijn;
 
 impl Demosaic for Markesteijn {
     fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
-        let width = raw.active_area.size.width as usize;
-        let height = raw.active_area.size.height as usize;
-        let x_off = raw.active_area.origin.x as usize;
-        let y_off = raw.active_area.origin.y as usize;
-        let raw_w = raw.size.width as usize;
+        let width = raw.active_area().size.width as usize;
+        let height = raw.active_area().size.height as usize;
+        let x_off = raw.active_area().origin.x as usize;
+        let y_off = raw.active_area().origin.y as usize;
+        let raw_w = raw.width() as usize;
 
         let expected = width * height * 3;
         if output.len() != expected {
@@ -41,7 +41,10 @@ impl Demosaic for Markesteijn {
         }
 
         // Use caller-supplied pattern or fall back to the standard Fujifilm one.
-        let pattern = raw.xtrans_pattern.unwrap_or_else(XTransPattern::standard);
+        let pattern = raw
+            .xtrans_pattern()
+            .copied()
+            .unwrap_or_else(XTransPattern::standard);
 
         // Color at active-area-relative position (x, y).
         let fc = |x: usize, y: usize| -> u8 { pattern.color_at(x + x_off, y + y_off) };
@@ -162,7 +165,7 @@ impl Demosaic for Markesteijn {
         }
 
         // ── Step 4: Compose and write output ─────────────────────────────────
-        let wl = raw.white_level as f32;
+        let wl = raw.white_level() as f32;
         for y in 0..height {
             for x in 0..width {
                 let idx = (y * width + x) * 3;
@@ -193,11 +196,11 @@ pub struct Markesteijn3Pass;
 
 impl Demosaic for Markesteijn3Pass {
     fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
-        let width = raw.active_area.size.width as usize;
-        let height = raw.active_area.size.height as usize;
-        let x_off = raw.active_area.origin.x as usize;
-        let y_off = raw.active_area.origin.y as usize;
-        let raw_w = raw.size.width as usize;
+        let width = raw.active_area().size.width as usize;
+        let height = raw.active_area().size.height as usize;
+        let x_off = raw.active_area().origin.x as usize;
+        let y_off = raw.active_area().origin.y as usize;
+        let raw_w = raw.width() as usize;
 
         let expected = width * height * 3;
         if output.len() != expected {
@@ -210,7 +213,10 @@ impl Demosaic for Markesteijn3Pass {
             return Err(DemosaicError::InvalidDimensions);
         }
 
-        let pattern = raw.xtrans_pattern.unwrap_or_else(XTransPattern::standard);
+        let pattern = raw
+            .xtrans_pattern()
+            .copied()
+            .unwrap_or_else(XTransPattern::standard);
         let fc = |x: usize, y: usize| -> u8 { pattern.color_at(x + x_off, y + y_off) };
         let get = |x: isize, y: isize| -> f32 {
             let cx = x.clamp(0, (width as isize) - 1) as usize;
@@ -328,7 +334,7 @@ impl Demosaic for Markesteijn3Pass {
         b_diff_i = interp_plane(&b_diff, 2);
 
         // ── Compose output ────────────────────────────────────────────────────
-        let wl = raw.white_level as f32;
+        let wl = raw.white_level() as f32;
         for y in 0..height {
             for x in 0..width {
                 let idx = (y * width + x) * 3;
@@ -355,11 +361,11 @@ pub struct XTransFast;
 
 impl Demosaic for XTransFast {
     fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
-        let width = raw.active_area.size.width as usize;
-        let height = raw.active_area.size.height as usize;
-        let x_off = raw.active_area.origin.x as usize;
-        let y_off = raw.active_area.origin.y as usize;
-        let raw_w = raw.size.width as usize;
+        let width = raw.active_area().size.width as usize;
+        let height = raw.active_area().size.height as usize;
+        let x_off = raw.active_area().origin.x as usize;
+        let y_off = raw.active_area().origin.y as usize;
+        let raw_w = raw.width() as usize;
 
         let expected = width * height * 3;
         if output.len() != expected {
@@ -372,7 +378,10 @@ impl Demosaic for XTransFast {
             return Err(DemosaicError::InvalidDimensions);
         }
 
-        let pattern = raw.xtrans_pattern.unwrap_or_else(XTransPattern::standard);
+        let pattern = raw
+            .xtrans_pattern()
+            .copied()
+            .unwrap_or_else(XTransPattern::standard);
         let fc = |x: usize, y: usize| -> u8 { pattern.color_at(x + x_off, y + y_off) };
         let get = |x: isize, y: isize| -> f32 {
             let cx = x.clamp(0, (width as isize) - 1) as usize;
@@ -382,7 +391,7 @@ impl Demosaic for XTransFast {
 
         // For each pixel, interpolate each channel from nearest same-colour
         // neighbours in a 3×3 window. Known values are used directly.
-        let wl = raw.white_level as f32;
+        let wl = raw.white_level() as f32;
 
         for y in 0..height {
             for x in 0..width {
@@ -441,18 +450,11 @@ mod tests {
         let size = Size::new(width, height);
         let active_area = Rect::new(Point::ORIGIN, size);
         let pixel_count = (width * height) as usize;
-        RawImage {
-            size,
-            active_area,
-            bit_depth: 14,
-            cfa_pattern: CfaPattern::Rggb, // irrelevant; X-Trans pattern takes precedence
-            xtrans_pattern: Some(XTransPattern::standard()),
-            black_levels: [0; 4],
-            white_level: 16383,
-            data: vec![value; pixel_count],
-            baseline_exposure: None,
-            default_crop: None,
-        }
+        RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
+            .xtrans_pattern(XTransPattern::standard())
+            .white_level(16383)
+            .data(vec![value; pixel_count])
+            .build()
     }
 
     // ── correctness helpers ───────────────────────────────────────────────────
@@ -577,18 +579,11 @@ mod tests {
         // (falling back to XTransPattern::standard()).
         let size = Size::new(12, 12);
         let active_area = Rect::new(Point::ORIGIN, size);
-        let raw = RawImage {
-            size,
-            active_area,
-            bit_depth: 14,
-            cfa_pattern: CfaPattern::Rggb,
-            xtrans_pattern: None, // deliberately absent
-            black_levels: [0; 4],
-            white_level: 16383,
-            data: vec![2000u16; 12 * 12],
-            baseline_exposure: None,
-            default_crop: None,
-        };
+        // xtrans_pattern deliberately absent — algorithm should fall back to standard()
+        let raw = RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
+            .white_level(16383)
+            .data(vec![2000u16; 12 * 12])
+            .build();
         let mut output = vec![0u16; 12 * 12 * 3];
         assert!(Markesteijn.demosaic_into(&raw, &mut output).is_ok());
     }

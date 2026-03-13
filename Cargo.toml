@@ -51,6 +51,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = ["dep:serde"]
 avif = ["ravif"]
 jxl-encode = ["zune-jpegxl"]
+# Placeholder: HEIC/HEIF decode support (no dependencies yet)
 heic = []
 svg = ["resvg"]
 # SIMD enables CPU-specific optimizations

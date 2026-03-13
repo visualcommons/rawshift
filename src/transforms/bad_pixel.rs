@@ -8,6 +8,7 @@ use crate::core::image::{CfaPattern, RawImage};
 
 /// Bad pixel correction modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BadPixelCorrectionMode {
     /// Median of same-color neighbors in a 5×5 window.
     Median,
@@ -52,9 +53,9 @@ fn cfa_color(x: u32, y: u32, pattern: CfaPattern) -> u8 {
 ///
 /// The center pixel itself is excluded.
 fn collect_same_color_neighbors(raw: &RawImage, cx: u32, cy: u32) -> Vec<u16> {
-    let center_color = cfa_color(cx, cy, raw.cfa_pattern);
-    let width = raw.size.width;
-    let height = raw.size.height;
+    let center_color = cfa_color(cx, cy, raw.cfa_pattern());
+    let width = raw.width();
+    let height = raw.height();
 
     let x_min = cx.saturating_sub(2);
     let x_max = (cx + 2).min(width - 1);
@@ -67,7 +68,7 @@ fn collect_same_color_neighbors(raw: &RawImage, cx: u32, cy: u32) -> Vec<u16> {
             if nx == cx && ny == cy {
                 continue;
             }
-            if cfa_color(nx, ny, raw.cfa_pattern) == center_color {
+            if cfa_color(nx, ny, raw.cfa_pattern()) == center_color {
                 let idx = (ny as usize) * (width as usize) + (nx as usize);
                 neighbors.push(raw.data[idx]);
             }
@@ -117,8 +118,8 @@ fn average(values: &[u16]) -> u16 {
 ///
 /// Returns a list of `(x, y)` coordinates of suspected bad pixels.
 pub fn detect_bad_pixels(raw: &RawImage, threshold_factor: f32) -> Vec<(u32, u32)> {
-    let width = raw.size.width;
-    let height = raw.size.height;
+    let width = raw.width();
+    let height = raw.height();
     let mut bad = Vec::new();
 
     for y in 0..height {

@@ -15,13 +15,7 @@ use std::path::PathBuf;
 /// 4×4 grey synthetic RGB image (16-bit, tone-mapped already).
 fn synthetic_image() -> RgbImage {
     // Mid-grey at ~50% sRGB after tone mapping
-    RgbImage {
-        width: 4,
-        height: 4,
-        data: vec![32768u16; 4 * 4 * 3],
-        baseline_exposure: None,
-        default_crop: None,
-    }
+    RgbImage::new(4, 4, vec![32768u16; 4 * 4 * 3])
 }
 
 /// Get a temporary file path for test output
@@ -197,13 +191,7 @@ mod jpeg_tests {
         let data: Vec<u16> = (0..64 * 64 * 3)
             .map(|i| ((i * 997) % 65536) as u16)
             .collect();
-        let img = RgbImage {
-            width: 64,
-            height: 64,
-            data,
-            baseline_exposure: None,
-            default_crop: None,
-        };
+        let img = RgbImage::new(64, 64, data);
 
         let path_low = temp_path("quality_low.jpg");
         let path_high = temp_path("quality_high.jpg");

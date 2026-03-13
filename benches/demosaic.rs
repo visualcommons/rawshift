@@ -18,18 +18,10 @@ fn create_test_raw(width: u32, height: u32) -> RawImage {
         }
     }
 
-    RawImage {
-        size,
-        active_area: area,
-        bit_depth: 14,
-        cfa_pattern: CfaPattern::Rggb,
-        xtrans_pattern: None,
-        black_levels: [0; 4],
-        white_level: 16383,
-        data,
-        baseline_exposure: None,
-        default_crop: None,
-    }
+    RawImage::builder(size, area, 14, CfaPattern::Rggb)
+        .white_level(16383)
+        .data(data)
+        .build()
 }
 
 fn bench_bilinear(c: &mut Criterion) {

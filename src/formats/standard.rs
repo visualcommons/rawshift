@@ -11,10 +11,11 @@ use zune_core::options::DecoderOptions;
 use zune_core::result::DecodingResult;
 
 use crate::core::image::RgbImage;
-use crate::error::{RawError, RawResult};
+use crate::error::{FormatError, RawError, RawResult};
 
 /// Supported standard (non-RAW) image formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StandardFormat {
     /// GIF (Graphics Interchange Format)
     Gif,
@@ -140,25 +141,29 @@ fn decode_gif(data: &[u8]) -> RawResult<RgbImage> {
 
     let mut opts = DecodeOptions::new();
     opts.set_color_output(ColorOutput::RGBA);
-    let mut decoder =
-        opts.read_info(Cursor::new(data))
-            .map_err(|e| RawError::ImageDecodeError {
-                format: "GIF",
-                message: e.to_string(),
-            })?;
+    let mut decoder = opts.read_info(Cursor::new(data)).map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "GIF",
+            message: e.to_string(),
+        })
+    })?;
 
     let canvas_width = decoder.width() as u32;
     let canvas_height = decoder.height() as u32;
 
     let frame = decoder
         .read_next_frame()
-        .map_err(|e| RawError::ImageDecodeError {
-            format: "GIF",
-            message: e.to_string(),
+        .map_err(|e| {
+            RawError::Format(FormatError::ImageDecode {
+                format: "GIF",
+                message: e.to_string(),
+            })
         })?
-        .ok_or_else(|| RawError::ImageDecodeError {
-            format: "GIF",
-            message: "no frames in GIF".to_string(),
+        .ok_or_else(|| {
+            RawError::Format(FormatError::ImageDecode {
+                format: "GIF",
+                message: "no frames in GIF".to_string(),
+            })
         })?;
 
     let frame_width = frame.width as usize;
@@ -173,7 +178,7 @@ fn decode_gif(data: &[u8]) -> RawResult<RgbImage> {
     // With ColorOutput::RGBA the buffer contains 4 bytes per pixel.
     let expected_rgba = frame_width * frame_height * 4;
     if buf.len() < expected_rgba {
-        return Err(RawError::ImageDecodeError {
+        return Err(RawError::Format(FormatError::ImageDecode {
             format: "GIF",
             message: format!(
                 "frame buffer too small: got {} bytes, expected {} ({}x{}x4)",
@@ -182,7 +187,7 @@ fn decode_gif(data: &[u8]) -> RawResult<RgbImage> {
                 frame_width,
                 frame_height,
             ),
-        });
+        }));
     }
 
     for row in 0..frame_height {
@@ -214,17 +219,21 @@ fn decode_jpeg(data: &[u8]) -> RawResult<RgbImage> {
     let cursor = ZCursor::new(data);
     let mut decoder = zune_jpeg::JpegDecoder::new_with_options(cursor, opts);
 
-    let pixels = decoder.decode().map_err(|e| RawError::ImageDecodeError {
-        format: "JPEG",
-        message: format!("{e:?}"),
+    let pixels = decoder.decode().map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "JPEG",
+            message: format!("{e:?}"),
+        })
     })?;
 
     let (w, h) = decoder
         .dimensions()
         .map(|(w, h)| (w as u32, h as u32))
-        .ok_or_else(|| RawError::ImageDecodeError {
-            format: "JPEG",
-            message: "could not read image dimensions after decode".to_string(),
+        .ok_or_else(|| {
+            RawError::Format(FormatError::ImageDecode {
+                format: "JPEG",
+                message: "could not read image dimensions after decode".to_string(),
+            })
         })?;
 
     // pixels is Vec<u8>, RGB interleaved — scale to u16
@@ -242,14 +251,18 @@ fn decode_png(data: &[u8]) -> RawResult<RgbImage> {
     let cursor = ZCursor::new(data);
     let mut decoder = zune_png::PngDecoder::new_with_options(cursor, opts);
 
-    let result = decoder.decode().map_err(|e| RawError::ImageDecodeError {
-        format: "PNG",
-        message: format!("{e:?}"),
+    let result = decoder.decode().map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "PNG",
+            message: format!("{e:?}"),
+        })
     })?;
 
-    let info = decoder.info().ok_or_else(|| RawError::ImageDecodeError {
-        format: "PNG",
-        message: "could not read PNG info after decode".to_string(),
+    let info = decoder.info().ok_or_else(|| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "PNG",
+            message: "could not read PNG info after decode".to_string(),
+        })
     })?;
 
     let w = info.width as u32;
@@ -264,10 +277,10 @@ fn decode_png(data: &[u8]) -> RawResult<RgbImage> {
         DecodingResult::U8(px) => px.iter().map(|&v| u8_to_u16(v)).collect(),
         DecodingResult::U16(px) => px,
         _ => {
-            return Err(RawError::ImageDecodeError {
+            return Err(RawError::Format(FormatError::ImageDecode {
                 format: "PNG",
                 message: "unexpected pixel depth in decoded result".to_string(),
-            });
+            }));
         }
     };
 
@@ -293,10 +306,10 @@ fn decode_png(data: &[u8]) -> RawResult<RgbImage> {
                 .collect()
         }
         _ => {
-            return Err(RawError::ImageDecodeError {
+            return Err(RawError::Format(FormatError::ImageDecode {
                 format: "PNG",
                 message: format!("unsupported PNG colorspace: {colorspace:?}"),
-            });
+            }));
         }
     };
 
@@ -307,30 +320,31 @@ fn decode_png(data: &[u8]) -> RawResult<RgbImage> {
 
 fn decode_webp(data: &[u8]) -> RawResult<RgbImage> {
     let cursor = BufReader::new(Cursor::new(data));
-    let mut decoder =
-        image_webp::WebPDecoder::new(cursor).map_err(|e| RawError::ImageDecodeError {
+    let mut decoder = image_webp::WebPDecoder::new(cursor).map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
             format: "WebP",
             message: format!("{e}"),
-        })?;
+        })
+    })?;
 
     let (w, h) = decoder.dimensions();
     let has_alpha = decoder.has_alpha();
     let bytes_per_pixel: usize = if has_alpha { 4 } else { 3 };
 
-    let buf_size = decoder
-        .output_buffer_size()
-        .ok_or_else(|| RawError::ImageDecodeError {
+    let buf_size = decoder.output_buffer_size().ok_or_else(|| {
+        RawError::Format(FormatError::ImageDecode {
             format: "WebP",
             message: "image too large to fit in memory".to_string(),
-        })?;
+        })
+    })?;
 
     let mut raw_pixels = vec![0u8; buf_size];
-    decoder
-        .read_image(&mut raw_pixels)
-        .map_err(|e| RawError::ImageDecodeError {
+    decoder.read_image(&mut raw_pixels).map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
             format: "WebP",
             message: format!("{e}"),
-        })?;
+        })
+    })?;
 
     // Strip alpha channel if present, converting to plain RGB
     let data_u16: Vec<u16> = if has_alpha {
@@ -350,30 +364,29 @@ fn decode_webp(data: &[u8]) -> RawResult<RgbImage> {
 fn decode_jxl(data: &[u8]) -> RawResult<RgbImage> {
     use jxl_oxide::{JxlImage, PixelFormat};
 
-    let image =
-        JxlImage::builder()
-            .read(Cursor::new(data))
-            .map_err(|e| RawError::ImageDecodeError {
-                format: "JXL",
-                message: format!("{e}"),
-            })?;
+    let image = JxlImage::builder().read(Cursor::new(data)).map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "JXL",
+            message: format!("{e}"),
+        })
+    })?;
 
     let w = image.width();
     let h = image.height();
 
     if image.num_loaded_keyframes() == 0 {
-        return Err(RawError::ImageDecodeError {
+        return Err(RawError::Format(FormatError::ImageDecode {
             format: "JXL",
             message: "no keyframes decoded".to_string(),
-        });
+        }));
     }
 
-    let render = image
-        .render_frame(0)
-        .map_err(|e| RawError::ImageDecodeError {
+    let render = image.render_frame(0).map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
             format: "JXL",
             message: format!("{e}"),
-        })?;
+        })
+    })?;
 
     let pixel_format = image.pixel_format();
     let total_pixels = (w as usize) * (h as usize);
@@ -408,10 +421,10 @@ fn decode_jxl(data: &[u8]) -> RawResult<RgbImage> {
             }
         }
         _ => {
-            return Err(RawError::ImageDecodeError {
+            return Err(RawError::Format(FormatError::ImageDecode {
                 format: "JXL",
                 message: format!("unsupported pixel format {pixel_format:?}"),
-            });
+            }));
         }
     };
 
@@ -425,31 +438,33 @@ fn decode_tiff(data: &[u8]) -> RawResult<RgbImage> {
     use tiff::decoder::{Decoder, DecodingResult};
 
     let cursor = Cursor::new(data);
-    let mut decoder = Decoder::new(cursor).map_err(|e| RawError::ImageDecodeError {
-        format: "TIFF",
-        message: format!("{e}"),
+    let mut decoder = Decoder::new(cursor).map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "TIFF",
+            message: format!("{e}"),
+        })
     })?;
 
-    let (w, h) = decoder
-        .dimensions()
-        .map_err(|e| RawError::ImageDecodeError {
+    let (w, h) = decoder.dimensions().map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
             format: "TIFF",
             message: format!("{e}"),
-        })?;
+        })
+    })?;
 
-    let color_type = decoder
-        .colortype()
-        .map_err(|e| RawError::ImageDecodeError {
+    let color_type = decoder.colortype().map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
             format: "TIFF",
             message: format!("{e}"),
-        })?;
+        })
+    })?;
 
-    let result = decoder
-        .read_image()
-        .map_err(|e| RawError::ImageDecodeError {
+    let result = decoder.read_image().map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
             format: "TIFF",
             message: format!("{e}"),
-        })?;
+        })
+    })?;
 
     // Extract raw samples as u16 values.
     let samples_u16: Vec<u16> = match result {
@@ -461,10 +476,10 @@ fn decode_tiff(data: &[u8]) -> RawResult<RgbImage> {
             .map(|&v| (v.clamp(0.0, 1.0) * 65535.0) as u16)
             .collect(),
         _ => {
-            return Err(RawError::ImageDecodeError {
+            return Err(RawError::Format(FormatError::ImageDecode {
                 format: "TIFF",
                 message: format!("unsupported TIFF sample type for color type {color_type:?}"),
-            });
+            }));
         }
     };
 
@@ -497,10 +512,10 @@ fn decode_tiff(data: &[u8]) -> RawResult<RgbImage> {
                 .collect()
         }
         _ => {
-            return Err(RawError::ImageDecodeError {
+            return Err(RawError::Format(FormatError::ImageDecode {
                 format: "TIFF",
                 message: format!("unsupported TIFF color type: {color_type:?}"),
-            });
+            }));
         }
     };
 
@@ -512,7 +527,7 @@ fn decode_tiff(data: &[u8]) -> RawResult<RgbImage> {
 fn decode_avif(_data: &[u8]) -> RawResult<RgbImage> {
     // `ravif` (the only AVIF crate in Cargo.toml) is an *encoder* only.
     // There is no AVIF *decoder* dependency available.
-    Err(RawError::UnsupportedFormat(
+    Err(RawError::Unsupported(
         "AVIF decoding is not yet implemented. \
          Add the `libavif` or `avif-decode` crate as a dependency to enable this."
             .to_string(),
@@ -524,12 +539,12 @@ fn decode_avif(_data: &[u8]) -> RawResult<RgbImage> {
 fn decode_heic(_data: &[u8]) -> RawResult<RgbImage> {
     // HEIC uses the ISOBMFF container with H.265 (HEVC) compression.
     // H.265 decoding requires a licensed library and is not implemented here.
-    Err(RawError::ImageDecodeError {
+    Err(RawError::Format(FormatError::ImageDecode {
         format: "HEIC",
         message: "HEIC decoding requires a licensed H.265 decoder. \
                   Set the 'heic' feature flag and provide a compatible library."
             .to_string(),
-    })
+    }))
 }
 
 // ── SVG ──────────────────────────────────────────────────────────────────────
@@ -539,20 +554,23 @@ fn decode_svg(data: &[u8]) -> RawResult<RgbImage> {
     use resvg::{tiny_skia, usvg};
 
     let options = usvg::Options::default();
-    let tree = usvg::Tree::from_data(data, &options).map_err(|e| RawError::ImageDecodeError {
-        format: "SVG",
-        message: e.to_string(),
+    let tree = usvg::Tree::from_data(data, &options).map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "SVG",
+            message: e.to_string(),
+        })
     })?;
 
     let pixmap_size = tree.size().to_int_size();
     let width = pixmap_size.width();
     let height = pixmap_size.height();
 
-    let mut pixmap =
-        tiny_skia::Pixmap::new(width, height).ok_or_else(|| RawError::ImageDecodeError {
+    let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or_else(|| {
+        RawError::Format(FormatError::ImageDecode {
             format: "SVG",
             message: "Failed to create pixmap".to_string(),
-        })?;
+        })
+    })?;
 
     resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
 
@@ -574,10 +592,10 @@ fn decode_svg(data: &[u8]) -> RawResult<RgbImage> {
 
 #[cfg(not(feature = "svg"))]
 fn decode_svg(_data: &[u8]) -> RawResult<RgbImage> {
-    Err(RawError::ImageDecodeError {
+    Err(RawError::Format(FormatError::ImageDecode {
         format: "SVG",
         message: "SVG support requires the 'svg' feature flag".to_string(),
-    })
+    }))
 }
 
 // ── APV ──────────────────────────────────────────────────────────────────────
@@ -585,12 +603,12 @@ fn decode_svg(_data: &[u8]) -> RawResult<RgbImage> {
 fn decode_apv(_data: &[u8]) -> RawResult<RgbImage> {
     // APV (All-intra Predictive Video codec) is an open format developed by Samsung.
     // No Rust decoder exists yet.
-    Err(RawError::ImageDecodeError {
+    Err(RawError::Format(FormatError::ImageDecode {
         format: "APV",
         message: "APV codec decoding is not yet implemented. \
                   The APV codec is an open format but no Rust decoder exists yet."
             .to_string(),
-    })
+    }))
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
@@ -780,8 +798,8 @@ mod tests {
         let decoded =
             decode_standard_image(&encoded, StandardFormat::Jpeg).expect("JPEG decode failed");
 
-        assert_eq!(decoded.width, W as u32);
-        assert_eq!(decoded.height, H as u32);
+        assert_eq!(decoded.width(), W as u32);
+        assert_eq!(decoded.height(), H as u32);
         assert_eq!(decoded.data.len(), W as usize * H as usize * 3);
     }
 
@@ -806,8 +824,8 @@ mod tests {
         let decoded =
             decode_standard_image(&encoded, StandardFormat::Png).expect("PNG decode failed");
 
-        assert_eq!(decoded.width, W as u32);
-        assert_eq!(decoded.height, H as u32);
+        assert_eq!(decoded.width(), W as u32);
+        assert_eq!(decoded.height(), H as u32);
         assert_eq!(decoded.data.len(), W * H * 3);
         // Each u8 value should have been scaled to u16
         assert_eq!(decoded.data[0], u8_to_u16(pixels_u8[0]));
@@ -830,8 +848,8 @@ mod tests {
         let fmt = detect_standard_format(&encoded);
         assert_eq!(fmt, Some(StandardFormat::Jpeg));
         let img = decode_standard_image(&encoded, fmt.unwrap()).unwrap();
-        assert_eq!(img.width, W as u32);
-        assert_eq!(img.height, H as u32);
+        assert_eq!(img.width(), W as u32);
+        assert_eq!(img.height(), H as u32);
     }
 
     // ── GIF decode ────────────────────────────────────────────────────────
@@ -878,8 +896,8 @@ mod tests {
         let gif_data = make_minimal_gif();
         let img =
             decode_standard_image(&gif_data, StandardFormat::Gif).expect("GIF decode must succeed");
-        assert_eq!(img.width, 2, "decoded width must be 2");
-        assert_eq!(img.height, 2, "decoded height must be 2");
+        assert_eq!(img.width(), 2, "decoded width must be 2");
+        assert_eq!(img.height(), 2, "decoded height must be 2");
         assert_eq!(
             img.data.len(),
             2 * 2 * 3,
@@ -897,8 +915,8 @@ mod tests {
             "format detection must return GIF"
         );
         let img = decode_standard_image(&gif_data, fmt.unwrap()).unwrap();
-        assert_eq!(img.width, 2);
-        assert_eq!(img.height, 2);
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.height(), 2);
     }
 
     #[test]
@@ -951,8 +969,8 @@ mod tests {
         let tiff_data = make_minimal_tiff_rgb8();
         let img = decode_standard_image(&tiff_data, StandardFormat::Tiff)
             .expect("TIFF decode must succeed");
-        assert_eq!(img.width, 2);
-        assert_eq!(img.height, 2);
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.height(), 2);
         assert_eq!(img.data.len(), 2 * 2 * 3);
     }
 
@@ -971,8 +989,8 @@ mod tests {
         let fmt = detect_standard_format(&tiff_data);
         assert_eq!(fmt, Some(StandardFormat::Tiff));
         let img = decode_standard_image(&tiff_data, fmt.unwrap()).unwrap();
-        assert_eq!(img.width, 2);
-        assert_eq!(img.height, 2);
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.height(), 2);
     }
 
     /// Build a grayscale TIFF (4×4, 8-bit) in memory.
@@ -992,8 +1010,8 @@ mod tests {
     fn tiff_decode_grayscale_expands_to_rgb() {
         let tiff_data = make_tiff_gray8();
         let img = decode_standard_image(&tiff_data, StandardFormat::Tiff).unwrap();
-        assert_eq!(img.width, 4);
-        assert_eq!(img.height, 4);
+        assert_eq!(img.width(), 4);
+        assert_eq!(img.height(), 4);
         assert_eq!(img.data.len(), 4 * 4 * 3);
         // Grayscale: R == G == B for each pixel
         for px in img.data.chunks_exact(3) {
@@ -1024,8 +1042,8 @@ mod tests {
     fn tiff_decode_rgba_drops_alpha() {
         let tiff_data = make_tiff_rgba8();
         let img = decode_standard_image(&tiff_data, StandardFormat::Tiff).unwrap();
-        assert_eq!(img.width, 2);
-        assert_eq!(img.height, 2);
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.height(), 2);
         // Should be RGB only (alpha dropped)
         assert_eq!(img.data.len(), 2 * 2 * 3);
         // First pixel should be red
@@ -1056,8 +1074,8 @@ mod tests {
     fn tiff_decode_16bit_preserves_values() {
         let tiff_data = make_tiff_rgb16();
         let img = decode_standard_image(&tiff_data, StandardFormat::Tiff).unwrap();
-        assert_eq!(img.width, 2);
-        assert_eq!(img.height, 2);
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.height(), 2);
         // 16-bit values should be preserved exactly
         assert_eq!(img.data[0], 65535); // R of red pixel
         assert_eq!(img.data[1], 0); // G of red pixel
@@ -1071,7 +1089,7 @@ mod tests {
         magic[8..12].copy_from_slice(b"avif");
         let result = decode_standard_image(&magic, StandardFormat::Avif);
         assert!(result.is_err());
-        assert!(matches!(result, Err(RawError::UnsupportedFormat(_))));
+        assert!(matches!(result, Err(RawError::Unsupported(_))));
     }
 
     // ── StandardFormat name (new variants) ───────────────────────────────
@@ -1135,7 +1153,10 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(RawError::ImageDecodeError { format: "HEIC", .. })
+            Err(RawError::Format(FormatError::ImageDecode {
+                format: "HEIC",
+                ..
+            }))
         ));
     }
 
@@ -1166,7 +1187,10 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(RawError::ImageDecodeError { format: "APV", .. })
+            Err(RawError::Format(FormatError::ImageDecode {
+                format: "APV",
+                ..
+            }))
         ));
     }
 
@@ -1201,7 +1225,10 @@ mod tests {
             assert!(result.is_err());
             assert!(matches!(
                 result,
-                Err(RawError::ImageDecodeError { format: "SVG", .. })
+                Err(RawError::Format(FormatError::ImageDecode {
+                    format: "SVG",
+                    ..
+                }))
             ));
         }
         // With the svg feature enabled, the test is skipped here (covered by feature-gated tests).
@@ -1221,8 +1248,8 @@ mod tests {
         let result = decode_standard_image(svg, StandardFormat::Svg);
         assert!(result.is_ok());
         let img = result.unwrap();
-        assert_eq!(img.width, 4);
-        assert_eq!(img.height, 4);
+        assert_eq!(img.width(), 4);
+        assert_eq!(img.height(), 4);
         assert_eq!(img.data.len(), 4 * 4 * 3);
     }
 }

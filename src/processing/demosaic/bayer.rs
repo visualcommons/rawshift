@@ -28,11 +28,11 @@ pub struct Amaze;
 
 impl Demosaic for Amaze {
     fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
-        let width = raw.active_area.size.width as usize;
-        let height = raw.active_area.size.height as usize;
-        let x_off = raw.active_area.origin.x as usize;
-        let y_off = raw.active_area.origin.y as usize;
-        let raw_w = raw.size.width as usize;
+        let width = raw.active_area().size.width as usize;
+        let height = raw.active_area().size.height as usize;
+        let x_off = raw.active_area().origin.x as usize;
+        let y_off = raw.active_area().origin.y as usize;
+        let raw_w = raw.width() as usize;
 
         let expected_size = width * height * 3;
         if output.len() != expected_size {
@@ -46,13 +46,13 @@ impl Demosaic for Amaze {
             return Err(DemosaicError::InvalidDimensions);
         }
 
-        let white = raw.white_level as f32;
+        let white = raw.white_level() as f32;
 
         // Determine color at each CFA position: 0=Red, 1=Green(R-row), 2=Blue, 3=Green(B-row)
         let fc = |x: usize, y: usize| -> u8 {
             let ax = x + x_off;
             let ay = y + y_off;
-            match raw.cfa_pattern {
+            match raw.cfa_pattern() {
                 CfaPattern::Rggb => match (ax % 2, ay % 2) {
                     (0, 0) => 0, // R
                     (1, 0) => 1, // G on R-row
@@ -479,11 +479,11 @@ pub struct Lmmse;
 
 impl Demosaic for Lmmse {
     fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
-        let width = raw.active_area.size.width as usize;
-        let height = raw.active_area.size.height as usize;
-        let x_off = raw.active_area.origin.x as usize;
-        let y_off = raw.active_area.origin.y as usize;
-        let raw_w = raw.size.width as usize;
+        let width = raw.active_area().size.width as usize;
+        let height = raw.active_area().size.height as usize;
+        let x_off = raw.active_area().origin.x as usize;
+        let y_off = raw.active_area().origin.y as usize;
+        let raw_w = raw.width() as usize;
 
         let expected_size = width * height * 3;
         if output.len() != expected_size {
@@ -497,13 +497,13 @@ impl Demosaic for Lmmse {
             return Err(DemosaicError::InvalidDimensions);
         }
 
-        let white = raw.white_level as f32;
+        let white = raw.white_level() as f32;
 
         // CFA color at each active-area position
         let fc = |x: usize, y: usize| -> u8 {
             let ax = x + x_off;
             let ay = y + y_off;
-            match raw.cfa_pattern {
+            match raw.cfa_pattern() {
                 CfaPattern::Rggb => match (ax % 2, ay % 2) {
                     (0, 0) => 0,
                     (1, 0) => 1,
@@ -787,11 +787,11 @@ pub struct Rcd;
 
 impl Demosaic for Rcd {
     fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
-        let width = raw.active_area.size.width as usize;
-        let height = raw.active_area.size.height as usize;
-        let x_off = raw.active_area.origin.x as usize;
-        let y_off = raw.active_area.origin.y as usize;
-        let raw_w = raw.size.width as usize;
+        let width = raw.active_area().size.width as usize;
+        let height = raw.active_area().size.height as usize;
+        let x_off = raw.active_area().origin.x as usize;
+        let y_off = raw.active_area().origin.y as usize;
+        let raw_w = raw.width() as usize;
 
         let expected_size = width * height * 3;
         if output.len() != expected_size {
@@ -805,13 +805,13 @@ impl Demosaic for Rcd {
             return Err(DemosaicError::InvalidDimensions);
         }
 
-        let white = raw.white_level as f32;
+        let white = raw.white_level() as f32;
 
         // CFA color at each active-area position
         let fc = |x: usize, y: usize| -> u8 {
             let ax = x + x_off;
             let ay = y + y_off;
-            match raw.cfa_pattern {
+            match raw.cfa_pattern() {
                 CfaPattern::Rggb => match (ax % 2, ay % 2) {
                     (0, 0) => 0,
                     (1, 0) => 1,
@@ -1049,18 +1049,10 @@ mod tests {
     fn create_test_raw(width: u32, height: u32, pattern: CfaPattern, value: u16) -> RawImage {
         let size = Size::new(width, height);
         let active_area = Rect::new(Point::ORIGIN, size);
-        RawImage {
-            size,
-            active_area,
-            bit_depth: 14,
-            cfa_pattern: pattern,
-            xtrans_pattern: None,
-            black_levels: [0; 4],
-            white_level: 16383,
-            data: vec![value; (width * height) as usize],
-            baseline_exposure: None,
-            default_crop: None,
-        }
+        RawImage::builder(size, active_area, 14, pattern)
+            .white_level(16383)
+            .data(vec![value; (width * height) as usize])
+            .build()
     }
 
     fn create_gradient_raw(width: u32, height: u32, pattern: CfaPattern) -> RawImage {
@@ -1075,18 +1067,10 @@ mod tests {
                 data[(y * width + x) as usize] = val;
             }
         }
-        RawImage {
-            size,
-            active_area,
-            bit_depth: 14,
-            cfa_pattern: pattern,
-            xtrans_pattern: None,
-            black_levels: [0; 4],
-            white_level: 16383,
-            data,
-            baseline_exposure: None,
-            default_crop: None,
-        }
+        RawImage::builder(size, active_area, 14, pattern)
+            .white_level(16383)
+            .data(data)
+            .build()
     }
 
     #[test]
@@ -1150,8 +1134,8 @@ mod tests {
         ] {
             let raw = create_test_raw(20, 20, pattern, 3000);
             let rgb = Amaze.demosaic(&raw);
-            assert_eq!(rgb.width, 20);
-            assert_eq!(rgb.height, 20);
+            assert_eq!(rgb.width(), 20);
+            assert_eq!(rgb.height(), 20);
             assert_eq!(rgb.data.len(), 20 * 20 * 3);
 
             // All values should be non-negative and bounded
@@ -1221,11 +1205,15 @@ mod tests {
 
     #[test]
     fn test_amaze_with_active_area() {
-        let mut raw = create_test_raw(30, 30, CfaPattern::Rggb, 4000);
-        raw.active_area = Rect::from_coords(5, 5, 20, 20);
+        let size = Size::new(30, 30);
+        let active_area = Rect::from_coords(5, 5, 20, 20);
+        let raw = RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
+            .white_level(16383)
+            .data(vec![4000u16; 30 * 30])
+            .build();
         let rgb = Amaze.demosaic(&raw);
-        assert_eq!(rgb.width, 20);
-        assert_eq!(rgb.height, 20);
+        assert_eq!(rgb.width(), 20);
+        assert_eq!(rgb.height(), 20);
         assert_eq!(rgb.data.len(), 20 * 20 * 3);
     }
 
@@ -1309,8 +1297,8 @@ mod tests {
         ] {
             let raw = create_test_raw(20, 20, pattern, 3000);
             let rgb = Lmmse.demosaic(&raw);
-            assert_eq!(rgb.width, 20);
-            assert_eq!(rgb.height, 20);
+            assert_eq!(rgb.width(), 20);
+            assert_eq!(rgb.height(), 20);
             assert_eq!(rgb.data.len(), 20 * 20 * 3);
 
             for val in &rgb.data {
@@ -1361,11 +1349,15 @@ mod tests {
 
     #[test]
     fn test_lmmse_with_active_area() {
-        let mut raw = create_test_raw(30, 30, CfaPattern::Rggb, 4000);
-        raw.active_area = Rect::from_coords(5, 5, 20, 20);
+        let size = Size::new(30, 30);
+        let active_area = Rect::from_coords(5, 5, 20, 20);
+        let raw = RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
+            .white_level(16383)
+            .data(vec![4000u16; 30 * 30])
+            .build();
         let rgb = Lmmse.demosaic(&raw);
-        assert_eq!(rgb.width, 20);
-        assert_eq!(rgb.height, 20);
+        assert_eq!(rgb.width(), 20);
+        assert_eq!(rgb.height(), 20);
         assert_eq!(rgb.data.len(), 20 * 20 * 3);
     }
 
@@ -1431,8 +1423,8 @@ mod tests {
         ] {
             let raw = create_test_raw(20, 20, pattern, 3000);
             let rgb = Rcd.demosaic(&raw);
-            assert_eq!(rgb.width, 20);
-            assert_eq!(rgb.height, 20);
+            assert_eq!(rgb.width(), 20);
+            assert_eq!(rgb.height(), 20);
             assert_eq!(rgb.data.len(), 20 * 20 * 3);
 
             for val in &rgb.data {
@@ -1483,11 +1475,15 @@ mod tests {
 
     #[test]
     fn test_rcd_with_active_area() {
-        let mut raw = create_test_raw(30, 30, CfaPattern::Rggb, 4000);
-        raw.active_area = Rect::from_coords(5, 5, 20, 20);
+        let size = Size::new(30, 30);
+        let active_area = Rect::from_coords(5, 5, 20, 20);
+        let raw = RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
+            .white_level(16383)
+            .data(vec![4000u16; 30 * 30])
+            .build();
         let rgb = Rcd.demosaic(&raw);
-        assert_eq!(rgb.width, 20);
-        assert_eq!(rgb.height, 20);
+        assert_eq!(rgb.width(), 20);
+        assert_eq!(rgb.height(), 20);
         assert_eq!(rgb.data.len(), 20 * 20 * 3);
     }
 }

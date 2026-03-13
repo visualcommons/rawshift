@@ -10,7 +10,7 @@ use binrw::{BinRead, BinReaderExt, binread};
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::error::{RawError, RawResult};
+use crate::error::{ParseError, RawError, RawResult};
 use crate::tiff::tags::TiffTag;
 use crate::tiff::types::{ByteOrder, Rational, SRational, TiffType, TiffValue};
 
@@ -118,17 +118,17 @@ impl TiffHeader {
         // First, read just the byte order and magic to determine TIFF type
         let raw_header: RawTiffHeader = reader
             .read_ne()
-            .map_err(|_| RawError::InvalidByteOrder(0))?;
+            .map_err(|_| RawError::Parse(ParseError::InvalidByteOrder(0)))?;
 
         // Validate magic number and determine if BigTIFF
         let is_bigtiff = match raw_header.magic {
             TIFF_MAGIC => false,
             BIGTIFF_MAGIC => true,
             _ => {
-                return Err(RawError::InvalidMagic {
+                return Err(RawError::Parse(ParseError::InvalidMagic {
                     expected: TIFF_MAGIC,
                     found: raw_header.magic,
-                });
+                }));
             }
         };
 
@@ -137,7 +137,7 @@ impl TiffHeader {
             reader.seek(SeekFrom::Start(0))?;
             let bigtiff_header: RawBigTiffHeader = reader
                 .read_ne()
-                .map_err(|e| RawError::ParseError(e.to_string()))?;
+                .map_err(|e| RawError::Parse(ParseError::BinaryParse(e.to_string())))?;
             bigtiff_header.ifd0_offset
         } else {
             raw_header.ifd0_offset as u64
@@ -282,7 +282,7 @@ impl<R: Read + Seek> TiffParser<R> {
     pub fn parse_ifd_at(&mut self, offset: u64) -> RawResult<Ifd> {
         // Check for circular references
         if self.visited_offsets.contains(&offset) {
-            return Err(RawError::CircularReference(offset));
+            return Err(RawError::Parse(ParseError::CircularReference(offset)));
         }
         self.visited_offsets.insert(offset);
 
@@ -302,10 +302,10 @@ impl<R: Read + Seek> TiffParser<R> {
 
         // Sanity check on entry count
         if entry_count > 65535 {
-            return Err(RawError::InvalidIfd {
+            return Err(RawError::Parse(ParseError::InvalidIfd {
                 offset,
                 reason: format!("Entry count {} is unreasonably large", entry_count),
-            });
+            }));
         }
 
         let mut entries = HashMap::new();
@@ -409,13 +409,13 @@ impl<R: Read + Seek> TiffParser<R> {
             let raw: RawBigTiffIfdEntry = self
                 .reader
                 .read_ne_args::<RawBigTiffIfdEntry>(binrw::args! { is_little })
-                .map_err(|e| RawError::ParseError(e.to_string()))?;
+                .map_err(|e| RawError::Parse(ParseError::BinaryParse(e.to_string())))?;
             (raw.tag_id, raw.data_type, raw.count, raw.value_offset)
         } else {
             let raw: RawIfdEntry = self
                 .reader
                 .read_ne_args::<RawIfdEntry>(binrw::args! { is_little })
-                .map_err(|e| RawError::ParseError(e.to_string()))?;
+                .map_err(|e| RawError::Parse(ParseError::BinaryParse(e.to_string())))?;
             (
                 raw.tag_id,
                 raw.data_type,
@@ -467,7 +467,9 @@ impl<R: Read + Seek> TiffParser<R> {
     pub fn read_value(&mut self, entry: &IfdEntry) -> RawResult<TiffValue> {
         let tiff_type = entry
             .tiff_type
-            .ok_or(RawError::UnknownDataType(entry.data_type))?;
+            .ok_or(RawError::Parse(ParseError::UnknownDataType(
+                entry.data_type,
+            )))?;
 
         // Determine if inline or offset
         let is_inline = entry.is_inline(self.header.is_bigtiff);
@@ -820,11 +822,11 @@ impl<R: Read + Seek> TiffParser<R> {
 
         // Validate header offset
         if self.header.ifd0_offset >= file_size {
-            return Err(RawError::OffsetOutOfBounds {
+            return Err(RawError::Parse(ParseError::OffsetOutOfBounds {
                 offset: self.header.ifd0_offset,
                 size: 0,
                 file_size,
-            });
+            }));
         }
 
         // Walk all IFDs and validate
@@ -843,11 +845,11 @@ impl<R: Read + Seek> TiffParser<R> {
             if !entry.is_inline(self.header.is_bigtiff) {
                 let end = entry.value_offset.saturating_add(entry.value_size());
                 if end > file_size {
-                    return Err(RawError::OffsetOutOfBounds {
+                    return Err(RawError::Parse(ParseError::OffsetOutOfBounds {
                         offset: entry.value_offset,
                         size: entry.value_size(),
                         file_size,
-                    });
+                    }));
                 }
             }
         }
@@ -924,7 +926,10 @@ mod tests {
         let mut cursor = Cursor::new(data);
         let result = TiffHeader::parse(&mut cursor);
 
-        assert!(matches!(result, Err(RawError::InvalidByteOrder(_))));
+        assert!(matches!(
+            result,
+            Err(RawError::Parse(ParseError::InvalidByteOrder(_)))
+        ));
     }
 
     #[test]
@@ -937,7 +942,10 @@ mod tests {
         let mut cursor = Cursor::new(data);
         let result = TiffHeader::parse(&mut cursor);
 
-        assert!(matches!(result, Err(RawError::InvalidMagic { .. })));
+        assert!(matches!(
+            result,
+            Err(RawError::Parse(ParseError::InvalidMagic { .. }))
+        ));
     }
 
     #[test]
@@ -1086,7 +1094,10 @@ mod tests {
 
         let result = parser.validate_complete();
         assert!(
-            matches!(result, Err(RawError::OffsetOutOfBounds { .. })),
+            matches!(
+                result,
+                Err(RawError::Parse(ParseError::OffsetOutOfBounds { .. }))
+            ),
             "Should detect value data past EOF: {:?}",
             result
         );

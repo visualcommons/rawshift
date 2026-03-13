@@ -15,6 +15,7 @@ use crate::tiff::{ByteOrder, TiffTag};
 
 /// DNG export configuration.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DngExportConfig {
     /// Software name to embed (defaults to "rawshift")
     pub software: Option<String>,
@@ -80,13 +81,13 @@ fn build_dng_ifd(
 ) -> Vec<IfdEntry> {
     let mut entries = vec![
         // === Required TIFF baseline tags ===
-        IfdEntry::long(TiffTag::ImageWidth, image.width),
-        IfdEntry::long(TiffTag::ImageLength, image.height),
+        IfdEntry::long(TiffTag::ImageWidth, image.width()),
+        IfdEntry::long(TiffTag::ImageLength, image.height()),
         IfdEntry::shorts(TiffTag::BitsPerSample, &[16, 16, 16]),
         IfdEntry::short(TiffTag::Compression, 1), // Uncompressed
         IfdEntry::short(TiffTag::PhotometricInterpretation, 2), // RGB
         IfdEntry::short(TiffTag::SamplesPerPixel, 3),
-        IfdEntry::long(TiffTag::RowsPerStrip, image.height),
+        IfdEntry::long(TiffTag::RowsPerStrip, image.height()),
         IfdEntry::long(TiffTag::StripOffsets, strip_offset as u32),
         IfdEntry::long(TiffTag::StripByteCounts, strip_bytes as u32),
         IfdEntry::short(TiffTag::PlanarConfiguration, 1), // Chunky

@@ -6,7 +6,7 @@
 use std::io::{Read, Seek};
 
 use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
-use crate::error::{RawError, RawResult};
+use crate::error::{FormatError, ParseError, RawError, RawResult};
 use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
 /// Metadata extracted from a Sony ARW file.
@@ -151,9 +151,11 @@ impl<R: Read + Seek> ArwFile<R> {
     /// Extract metadata from the parsed IFDs.
     fn extract_metadata(&mut self) -> RawResult<()> {
         // Clone the IFDs we need to avoid borrow issues
-        let ifd0 = self.ifd0().cloned().ok_or_else(|| RawError::InvalidIfd {
-            offset: 0,
-            reason: "No IFD0 found".to_string(),
+        let ifd0 = self.ifd0().cloned().ok_or_else(|| {
+            RawError::Parse(ParseError::InvalidIfd {
+                offset: 0,
+                reason: "No IFD0 found".to_string(),
+            })
         })?;
 
         // Extract Make
@@ -166,7 +168,7 @@ impl<R: Read + Seek> ArwFile<R> {
 
         // Validate this is a Sony file
         if !make.to_uppercase().contains("SONY") {
-            return Err(RawError::UnsupportedFormat(format!(
+            return Err(RawError::Unsupported(format!(
                 "Not a Sony file (Make: {})",
                 make
             )));
@@ -184,18 +186,22 @@ impl<R: Read + Seek> ArwFile<R> {
         let raw_ifd = self
             .raw_ifd()
             .cloned()
-            .ok_or_else(|| RawError::UnsupportedFormat("Could not find raw SubIFD".to_string()))?;
+            .ok_or_else(|| RawError::Unsupported("Could not find raw SubIFD".to_string()))?;
 
         // Extract dimensions from raw SubIFD
         let width = raw_ifd
             .get(TiffTag::ImageWidth)
             .map(|e| e.value_offset as u32)
-            .ok_or(RawError::TagNotFound(TiffTag::ImageWidth))?;
+            .ok_or(RawError::Parse(ParseError::TagNotFound(
+                TiffTag::ImageWidth,
+            )))?;
 
         let height = raw_ifd
             .get(TiffTag::ImageLength)
             .map(|e| e.value_offset as u32)
-            .ok_or(RawError::TagNotFound(TiffTag::ImageLength))?;
+            .ok_or(RawError::Parse(ParseError::TagNotFound(
+                TiffTag::ImageLength,
+            )))?;
 
         let sensor_size = Size::new(width, height);
 
@@ -628,11 +634,11 @@ impl<R: Read + Seek> ArwFile<R> {
         let metadata = self
             .metadata
             .as_ref()
-            .ok_or_else(|| RawError::UnsupportedFormat("Metadata not extracted".to_string()))?;
+            .ok_or_else(|| RawError::Unsupported("Metadata not extracted".to_string()))?;
 
         // Check for Sony
         if !metadata.make.to_uppercase().contains("SONY") {
-            return Err(RawError::UnsupportedFormat(format!(
+            return Err(RawError::Unsupported(format!(
                 "Not a Sony camera: {}",
                 metadata.make
             )));
@@ -640,10 +646,10 @@ impl<R: Read + Seek> ArwFile<R> {
 
         // Check for valid dimensions
         if metadata.sensor_size.width == 0 || metadata.sensor_size.height == 0 {
-            return Err(RawError::InvalidDimensions {
+            return Err(RawError::Parse(ParseError::InvalidDimensions {
                 width: metadata.sensor_size.width,
                 height: metadata.sensor_size.height,
-            });
+            }));
         }
 
         // Verify Model name (per Sony ARW specs)
@@ -663,7 +669,7 @@ impl<R: Read + Seek> ArwFile<R> {
 
         // Check for raw data
         if metadata.raw_data_offset == 0 || metadata.raw_data_size == 0 {
-            return Err(RawError::UnsupportedFormat("No raw data found".to_string()));
+            return Err(RawError::Unsupported("No raw data found".to_string()));
         }
 
         Ok(())
@@ -676,7 +682,7 @@ impl<R: Read + Seek> ArwFile<R> {
         let metadata = self
             .metadata
             .as_ref()
-            .ok_or_else(|| RawError::UnsupportedFormat("Metadata not extracted".to_string()))?;
+            .ok_or_else(|| RawError::Unsupported("Metadata not extracted".to_string()))?;
 
         let offset = metadata.raw_data_offset;
         let size = metadata.raw_data_size as usize;
@@ -688,6 +694,38 @@ impl<R: Read + Seek> ArwFile<R> {
         let data = self.parser.read_bytes(size)?;
 
         Ok(data)
+    }
+
+    /// Extract the embedded JPEG thumbnail from IFD 0, if present.
+    pub fn thumbnail(&mut self) -> RawResult<Option<Vec<u8>>> {
+        let ifd0 = match self.ifd0() {
+            Some(ifd) => ifd,
+            None => return Ok(None),
+        };
+        let offset_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormat) {
+            Some(e) => e.clone(),
+            None => return Ok(None),
+        };
+        let length_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormatLength) {
+            Some(e) => e.clone(),
+            None => return Ok(None),
+        };
+        let offset = match self.parser.read_value(&offset_entry)? {
+            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
+            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
+            _ => return Ok(None),
+        };
+        let length = match self.parser.read_value(&length_entry)? {
+            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
+            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
+            _ => return Ok(None),
+        };
+        if length == 0 {
+            return Ok(None);
+        }
+        self.parser.seek_to(offset)?;
+        let data = self.parser.read_bytes(length)?;
+        Ok(Some(data))
     }
 
     /// Decode the raw image data into a RawImage.
@@ -773,33 +811,31 @@ impl<R: Read + Seek> ArwFile<R> {
 
             let expected_pixels = metadata.sensor_size.pixel_count() as usize;
             if output.len() != expected_pixels {
-                return Err(RawError::DecompressionError(format!(
+                return Err(RawError::Format(FormatError::Decompression(format!(
                     "Decoded {} pixels, expected {}",
                     output.len(),
                     expected_pixels
-                )));
+                ))));
             }
 
-            return Ok(RawImage {
-                size: metadata.sensor_size,
-                active_area: metadata.active_area,
-                bit_depth: metadata.bit_depth,
-                cfa_pattern: metadata.cfa_pattern,
-                xtrans_pattern: None,
-                black_levels: metadata.black_levels,
-                white_level: metadata.white_level,
-                data: output,
-                baseline_exposure: None,
-                default_crop: None,
-            });
+            return Ok(RawImage::builder(
+                metadata.sensor_size,
+                metadata.active_area,
+                metadata.bit_depth,
+                metadata.cfa_pattern,
+            )
+            .black_levels(metadata.black_levels)
+            .white_level(metadata.white_level)
+            .data(output)
+            .build());
         }
 
         // Handle specific compression types
         match metadata.compression {
-            8 => Err(RawError::UnsupportedFormat(
+            8 => Err(RawError::Unsupported(
                 "Sony Compressed (Type 8) not yet supported. Only Uncompressed/LJPEG (Type 7) is supported.".to_string()
             )),
-            _ => Err(RawError::UnsupportedFormat(format!(
+            _ => Err(RawError::Unsupported(format!(
                 "Compression type {} not yet supported (only JPEG type 7 is supported)",
                 metadata.compression
             ))),

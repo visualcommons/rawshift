@@ -3,7 +3,7 @@
 //! This module wraps the jxl-oxide crate to decode JPEG XL compressed
 //! tiles used in DNG 1.7+ files (compression code 52546).
 
-use crate::error::{RawError, RawResult};
+use crate::error::{FormatError, RawError, RawResult};
 use jxl_oxide::JxlImage;
 
 /// JPEG XL tile decoder for DNG files.
@@ -19,15 +19,23 @@ impl JxlDecoder {
     pub fn decode_tile(data: &[u8]) -> RawResult<(usize, usize, usize, Vec<u16>)> {
         let image = JxlImage::builder()
             .read(std::io::Cursor::new(data))
-            .map_err(|e| RawError::DecompressionError(format!("JXL decode error: {}", e)))?;
+            .map_err(|e| {
+                RawError::Format(FormatError::Decompression(format!(
+                    "JXL decode error: {}",
+                    e
+                )))
+            })?;
 
         let width = image.width() as usize;
         let height = image.height() as usize;
 
         // Render the first frame
-        let render = image
-            .render_frame(0)
-            .map_err(|e| RawError::DecompressionError(format!("JXL render error: {}", e)))?;
+        let render = image.render_frame(0).map_err(|e| {
+            RawError::Format(FormatError::Decompression(format!(
+                "JXL render error: {}",
+                e
+            )))
+        })?;
 
         // Get interleaved pixel data
         let fb = render.image_all_channels();
@@ -55,14 +63,22 @@ impl JxlDecoder {
     ) -> RawResult<(usize, usize, usize, Vec<u16>)> {
         let image = JxlImage::builder()
             .read(std::io::Cursor::new(data))
-            .map_err(|e| RawError::DecompressionError(format!("JXL decode error: {}", e)))?;
+            .map_err(|e| {
+                RawError::Format(FormatError::Decompression(format!(
+                    "JXL decode error: {}",
+                    e
+                )))
+            })?;
 
         let width = image.width() as usize;
         let height = image.height() as usize;
 
-        let render = image
-            .render_frame(0)
-            .map_err(|e| RawError::DecompressionError(format!("JXL render error: {}", e)))?;
+        let render = image.render_frame(0).map_err(|e| {
+            RawError::Format(FormatError::Decompression(format!(
+                "JXL render error: {}",
+                e
+            )))
+        })?;
 
         let fb = render.image_all_channels();
         let channels = fb.channels();

@@ -289,6 +289,10 @@ static CAMERA_DB: &[CameraCalibration] = &[
 /// Look up camera calibration data by model string.
 ///
 /// Performs an exact match against the model field.
+#[deprecated(
+    since = "0.2.0",
+    note = "use `find_camera_calibration` which supports substring matching"
+)]
 pub fn get_camera_calibration(model: &str) -> Option<&'static CameraCalibration> {
     CAMERA_DB.iter().find(|c| c.model == model)
 }

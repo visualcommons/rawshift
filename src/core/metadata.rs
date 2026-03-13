@@ -5,13 +5,14 @@
 //! Extend as new formats reveal additional fields.
 
 /// Unsigned rational (numerator, denominator).
-pub type URational = (u32, u32);
+pub use crate::tiff::Rational as URational;
 
 /// Signed rational (numerator, denominator).
-pub type SRational = (i32, i32);
+pub use crate::tiff::SRational;
 
 /// Camera identification information.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CameraInfo {
     /// Camera manufacturer (e.g., "SONY", "Apple")
     pub make: String,
@@ -30,7 +31,8 @@ pub struct CameraInfo {
 }
 
 /// EXIF exposure and capture settings.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ExifInfo {
     /// ISO sensitivity
     pub iso: Option<u32>,
@@ -57,7 +59,8 @@ pub struct ExifInfo {
 }
 
 /// Date/time information.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DateTimeInfo {
     /// Original capture date/time (EXIF format: "YYYY:MM:DD HH:MM:SS")
     pub datetime_original: Option<String>,
@@ -72,7 +75,8 @@ pub struct DateTimeInfo {
 }
 
 /// GPS geolocation data.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GpsInfo {
     /// Latitude as [degrees, minutes, seconds] rationals
     pub latitude: Option<[URational; 3]>,
@@ -97,7 +101,8 @@ pub struct GpsInfo {
 }
 
 /// DNG color calibration data.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DngColorInfo {
     /// Color matrix 1 (3x3, row-major) - XYZ to camera native under illuminant 1
     pub color_matrix_1: Option<[f64; 9]>,
@@ -118,7 +123,8 @@ pub struct DngColorInfo {
 }
 
 /// DNG calibration and noise data.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DngCalibrationInfo {
     /// Baseline exposure offset in EV
     pub baseline_exposure: Option<f64>,
@@ -133,7 +139,8 @@ pub struct DngCalibrationInfo {
 }
 
 /// DNG profile data.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DngProfileInfo {
     /// Embedded profile name
     pub profile_name: Option<String>,
@@ -142,7 +149,8 @@ pub struct DngProfileInfo {
 }
 
 /// Image-level metadata.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ImageInfo {
     /// EXIF orientation (1-8)
     pub orientation: Option<u16>,
@@ -162,7 +170,8 @@ pub struct ImageInfo {
 ///
 /// This struct is designed for extension. When adding support for new RAW
 /// formats, add fields as needed to capture format-specific metadata.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ImageMetadata {
     /// Camera identification
     pub camera: CameraInfo,
@@ -205,12 +214,12 @@ mod tests {
 
     #[test]
     fn test_rational_types() {
-        let ur: URational = (1, 100);
-        assert_eq!(ur.0, 1);
-        assert_eq!(ur.1, 100);
+        let ur = URational::new(1, 100);
+        assert_eq!(ur.numerator, 1);
+        assert_eq!(ur.denominator, 100);
 
-        let sr: SRational = (-1, 3);
-        assert_eq!(sr.0, -1);
-        assert_eq!(sr.1, 3);
+        let sr = SRational::new(-1, 3);
+        assert_eq!(sr.numerator, -1);
+        assert_eq!(sr.denominator, 3);
     }
 }

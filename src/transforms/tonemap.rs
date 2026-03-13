@@ -28,7 +28,7 @@ pub fn apply_tone_reproduction(image: &mut RgbImage, custom_gamma: Option<f32>) 
     if let Some(gamma) = custom_gamma {
         apply_gamma(image, gamma);
     } else {
-        apply_tonemap(image, image.baseline_exposure);
+        apply_tonemap(image, image.baseline_exposure());
     }
 }
 
@@ -105,13 +105,7 @@ mod tests {
 
     fn make_image(values: &[u16]) -> RgbImage {
         let n = values.len() as u32 / 3;
-        RgbImage {
-            width: n,
-            height: 1,
-            data: values.to_vec(),
-            baseline_exposure: None,
-            default_crop: None,
-        }
+        RgbImage::new(n, 1, values.to_vec())
     }
 
     #[test]

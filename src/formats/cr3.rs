@@ -24,7 +24,7 @@ use std::io::{Cursor, Read, Seek, SeekFrom};
 use tracing::instrument;
 
 use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
-use crate::error::{RawError, RawResult};
+use crate::error::{FormatError, RawError, RawResult};
 use crate::tiff::{TiffParser, TiffTag, TiffValue};
 
 // ── Canon UUID ────────────────────────────────────────────────────────────────
@@ -115,9 +115,9 @@ fn read_box_header<R: Read + Seek>(reader: &mut R) -> RawResult<Option<IsobmffBo
         reader.read_exact(&mut ext)?;
         let ext_size = u64::from_be_bytes(ext);
         if ext_size < 16 {
-            return Err(RawError::Cr3Error(format!(
+            return Err(RawError::Format(FormatError::Cr3(format!(
                 "ISOBMFF box at {header_start}: extended size {ext_size} < 16"
-            )));
+            ))));
         }
         (16, ext_size)
     } else if size_u32 == 0 {
@@ -132,9 +132,9 @@ fn read_box_header<R: Read + Seek>(reader: &mut R) -> RawResult<Option<IsobmffBo
     };
 
     if total_size < header_size {
-        return Err(RawError::Cr3Error(format!(
+        return Err(RawError::Format(FormatError::Cr3(format!(
             "ISOBMFF box at {header_start}: total_size {total_size} < header_size {header_size}"
-        )));
+        ))));
     }
 
     let payload_offset = header_start + header_size;
@@ -217,9 +217,9 @@ impl<R: Read + Seek> Cr3File<R> {
         let mut magic = [0u8; 12];
         reader.read_exact(&mut magic)?;
         if !is_cr3(&magic) {
-            return Err(RawError::Cr3Error(
+            return Err(RawError::Format(FormatError::Cr3(
                 "Not a CR3 file: ftyp brand is not crx /crx2".to_string(),
-            ));
+            )));
         }
         reader.seek(SeekFrom::Start(0))?;
 
@@ -242,14 +242,22 @@ impl<R: Read + Seek> Cr3File<R> {
     }
 
     /// Attempt to decode the raw image.
+    /// Extract the embedded JPEG thumbnail.
+    ///
+    /// CR3 thumbnail extraction from ISOBMFF tracks is not yet implemented.
+    pub fn thumbnail(&mut self) -> RawResult<Option<Vec<u8>>> {
+        Ok(None)
+    }
+
+    /// Decode the raw image data.
     ///
     /// CR3 uses Canon's proprietary CRX codec; full decoding is not yet
     /// implemented. This method always returns an informative error.
     #[instrument(skip(self), name = "Cr3File::decode_raw")]
     pub fn decode_raw(&mut self) -> RawResult<RawImage> {
-        Err(RawError::Cr3Error(
+        Err(RawError::Format(FormatError::Cr3(
             "CRX codec not yet implemented; metadata extraction only".to_string(),
-        ))
+        )))
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -263,7 +271,11 @@ impl<R: Read + Seek> Cr3File<R> {
         let moov = top_boxes
             .iter()
             .find(|b| b.box_type == BOX_MOOV)
-            .ok_or_else(|| RawError::Cr3Error("No moov box found in CR3 file".to_string()))?
+            .ok_or_else(|| {
+                RawError::Format(FormatError::Cr3(
+                    "No moov box found in CR3 file".to_string(),
+                ))
+            })?
             .clone();
 
         self.parse_moov(moov)?;
@@ -769,7 +781,7 @@ mod tests {
         let cursor = Cursor::new(data);
         let result = Cr3File::parse(cursor);
         assert!(
-            matches!(result, Err(RawError::Cr3Error(_))),
+            matches!(result, Err(RawError::Format(FormatError::Cr3(_)))),
             "TIFF data should produce Cr3Error, got: {:?}",
             result.err()
         );
@@ -789,7 +801,7 @@ mod tests {
         let cursor = Cursor::new(data);
         let result = Cr3File::parse(cursor);
         assert!(
-            matches!(result, Err(RawError::Cr3Error(_))),
+            matches!(result, Err(RawError::Format(FormatError::Cr3(_)))),
             "CR3 ftyp without moov should produce Cr3Error"
         );
     }
@@ -893,7 +905,7 @@ mod tests {
         let mut cr3 = Cr3File::parse(cursor).expect("Should parse minimal CR3");
         let result = cr3.decode_raw();
         assert!(
-            matches!(result, Err(RawError::Cr3Error(_))),
+            matches!(result, Err(RawError::Format(FormatError::Cr3(_)))),
             "decode_raw must return Cr3Error for unimplemented CRX codec"
         );
     }

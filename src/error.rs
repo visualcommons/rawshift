@@ -2,6 +2,13 @@
 //!
 //! This module defines comprehensive error types for TIFF parsing,
 //! format-specific errors, and I/O errors.
+//!
+//! Errors are organized into categories:
+//! - [`ParseError`] — TIFF/binary parse issues
+//! - [`FormatError`] — Format-specific decode failures
+//! - [`ProcessingError`] — Demosaic, color, tonemap
+//! - [`EncodeError`] — Output encoding
+//! - [`RawError::Unsupported`] — Feature not implemented
 
 use std::io;
 use thiserror::Error;
@@ -15,6 +22,30 @@ pub enum RawError {
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
 
+    /// TIFF/binary parse error.
+    #[error(transparent)]
+    Parse(#[from] ParseError),
+
+    /// Format-specific decode error.
+    #[error(transparent)]
+    Format(#[from] FormatError),
+
+    /// Processing pipeline error.
+    #[error(transparent)]
+    Processing(#[from] ProcessingError),
+
+    /// Output encoding error.
+    #[error(transparent)]
+    Encode(#[from] EncodeError),
+
+    /// Feature not yet implemented.
+    #[error("Unsupported: {0}")]
+    Unsupported(String),
+}
+
+/// TIFF and binary parse errors.
+#[derive(Debug, Error)]
+pub enum ParseError {
     /// Invalid TIFF magic number.
     #[error("Invalid TIFF magic number: expected {expected}, found {found}")]
     InvalidMagic {
@@ -27,10 +58,6 @@ pub enum RawError {
     /// Invalid byte order marker.
     #[error("Invalid byte order marker: 0x{0:04X} (expected 'II' or 'MM')")]
     InvalidByteOrder(u16),
-
-    /// Unsupported TIFF version.
-    #[error("Unsupported TIFF version: {0} (expected 42 for TIFF or 43 for BigTIFF)")]
-    UnsupportedTiffVersion(u16),
 
     /// Invalid or malformed IFD.
     #[error("Invalid IFD at offset {offset}: {reason}")]
@@ -45,19 +72,6 @@ pub enum RawError {
     #[error("Required tag not found: {0}")]
     TagNotFound(TiffTag),
 
-    /// Required tag not found (by ID).
-    #[error("Required tag not found: 0x{0:04X}")]
-    TagIdNotFound(u16),
-
-    /// Invalid tag value.
-    #[error("Invalid value for tag {tag}: {reason}")]
-    InvalidTagValue {
-        /// The tag with the invalid value
-        tag: TiffTag,
-        /// Description of what's wrong
-        reason: String,
-    },
-
     /// Offset exceeds file boundaries.
     #[error("Offset out of bounds: offset {offset} + size {size} exceeds file size {file_size}")]
     OffsetOutOfBounds {
@@ -69,17 +83,9 @@ pub enum RawError {
         file_size: u64,
     },
 
-    /// Unsupported format or feature.
-    #[error("Unsupported format: {0}")]
-    UnsupportedFormat(String),
-
     /// Unknown TIFF data type.
     #[error("Unknown TIFF data type: {0}")]
     UnknownDataType(u16),
-
-    /// Decompression error.
-    #[error("Decompression error: {0}")]
-    DecompressionError(String),
 
     /// Invalid image dimensions.
     #[error("Invalid image dimensions: {width}x{height}")]
@@ -90,118 +96,100 @@ pub enum RawError {
         height: u32,
     },
 
-    /// Parse error from binrw.
-    #[error("Binary parse error: {0}")]
-    ParseError(String),
-
-    /// Unexpected end of data.
-    #[error("Unexpected end of data at offset {offset}, needed {needed} bytes")]
-    UnexpectedEof {
-        /// Offset where data ended
-        offset: u64,
-        /// Number of bytes needed
-        needed: usize,
-    },
-
     /// Circular reference detected in IFD chain.
     #[error("Circular reference detected in IFD chain at offset {0}")]
     CircularReference(u64),
 
-    /// Unaccounted data found in file (gaps or trailing bytes).
-    #[error("Unaccounted data: {size} bytes at offset {offset}")]
-    UnaccountedData {
-        /// Offset where unaccounted data starts
-        offset: u64,
-        /// Size of unaccounted region
-        size: u64,
-    },
+    /// Binary parse error (from binrw or other parsers).
+    #[error("Binary parse error: {0}")]
+    BinaryParse(String),
+}
 
-    /// Overlapping data regions detected.
-    #[error("Overlapping data regions at offset {offset}")]
-    OverlappingData {
-        /// Offset where overlap occurs
-        offset: u64,
-    },
-
-    /// Unknown/unhandled TIFF tag found.
-    #[error("Unknown tag 0x{tag_id:04X} at IFD offset {ifd_offset}")]
-    UnknownTag {
-        /// The unknown tag ID
-        tag_id: u16,
-        /// Offset of the IFD containing the tag
-        ifd_offset: u64,
-    },
-
-    // ── Format-specific errors ──────────────────────────────────────
+/// Format-specific decode errors.
+#[derive(Debug, Error)]
+pub enum FormatError {
     /// Canon CR2 format error.
     #[error("CR2 error: {0}")]
-    Cr2Error(String),
+    Cr2(String),
 
     /// Nikon NEF format error.
     #[error("NEF error: {0}")]
-    NefError(String),
+    Nef(String),
 
     /// Canon CR3/ISOBMFF format error.
     #[error("CR3 error: {0}")]
-    Cr3Error(String),
+    Cr3(String),
 
     /// Fujifilm RAF format error.
     #[error("RAF error: {0}")]
-    RafError(String),
+    Raf(String),
 
     /// Canon CRW/CIFF format error.
     #[error("CRW error: {0}")]
-    CrwError(String),
+    Crw(String),
 
     /// Standard image format decoding error.
     #[error("Image decode error ({format}): {message}")]
-    ImageDecodeError {
+    ImageDecode {
         /// Format name (e.g., "JPEG", "PNG")
         format: &'static str,
         /// Error description
         message: String,
     },
 
-    /// Operation is not yet implemented (stub).
-    ///
-    /// Used for stub implementations where the API surface exists but the
-    /// underlying logic has not been written yet.
-    #[error("Unsupported operation: {0}")]
-    UnsupportedOperation(String),
+    /// Decompression error.
+    #[error("Decompression error: {0}")]
+    Decompression(String),
+}
 
+/// Processing pipeline errors.
+#[derive(Debug, Error)]
+pub enum ProcessingError {
     /// Demosaicing error.
     #[error("Demosaic error: {0}")]
-    DemosaicError(String),
+    Demosaic(String),
 
     /// Color processing error.
     #[error("Color processing error: {0}")]
-    ColorError(String),
+    Color(String),
+}
 
-    /// Encoding/export error.
+/// Output encoding errors.
+#[derive(Debug, Error)]
+pub enum EncodeError {
+    /// Generic encoding/export error.
     #[error("Encoding error ({format}): {message}")]
-    EncodingError {
+    Encoding {
         /// Format name (e.g., "JPEG", "PNG")
         format: &'static str,
         /// Error description
         message: String,
     },
+
+    /// JPEG encoding error.
+    #[error("JPEG encoding error: {0}")]
+    Jpeg(#[from] jpeg_encoder::EncodingError),
+
+    /// WebP encoding error.
+    #[error("WebP encoding error: {0:?}")]
+    WebP(#[from] image_webp::EncodingError),
 }
 
 impl From<binrw::Error> for RawError {
     fn from(err: binrw::Error) -> Self {
-        RawError::ParseError(err.to_string())
+        RawError::Parse(ParseError::BinaryParse(err.to_string()))
     }
 }
 
 impl From<jpeg_encoder::EncodingError> for RawError {
     fn from(err: jpeg_encoder::EncodingError) -> Self {
-        RawError::ParseError(format!("JPEG encoding error: {}", err))
+        RawError::Encode(EncodeError::Jpeg(err))
     }
 }
 
 impl From<image_webp::EncodingError> for RawError {
     fn from(err: image_webp::EncodingError) -> Self {
-        RawError::ParseError(format!("WebP encoding error: {:?}", err))
+        RawError::Encode(EncodeError::WebP(err))
     }
 }
 
@@ -213,59 +201,63 @@ impl From<zune_image::errors::ImageErrors> for RawError {
             ImageErrors::IoError(e) => RawError::Io(e),
 
             // Dimension Mismatches
-            ImageErrors::DimensionsMisMatch(w, h) => RawError::InvalidDimensions {
-                width: w as u32,
-                height: h as u32,
-            },
+            ImageErrors::DimensionsMisMatch(w, h) => {
+                RawError::Parse(ParseError::InvalidDimensions {
+                    width: w as u32,
+                    height: h as u32,
+                })
+            }
 
             // Decoding/Decompression Errors
-            ImageErrors::ImageDecodeErrors(desc) => RawError::DecompressionError(desc),
+            ImageErrors::ImageDecodeErrors(desc) => {
+                RawError::Format(FormatError::Decompression(desc))
+            }
 
             // Unsupported Formats & Features
             ImageErrors::UnsupportedColorspace(cs, source, supported) => {
-                RawError::UnsupportedFormat(format!(
+                RawError::Unsupported(format!(
                     "Colorspace {:?} in {}. Supported: {:?}",
                     cs, source, supported
                 ))
             }
             ImageErrors::ImageDecoderNotIncluded(fmt) => {
-                RawError::UnsupportedFormat(format!("Decoder for {:?} not included", fmt))
+                RawError::Unsupported(format!("Decoder for {:?} not included", fmt))
             }
             ImageErrors::ImageDecoderNotImplemented(fmt) => {
-                RawError::UnsupportedFormat(format!("Decoder for {:?} not implemented", fmt))
+                RawError::Unsupported(format!("Decoder for {:?} not implemented", fmt))
             }
-            ImageErrors::ImageOperationNotImplemented(op, bit) => RawError::UnsupportedFormat(
-                format!("Operation {} not implemented for {:?}", op, bit),
-            ),
+            ImageErrors::ImageOperationNotImplemented(op, bit) => {
+                RawError::Unsupported(format!("Operation {} not implemented for {:?}", op, bit))
+            }
 
-            // State and Logic Errors (Mapped to ParseError/Generic)
-            ImageErrors::NoImageForOperations => {
-                RawError::ParseError("No image available for operations".to_string())
-            }
-            ImageErrors::NoImageForEncoding => {
-                RawError::ParseError("No image available for encoding".to_string())
-            }
-            ImageErrors::NoImageBuffer => {
-                RawError::ParseError("No image buffer available".to_string())
-            }
-            ImageErrors::WrongTypeId(expected, found) => RawError::ParseError(format!(
-                "Type mismatch: expected {:?}, found {:?}",
-                expected, found
+            // State and Logic Errors
+            ImageErrors::NoImageForOperations => RawError::Parse(ParseError::BinaryParse(
+                "No image available for operations".to_string(),
+            )),
+            ImageErrors::NoImageForEncoding => RawError::Parse(ParseError::BinaryParse(
+                "No image available for encoding".to_string(),
+            )),
+            ImageErrors::NoImageBuffer => RawError::Parse(ParseError::BinaryParse(
+                "No image buffer available".to_string(),
+            )),
+            ImageErrors::WrongTypeId(expected, found) => RawError::Parse(ParseError::BinaryParse(
+                format!("Type mismatch: expected {:?}, found {:?}", expected, found),
             )),
 
             // Generic String/Str Errors
-            ImageErrors::GenericString(s) => RawError::ParseError(s),
-            ImageErrors::GenericStr(s) => RawError::ParseError(s.to_string()),
+            ImageErrors::GenericString(s) => RawError::Parse(ParseError::BinaryParse(s)),
+            ImageErrors::GenericStr(s) => RawError::Parse(ParseError::BinaryParse(s.to_string())),
 
-            // Nested Error Enums (Preserving context via String)
+            // Nested Error Enums
             ImageErrors::OperationsError(e) => {
-                RawError::ParseError(format!("Operations error: {:?}", e))
+                RawError::Processing(ProcessingError::Color(format!("Operations error: {:?}", e)))
             }
-            ImageErrors::EncodeErrors(e) => {
-                RawError::ParseError(format!("Encoding error: {:?}", e))
-            }
+            ImageErrors::EncodeErrors(e) => RawError::Encode(EncodeError::Encoding {
+                format: "zune",
+                message: format!("{:?}", e),
+            }),
             ImageErrors::ChannelErrors(e) => {
-                RawError::ParseError(format!("Channel error: {:?}", e))
+                RawError::Parse(ParseError::BinaryParse(format!("Channel error: {:?}", e)))
             }
         }
     }
@@ -280,14 +272,14 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let err = RawError::InvalidMagic {
+        let err = RawError::Parse(ParseError::InvalidMagic {
             expected: 42,
             found: 0,
-        };
+        });
         let s = format!("{}", err);
         assert!(s.contains("Invalid TIFF magic"));
 
-        let err = RawError::TagNotFound(TiffTag::ImageWidth);
+        let err = RawError::Parse(ParseError::TagNotFound(TiffTag::ImageWidth));
         let s = format!("{}", err);
         assert!(s.contains("ImageWidth"));
     }
@@ -297,5 +289,35 @@ mod tests {
         let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
         let raw_err: RawError = io_err.into();
         assert!(matches!(raw_err, RawError::Io(_)));
+    }
+
+    #[test]
+    fn test_parse_error_conversion() {
+        let parse_err = ParseError::InvalidByteOrder(0x1234);
+        let raw_err: RawError = parse_err.into();
+        assert!(matches!(
+            raw_err,
+            RawError::Parse(ParseError::InvalidByteOrder(0x1234))
+        ));
+    }
+
+    #[test]
+    fn test_format_error_conversion() {
+        let fmt_err = FormatError::Cr2("test error".to_string());
+        let raw_err: RawError = fmt_err.into();
+        assert!(matches!(raw_err, RawError::Format(FormatError::Cr2(_))));
+    }
+
+    #[test]
+    fn test_encode_error_conversion() {
+        let enc_err = EncodeError::Encoding {
+            format: "PNG",
+            message: "test".to_string(),
+        };
+        let raw_err: RawError = enc_err.into();
+        assert!(matches!(
+            raw_err,
+            RawError::Encode(EncodeError::Encoding { .. })
+        ));
     }
 }

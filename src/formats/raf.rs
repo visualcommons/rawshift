@@ -15,7 +15,7 @@
 use std::io::{Read, Seek, SeekFrom};
 
 use crate::core::image::{CfaPattern, RawImage, Rect, Size, XTransPattern};
-use crate::error::{RawError, RawResult};
+use crate::error::{FormatError, RawError, RawResult};
 use tracing::instrument;
 
 /// RAF magic bytes at the beginning of every Fujifilm RAF file.
@@ -101,15 +101,15 @@ impl<R: Read + Seek> RafFile<R> {
     pub fn parse(mut reader: R) -> RawResult<Self> {
         // Read the full header (160 bytes)
         let mut header = [0u8; RAF_HEADER_SIZE];
-        reader
-            .read_exact(&mut header)
-            .map_err(|e| RawError::RafError(format!("Failed to read RAF header: {e}")))?;
+        reader.read_exact(&mut header).map_err(|e| {
+            RawError::Format(FormatError::Raf(format!("Failed to read RAF header: {e}")))
+        })?;
 
         // Validate magic
         if &header[..16] != RAF_MAGIC {
-            return Err(RawError::RafError(
+            return Err(RawError::Format(FormatError::Raf(
                 "Invalid RAF magic: not a Fujifilm RAF file".to_string(),
-            ));
+            )));
         }
 
         // Extract camera model string (null-terminated, padded to 32 bytes)
@@ -123,9 +123,9 @@ impl<R: Read + Seek> RafFile<R> {
         let raw_data_size = read_be_u32(&header, RAW_DATA_SIZE_FIELD) as u64;
 
         if raw_data_offset == 0 {
-            return Err(RawError::RafError(
+            return Err(RawError::Format(FormatError::Raf(
                 "RAF header has zero raw data offset".to_string(),
-            ));
+            )));
         }
 
         // Determine if this is an X-Trans model
@@ -180,35 +180,52 @@ impl<R: Read + Seek> RafFile<R> {
         self.metadata.as_ref()
     }
 
+    /// Extract the embedded JPEG preview from the RAF file.
+    pub fn thumbnail(&mut self) -> RawResult<Option<Vec<u8>>> {
+        let metadata = match self.metadata.as_ref() {
+            Some(m) => m,
+            None => return Ok(None),
+        };
+        let offset = metadata.jpeg_offset;
+        let size = metadata.jpeg_size as usize;
+        if size == 0 {
+            return Ok(None);
+        }
+        self.reader.seek(std::io::SeekFrom::Start(offset))?;
+        let mut data = vec![0u8; size];
+        self.reader.read_exact(&mut data)?;
+        Ok(Some(data))
+    }
+
     /// Decode the raw image data into a [`RawImage`].
     ///
     /// Seeks to `raw_data_offset`, skips the small raw sub-header (32 bytes),
     /// reads the remaining bytes, and unpacks them as big-endian 16-bit values.
     #[instrument(skip(self))]
     pub fn decode_raw(&mut self) -> RawResult<RawImage> {
-        let metadata = self
-            .metadata
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| RawError::RafError("Metadata not extracted".to_string()))?;
+        let metadata = self.metadata.as_ref().cloned().ok_or_else(|| {
+            RawError::Format(FormatError::Raf("Metadata not extracted".to_string()))
+        })?;
 
         let raw_data_size = metadata.raw_data_size as usize;
         if raw_data_size < 32 {
-            return Err(RawError::RafError(format!(
+            return Err(RawError::Format(FormatError::Raf(format!(
                 "RAF raw data size too small: {raw_data_size} bytes"
-            )));
+            ))));
         }
 
         // Seek to the raw data section
         self.reader
             .seek(SeekFrom::Start(metadata.raw_data_offset))
-            .map_err(|e| RawError::RafError(format!("Failed to seek to raw data: {e}")))?;
+            .map_err(|e| {
+                RawError::Format(FormatError::Raf(format!("Failed to seek to raw data: {e}")))
+            })?;
 
         // Read the raw data (includes the sub-header)
         let mut raw_bytes = vec![0u8; raw_data_size];
-        self.reader
-            .read_exact(&mut raw_bytes)
-            .map_err(|e| RawError::RafError(format!("Failed to read raw data: {e}")))?;
+        self.reader.read_exact(&mut raw_bytes).map_err(|e| {
+            RawError::Format(FormatError::Raf(format!("Failed to read raw data: {e}")))
+        })?;
 
         // Skip the 32-byte raw sub-header present in newer RAF files
         const RAW_SUB_HEADER: usize = 32;
@@ -223,27 +240,30 @@ impl<R: Read + Seek> RafFile<R> {
 
         let expected = metadata.sensor_size.pixel_count() as usize;
         if pixels.len() != expected {
-            return Err(RawError::RafError(format!(
+            return Err(RawError::Format(FormatError::Raf(format!(
                 "Pixel count mismatch: got {} pixels, expected {} ({}×{})",
                 pixels.len(),
                 expected,
                 metadata.sensor_size.width,
                 metadata.sensor_size.height,
-            )));
+            ))));
         }
 
-        Ok(RawImage {
-            size: metadata.sensor_size,
-            active_area: metadata.active_area,
-            bit_depth: metadata.bit_depth,
-            cfa_pattern: metadata.cfa_pattern,
-            xtrans_pattern: metadata.xtrans_pattern,
-            black_levels: metadata.black_levels,
-            white_level: metadata.white_level,
-            data: pixels,
-            baseline_exposure: None,
-            default_crop: None,
-        })
+        {
+            let mut builder = RawImage::builder(
+                metadata.sensor_size,
+                metadata.active_area,
+                metadata.bit_depth,
+                metadata.cfa_pattern,
+            )
+            .black_levels(metadata.black_levels)
+            .white_level(metadata.white_level)
+            .data(pixels);
+            if let Some(xtrans) = metadata.xtrans_pattern {
+                builder = builder.xtrans_pattern(xtrans);
+            }
+            Ok(builder.build())
+        }
     }
 }
 
@@ -646,7 +666,7 @@ mod tests {
         let cursor = Cursor::new(data);
         let result = RafFile::parse(cursor);
         assert!(
-            matches!(result, Err(RawError::RafError(_))),
+            matches!(result, Err(RawError::Format(FormatError::Raf(_)))),
             "Non-RAF data should produce RafError"
         );
     }
@@ -658,7 +678,7 @@ mod tests {
         let cursor = Cursor::new(data);
         let result = RafFile::parse(cursor);
         assert!(
-            matches!(result, Err(RawError::RafError(_))),
+            matches!(result, Err(RawError::Format(FormatError::Raf(_)))),
             "Truncated header should produce RafError"
         );
     }

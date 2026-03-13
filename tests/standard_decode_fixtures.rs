@@ -161,14 +161,20 @@ fn assert_decode_dimensions(format_dir: &str, expected_format: StandardFormat) {
         .unwrap_or_else(|e| panic!("{} decode failed: {}", gt.format, e));
 
     assert_eq!(
-        img.width, gt.width,
+        img.width(),
+        gt.width,
         "{} width mismatch: expected {}, got {}",
-        gt.format, gt.width, img.width
+        gt.format,
+        gt.width,
+        img.width()
     );
     assert_eq!(
-        img.height, gt.height,
+        img.height(),
+        gt.height,
         "{} height mismatch: expected {}, got {}",
-        gt.format, gt.height, img.height
+        gt.format,
+        gt.height,
+        img.height()
     );
     assert_eq!(
         img.data.len(),
@@ -234,8 +240,8 @@ fn assert_detect_then_decode(format_dir: &str, expected_format: StandardFormat) 
     let img = decode_standard_image(&data, detected.unwrap())
         .unwrap_or_else(|e| panic!("{} decode after detection failed: {}", gt.format, e));
 
-    assert_eq!(img.width, gt.width);
-    assert_eq!(img.height, gt.height);
+    assert_eq!(img.width(), gt.width);
+    assert_eq!(img.height(), gt.height);
 }
 
 #[test]

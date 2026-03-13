@@ -7,7 +7,7 @@ use std::io::{Read, Seek};
 
 use crate::codecs::jxl::JxlDecoder;
 use crate::core::image::{CfaPattern, RawImage, Rect, RgbImage, Size};
-use crate::error::{RawError, RawResult};
+use crate::error::{ParseError, RawError, RawResult};
 use crate::tiff::{ByteOrder, Ifd, TiffParser, TiffTag, TiffValue};
 
 // TODO: Ensure this code ensures all tags are parsed exhaustively
@@ -238,9 +238,11 @@ impl<R: Read + Seek> DngFile<R> {
 
     /// Extract metadata from the parsed IFDs.
     fn extract_metadata(&mut self) -> RawResult<()> {
-        let ifd0 = self.ifd0().cloned().ok_or_else(|| RawError::InvalidIfd {
-            offset: 0,
-            reason: "No IFD0 found".to_string(),
+        let ifd0 = self.ifd0().cloned().ok_or_else(|| {
+            RawError::Parse(ParseError::InvalidIfd {
+                offset: 0,
+                reason: "No IFD0 found".to_string(),
+            })
         })?;
 
         // Extract Make
@@ -287,18 +289,22 @@ impl<R: Read + Seek> DngFile<R> {
         let raw_ifd = self
             .raw_ifd()
             .cloned()
-            .ok_or_else(|| RawError::UnsupportedFormat("Could not find raw IFD".to_string()))?;
+            .ok_or_else(|| RawError::Unsupported("Could not find raw IFD".to_string()))?;
 
         // Extract dimensions
         let width = raw_ifd
             .get(TiffTag::ImageWidth)
             .map(|e| e.value_offset as u32)
-            .ok_or(RawError::TagNotFound(TiffTag::ImageWidth))?;
+            .ok_or(RawError::Parse(ParseError::TagNotFound(
+                TiffTag::ImageWidth,
+            )))?;
 
         let height = raw_ifd
             .get(TiffTag::ImageLength)
             .map(|e| e.value_offset as u32)
-            .ok_or(RawError::TagNotFound(TiffTag::ImageLength))?;
+            .ok_or(RawError::Parse(ParseError::TagNotFound(
+                TiffTag::ImageLength,
+            )))?;
 
         let sensor_size = Size::new(width, height);
 
@@ -829,7 +835,7 @@ impl<R: Read + Seek> DngFile<R> {
                     );
                 }
                 other => {
-                    return Err(RawError::UnsupportedFormat(format!(
+                    return Err(RawError::Unsupported(format!(
                         "Unsupported DNG strip compression: {} (supported: 1=uncompressed, 52546=JPEG XL)",
                         other
                     )));
@@ -861,7 +867,7 @@ impl<R: Read + Seek> DngFile<R> {
             16 => {
                 let bytes_needed = total_samples * 2;
                 if data.len() < bytes_needed {
-                    return Err(RawError::UnsupportedFormat(format!(
+                    return Err(RawError::Unsupported(format!(
                         "Strip data too short: {} bytes for {} 16-bit samples",
                         data.len(),
                         total_samples
@@ -902,7 +908,7 @@ impl<R: Read + Seek> DngFile<R> {
                     let total_bits = total_samples * bit_depth as usize;
                     let bytes_needed = total_bits.div_ceil(8);
                     if data.len() < bytes_needed {
-                        return Err(RawError::UnsupportedFormat(format!(
+                        return Err(RawError::Unsupported(format!(
                             "Strip data too short: {} bytes for {} {}-bit samples",
                             data.len(),
                             total_samples,
@@ -934,7 +940,7 @@ impl<R: Read + Seek> DngFile<R> {
                 }
             }
             _ => {
-                return Err(RawError::UnsupportedFormat(format!(
+                return Err(RawError::Unsupported(format!(
                     "Unsupported bit depth for uncompressed strip: {}",
                     bit_depth
                 )));
@@ -946,6 +952,72 @@ impl<R: Read + Seek> DngFile<R> {
         Ok(pixels)
     }
 
+    /// Extract the embedded JPEG thumbnail, if present.
+    ///
+    /// Searches IFDs for a thumbnail (NewSubfileType=1) or falls back to
+    /// JPEGInterchangeFormat in IFD 0.
+    pub fn thumbnail(&mut self) -> RawResult<Option<Vec<u8>>> {
+        // Try each IFD looking for a thumbnail (NewSubfileType=1 with JPEG data)
+        for ifd in &self.ifds.clone() {
+            if let Some(entry) = ifd.get(TiffTag::NewSubfileType) {
+                if entry.value_offset == 1 {
+                    // This is a thumbnail IFD
+                    if let Some(offset_entry) = ifd.get(TiffTag::JPEGInterchangeFormat) {
+                        if let Some(length_entry) = ifd.get(TiffTag::JPEGInterchangeFormatLength) {
+                            let offset_entry = offset_entry.clone();
+                            let length_entry = length_entry.clone();
+                            let offset = match self.parser.read_value(&offset_entry)? {
+                                crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
+                                crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
+                                _ => continue,
+                            };
+                            let length = match self.parser.read_value(&length_entry)? {
+                                crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
+                                crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
+                                _ => continue,
+                            };
+                            if length > 0 {
+                                self.parser.seek_to(offset)?;
+                                let data = self.parser.read_bytes(length)?;
+                                return Ok(Some(data));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: try IFD 0 JPEG tags
+        let ifd0 = match self.ifd0() {
+            Some(ifd) => ifd,
+            None => return Ok(None),
+        };
+        let offset_entry = match ifd0.get(TiffTag::JPEGInterchangeFormat) {
+            Some(e) => e.clone(),
+            None => return Ok(None),
+        };
+        let length_entry = match ifd0.get(TiffTag::JPEGInterchangeFormatLength) {
+            Some(e) => e.clone(),
+            None => return Ok(None),
+        };
+        let offset = match self.parser.read_value(&offset_entry)? {
+            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
+            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
+            _ => return Ok(None),
+        };
+        let length = match self.parser.read_value(&length_entry)? {
+            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
+            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
+            _ => return Ok(None),
+        };
+        if length == 0 {
+            return Ok(None);
+        }
+        self.parser.seek_to(offset)?;
+        let data = self.parser.read_bytes(length)?;
+        Ok(Some(data))
+    }
+
     /// Decode the raw image data.
     ///
     /// For LinearRaw (iPhone ProRAW), this returns an RGB image directly.
@@ -955,7 +1027,7 @@ impl<R: Read + Seek> DngFile<R> {
             .metadata
             .as_ref()
             .cloned()
-            .ok_or_else(|| RawError::UnsupportedFormat("Metadata not extracted".to_string()))?;
+            .ok_or_else(|| RawError::Unsupported("Metadata not extracted".to_string()))?;
 
         let width = metadata.sensor_size.width as usize;
         let height = metadata.sensor_size.height as usize;
@@ -968,7 +1040,7 @@ impl<R: Read + Seek> DngFile<R> {
         let is_strip_based = !metadata.strip_offsets.is_empty();
 
         if !is_tile_based && !is_strip_based {
-            return Err(RawError::UnsupportedFormat(
+            return Err(RawError::Unsupported(
                 "No tile or strip data found".to_string(),
             ));
         }
@@ -979,7 +1051,7 @@ impl<R: Read + Seek> DngFile<R> {
         if is_tile_based {
             // Check compression type for tile-based (only JXL supported)
             if metadata.compression != 52546 {
-                return Err(RawError::UnsupportedFormat(format!(
+                return Err(RawError::Unsupported(format!(
                     "Unsupported DNG compression: {} (only JPEG XL 52546 supported for tiles)",
                     metadata.compression
                 )));
@@ -1056,34 +1128,44 @@ impl<R: Read + Seek> DngFile<R> {
             metadata.bit_depth
         };
 
-        let mut raw_image = RawImage {
-            size: metadata.sensor_size,
-            active_area,
-            bit_depth: output_bit_depth,
-            cfa_pattern,
-            xtrans_pattern: None,
-            black_levels: [
-                metadata.black_levels.first().copied().unwrap_or(0) as u16,
-                metadata.black_levels.get(1).copied().unwrap_or(0) as u16,
-                metadata.black_levels.get(2).copied().unwrap_or(0) as u16,
-                metadata.black_levels.get(3).copied().unwrap_or(0) as u16,
-            ],
-            white_level: metadata.white_levels.first().copied().unwrap_or(65535) as u16,
-            data: output,
-            baseline_exposure: metadata.baseline_exposure,
-            default_crop: if let (Some(origin), Some(size)) =
-                (metadata.default_crop_origin, metadata.default_crop_size)
-            {
-                Some(Rect::from_coords(origin.0, origin.1, size.0, size.1))
-            } else {
-                None
-            },
+        let black_levels = [
+            metadata.black_levels.first().copied().unwrap_or(0) as u16,
+            metadata.black_levels.get(1).copied().unwrap_or(0) as u16,
+            metadata.black_levels.get(2).copied().unwrap_or(0) as u16,
+            metadata.black_levels.get(3).copied().unwrap_or(0) as u16,
+        ];
+        let white_level = metadata.white_levels.first().copied().unwrap_or(65535) as u16;
+        let default_crop = if let (Some(origin), Some(size)) =
+            (metadata.default_crop_origin, metadata.default_crop_size)
+        {
+            Some(Rect::from_coords(origin.0, origin.1, size.0, size.1))
+        } else {
+            None
         };
 
         // If LinearRaw, the data is already RGB interleaved
-        if metadata.is_linear_raw {
-            raw_image.bit_depth = metadata.bit_depth;
+        let final_bit_depth = if metadata.is_linear_raw {
+            metadata.bit_depth
+        } else {
+            output_bit_depth
+        };
+
+        let mut builder = RawImage::builder(
+            metadata.sensor_size,
+            active_area,
+            final_bit_depth,
+            cfa_pattern,
+        )
+        .black_levels(black_levels)
+        .white_level(white_level)
+        .data(output);
+        if let Some(be) = metadata.baseline_exposure {
+            builder = builder.baseline_exposure(be);
         }
+        if let Some(crop) = default_crop {
+            builder = builder.default_crop(crop);
+        }
+        let raw_image = builder.build();
 
         Ok(raw_image)
     }
@@ -1097,10 +1179,10 @@ impl<R: Read + Seek> DngFile<R> {
             .metadata
             .as_ref()
             .cloned()
-            .ok_or_else(|| RawError::UnsupportedFormat("Metadata not extracted".to_string()))?;
+            .ok_or_else(|| RawError::Unsupported("Metadata not extracted".to_string()))?;
 
         if !metadata.is_linear_raw {
-            return Err(RawError::UnsupportedFormat(
+            return Err(RawError::Unsupported(
                 "Not a LinearRaw DNG file".to_string(),
             ));
         }
@@ -1112,7 +1194,7 @@ impl<R: Read + Seek> DngFile<R> {
         let is_strip_based = !metadata.strip_offsets.is_empty();
 
         if !is_tile_based && !is_strip_based {
-            return Err(RawError::UnsupportedFormat(
+            return Err(RawError::Unsupported(
                 "No tile or strip data found".to_string(),
             ));
         }
@@ -1131,7 +1213,7 @@ impl<R: Read + Seek> DngFile<R> {
 
         if is_tile_based {
             if metadata.compression != 52546 {
-                return Err(RawError::UnsupportedFormat(format!(
+                return Err(RawError::Unsupported(format!(
                     "Unsupported DNG compression: {} (only JPEG XL 52546 supported for tiles)",
                     metadata.compression
                 )));
@@ -1198,14 +1280,16 @@ impl<R: Read + Seek> DngFile<R> {
         }
 
         let mut image = RgbImage::new(out_width as u32, out_height as u32, output);
-        image.baseline_exposure = metadata.baseline_exposure;
-        image.default_crop = if let (Some(origin), Some(size)) =
-            (metadata.default_crop_origin, metadata.default_crop_size)
-        {
-            Some(Rect::from_coords(origin.0, origin.1, size.0, size.1))
-        } else {
-            None
-        };
+        image.set_baseline_exposure(metadata.baseline_exposure);
+        image.set_default_crop(
+            if let (Some(origin), Some(size)) =
+                (metadata.default_crop_origin, metadata.default_crop_size)
+            {
+                Some(Rect::from_coords(origin.0, origin.1, size.0, size.1))
+            } else {
+                None
+            },
+        );
 
         // Apply OpcodeList2 — defined as corrections applied to linear raw (post-demosaic) data.
         // This is where GainMap (lens shading correction) lives for iPhone ProRAW.
@@ -1394,8 +1478,8 @@ mod tests {
 
         let raw_image = dng.decode_raw().unwrap();
 
-        assert_eq!(raw_image.size.width, width);
-        assert_eq!(raw_image.size.height, height);
+        assert_eq!(raw_image.size().width, width);
+        assert_eq!(raw_image.size().height, height);
         assert_eq!(raw_image.data.len(), (width * height) as usize);
 
         // Verify all pixel values match the input
@@ -1513,8 +1597,8 @@ mod tests {
         let rgb_image = dng.decode_linear_raw().unwrap();
 
         // Validate dimensions
-        assert_eq!(rgb_image.width, 8064);
-        assert_eq!(rgb_image.height, 6048);
+        assert_eq!(rgb_image.width(), 8064);
+        assert_eq!(rgb_image.height(), 6048);
 
         // Validate data size (width * height * 3 channels)
         let expected_size = 8064 * 6048 * 3;

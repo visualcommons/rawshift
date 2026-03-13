@@ -59,8 +59,8 @@ pub fn apply_warp_rectilinear_tangential(
     cx: f64,
     cy: f64,
 ) {
-    let width = image.width as usize;
-    let height = image.height as usize;
+    let width = image.width() as usize;
+    let height = image.height() as usize;
 
     if width == 0 || height == 0 {
         return;
@@ -189,8 +189,8 @@ mod tests {
 
         apply_warp_rectilinear(&mut img, [-0.01, 0.0, 0.0, 0.0], 0.5, 0.5);
 
-        assert_eq!(img.width, w, "width must not change after warp");
-        assert_eq!(img.height, h, "height must not change after warp");
+        assert_eq!(img.width(), w, "width must not change after warp");
+        assert_eq!(img.height(), h, "height must not change after warp");
         assert_eq!(img.data.len(), (w as usize) * (h as usize) * 3);
     }
 
@@ -219,8 +219,8 @@ mod tests {
         // A 2×2 image must not panic regardless of coefficients.
         let mut img = make_rgb(2, 2, 1000);
         apply_warp_rectilinear(&mut img, [-0.1, 0.05, -0.01, 0.001], 0.5, 0.5);
-        assert_eq!(img.width, 2);
-        assert_eq!(img.height, 2);
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.height(), 2);
     }
 
     #[test]
@@ -259,8 +259,8 @@ mod tests {
             0.5,
         );
 
-        assert_eq!(img.width, w);
-        assert_eq!(img.height, h);
+        assert_eq!(img.width(), w);
+        assert_eq!(img.height(), h);
     }
 
     #[test]

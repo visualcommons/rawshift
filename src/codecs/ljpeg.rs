@@ -13,7 +13,7 @@
 //! - Mode 6: Rb + (Ra - Rc) / 2
 //! - Mode 7: (Ra + Rb) / 2
 
-use crate::error::{RawError, RawResult};
+use crate::error::{FormatError, RawError, RawResult};
 
 /// JPEG Markers
 #[allow(dead_code)]
@@ -32,6 +32,7 @@ mod markers {
 }
 
 /// Component information from SOF marker
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct Component {
     pub id: u8,
@@ -169,12 +170,14 @@ pub struct LjpegDecoder {
 /// Builder for [`LjpegDecoder`].
 ///
 /// Provides a fluent API for constructing an LJPEG decoder.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct LjpegDecoderBuilder {
     width: Option<u32>,
     height: Option<u32>,
 }
 
+#[allow(dead_code)]
 impl LjpegDecoderBuilder {
     /// Create a new builder with default settings.
     pub fn new() -> Self {
@@ -230,6 +233,7 @@ impl LjpegDecoder {
     }
 
     /// Create a builder for configuring a new decoder.
+    #[allow(dead_code)]
     pub fn builder() -> LjpegDecoderBuilder {
         LjpegDecoderBuilder::new()
     }
@@ -241,6 +245,7 @@ impl LjpegDecoder {
     }
 
     /// Get the frame information (parsed from JPEG header).
+    #[allow(dead_code)]
     pub fn frame_info(&self) -> &FrameInfo {
         &self.frame
     }
@@ -253,9 +258,9 @@ impl LjpegDecoder {
 
         // Check SOI
         if data.len() < 2 || data[0] != 0xFF || data[1] != 0xD8 {
-            return Err(RawError::DecompressionError(
+            return Err(RawError::Format(FormatError::Decompression(
                 "Missing JPEG SOI marker".into(),
-            ));
+            )));
         }
         pos = 2;
 
@@ -336,7 +341,9 @@ impl LjpegDecoder {
     /// Parse SOF3 (Start of Frame, Lossless)
     fn parse_sof3(&mut self, data: &[u8]) -> RawResult<()> {
         if data.len() < 8 {
-            return Err(RawError::DecompressionError("SOF3 too short".into()));
+            return Err(RawError::Format(FormatError::Decompression(
+                "SOF3 too short".into(),
+            )));
         }
 
         let _len = u16::from_be_bytes([data[0], data[1]]);
@@ -346,9 +353,9 @@ impl LjpegDecoder {
         let num_components = data[7] as usize;
 
         if data.len() < 8 + num_components * 3 {
-            return Err(RawError::DecompressionError(
+            return Err(RawError::Format(FormatError::Decompression(
                 "SOF3 component data too short".into(),
-            ));
+            )));
         }
 
         self.frame.components.clear();
@@ -379,10 +386,10 @@ impl LjpegDecoder {
             pos += 1;
 
             if table_id >= 4 {
-                return Err(RawError::DecompressionError(format!(
+                return Err(RawError::Format(FormatError::Decompression(format!(
                     "Invalid Huffman table ID: {}",
                     table_id
-                )));
+                ))));
             }
 
             // Read BITS (number of codes of each length 1-16)
@@ -390,7 +397,9 @@ impl LjpegDecoder {
             let mut total_codes = 0usize;
             for i in 1..=16 {
                 if pos >= len {
-                    return Err(RawError::DecompressionError("DHT truncated".into()));
+                    return Err(RawError::Format(FormatError::Decompression(
+                        "DHT truncated".into(),
+                    )));
                 }
                 table.bits[i] = data[pos];
                 total_codes += data[pos] as usize;
@@ -399,7 +408,9 @@ impl LjpegDecoder {
 
             // Read HUFFVAL (symbol values)
             if pos + total_codes > len {
-                return Err(RawError::DecompressionError("DHT HUFFVAL truncated".into()));
+                return Err(RawError::Format(FormatError::Decompression(
+                    "DHT HUFFVAL truncated".into(),
+                )));
             }
             table.huffval = data[pos..pos + total_codes].to_vec();
             pos += total_codes;
@@ -419,14 +430,18 @@ impl LjpegDecoder {
     /// Parse SOS (Start of Scan)
     fn parse_sos(&mut self, data: &[u8]) -> RawResult<()> {
         if data.len() < 3 {
-            return Err(RawError::DecompressionError("SOS too short".into()));
+            return Err(RawError::Format(FormatError::Decompression(
+                "SOS too short".into(),
+            )));
         }
 
         let _len = u16::from_be_bytes([data[0], data[1]]);
         let num_components = data[2] as usize;
 
         if data.len() < 3 + num_components * 2 + 3 {
-            return Err(RawError::DecompressionError("SOS data too short".into()));
+            return Err(RawError::Format(FormatError::Decompression(
+                "SOS data too short".into(),
+            )));
         }
 
         // Parse component selectors
@@ -516,7 +531,9 @@ impl LjpegDecoder {
         let num_components = self.frame.components.len();
 
         if num_components == 0 {
-            return Err(RawError::DecompressionError("No components defined".into()));
+            return Err(RawError::Format(FormatError::Decompression(
+                "No components defined".into(),
+            )));
         }
 
         let total_pixels = out_width * out_height;
@@ -648,10 +665,10 @@ impl LjpegDecoder {
                 }
             }
         } else {
-            return Err(RawError::DecompressionError(format!(
+            return Err(RawError::Format(FormatError::Decompression(format!(
                 "Unsupported component count: {}",
                 num_components
-            )));
+            ))));
         }
 
         // Apply point transform

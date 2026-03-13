@@ -161,12 +161,14 @@ impl<'a> BitPump<'a> {
 
     /// Get the current byte position in the input data.
     #[inline]
+    #[allow(dead_code)]
     pub fn position(&self) -> usize {
         self.pos
     }
 
     /// Get the number of bits remaining in the buffer.
     #[inline]
+    #[allow(dead_code)]
     pub fn bits_available(&self) -> u32 {
         self.bits_left
     }

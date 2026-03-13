@@ -13,10 +13,10 @@ pub struct Bilinear;
 
 impl Demosaic for Bilinear {
     fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
-        let width = raw.active_area.size.width;
-        let height = raw.active_area.size.height;
-        let x_offset = raw.active_area.origin.x;
-        let y_offset = raw.active_area.origin.y;
+        let width = raw.active_area().size.width;
+        let height = raw.active_area().size.height;
+        let x_offset = raw.active_area().origin.x;
+        let y_offset = raw.active_area().origin.y;
 
         let expected_size = (width as usize) * (height as usize) * 3;
         if output.len() != expected_size {
@@ -26,10 +26,10 @@ impl Demosaic for Bilinear {
             });
         }
 
-        let raw_width = raw.size.width;
-        let raw_height = raw.size.height;
+        let raw_width = raw.width();
+        let raw_height = raw.height();
         let raw_data = &raw.data;
-        let cfa_pattern = raw.cfa_pattern;
+        let cfa_pattern = raw.cfa_pattern();
         let row_stride = (width as usize) * 3;
 
         // Get raw pixel with bounds checking (closure captures raw data)
@@ -227,18 +227,10 @@ mod tests {
         let size = Size::new(width, height);
         let active_area = Rect::new(Point::ORIGIN, size);
         let pixel_count = (width * height) as usize;
-        RawImage {
-            size,
-            active_area,
-            bit_depth: 14,
-            cfa_pattern: pattern,
-            xtrans_pattern: None,
-            black_levels: [0; 4],
-            white_level: 16383,
-            data: vec![value; pixel_count],
-            baseline_exposure: None,
-            default_crop: None,
-        }
+        RawImage::builder(size, active_area, 14, pattern)
+            .white_level(16383)
+            .data(vec![value; pixel_count])
+            .build()
     }
 
     /// Create a raw image with a 2x2 Bayer pattern.
@@ -281,8 +273,8 @@ mod tests {
         let demosaic = Bilinear;
         let rgb = demosaic.demosaic(&raw);
 
-        assert_eq!(rgb.width, 10);
-        assert_eq!(rgb.height, 10);
+        assert_eq!(rgb.width(), 10);
+        assert_eq!(rgb.height(), 10);
         assert_eq!(rgb.data.len(), 10 * 10 * 3);
 
         // Interior pixels (not on edge) should be close to input value
@@ -318,8 +310,8 @@ mod tests {
             let raw = create_test_raw(8, 8, pattern, 2000);
             let rgb = Bilinear.demosaic(&raw);
 
-            assert_eq!(rgb.width, 8);
-            assert_eq!(rgb.height, 8);
+            assert_eq!(rgb.width(), 8);
+            assert_eq!(rgb.height(), 8);
             assert_eq!(rgb.data.len(), 8 * 8 * 3);
 
             // Verify all pixels have reasonable values
@@ -342,8 +334,8 @@ mod tests {
 
         // For RGGB, position (0,0) is Red
         // The output should have interpolated values
-        assert_eq!(rgb.width, 2);
-        assert_eq!(rgb.height, 2);
+        assert_eq!(rgb.width(), 2);
+        assert_eq!(rgb.height(), 2);
 
         // First pixel (0,0) - this is a Red position in RGGB
         let r = rgb.data[0];
@@ -361,15 +353,20 @@ mod tests {
     #[test]
     fn test_demosaic_with_active_area() {
         // Test that active_area is respected
-        let mut raw = create_test_raw(10, 10, CfaPattern::Rggb, 1000);
-        // Set active area to only the center 4x4
-        raw.active_area = Rect::from_coords(3, 3, 4, 4);
+        let raw = {
+            let size = Size::new(10, 10);
+            let active_area = Rect::from_coords(3, 3, 4, 4);
+            RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
+                .white_level(16383)
+                .data(vec![1000u16; 100])
+                .build()
+        };
 
         let rgb = Bilinear.demosaic(&raw);
 
         // Output dimensions should match active area
-        assert_eq!(rgb.width, 4);
-        assert_eq!(rgb.height, 4);
+        assert_eq!(rgb.width(), 4);
+        assert_eq!(rgb.height(), 4);
         assert_eq!(rgb.data.len(), 4 * 4 * 3);
     }
 
@@ -403,8 +400,8 @@ mod tests {
             let raw = create_test_raw(6, 6, pattern, 8000);
             let rgb = Bilinear.demosaic(&raw);
 
-            assert_eq!(rgb.width, 6, "width for {:?}", pattern);
-            assert_eq!(rgb.height, 6, "height for {:?}", pattern);
+            assert_eq!(rgb.width(), 6, "width for {:?}", pattern);
+            assert_eq!(rgb.height(), 6, "height for {:?}", pattern);
             assert_eq!(rgb.data.len(), 6 * 6 * 3, "data length for {:?}", pattern);
 
             // All output pixels must be in valid u16 range (which they always are,
@@ -421,16 +418,25 @@ mod tests {
     #[test]
     fn test_bilinear_with_active_area() {
         // Test various active area offsets
-        let mut raw = create_test_raw(12, 12, CfaPattern::Rggb, 5000);
-
-        // Active area starts at (2, 4) with size 6x6
-        raw.active_area = Rect::from_coords(2, 4, 6, 6);
+        let raw = {
+            let size = Size::new(12, 12);
+            let active_area = Rect::from_coords(2, 4, 6, 6);
+            RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
+                .white_level(16383)
+                .data(vec![5000u16; 144])
+                .build()
+        };
 
         let rgb = Bilinear.demosaic(&raw);
 
-        assert_eq!(rgb.width, 6, "output width should match active area width");
         assert_eq!(
-            rgb.height, 6,
+            rgb.width(),
+            6,
+            "output width should match active area width"
+        );
+        assert_eq!(
+            rgb.height(),
+            6,
             "output height should match active area height"
         );
         assert_eq!(
@@ -462,18 +468,10 @@ mod tests {
             }
         }
 
-        let raw = RawImage {
-            size,
-            active_area,
-            bit_depth: 14,
-            cfa_pattern: CfaPattern::Rggb,
-            xtrans_pattern: None,
-            black_levels: [0; 4],
-            white_level: 16383,
-            data,
-            baseline_exposure: None,
-            default_crop: None,
-        };
+        let raw = RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
+            .white_level(16383)
+            .data(data)
+            .build();
 
         let rgb = Bilinear.demosaic(&raw);
 

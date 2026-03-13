@@ -4,6 +4,7 @@
 
 /// Error type for ICC operations.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum IccError {
     /// Invalid ICC profile data
     InvalidProfile(String),
@@ -224,11 +225,13 @@ impl IccProfile {
     }
 
     /// Create an ICC profile from raw bytes.
+    #[allow(dead_code)]
     pub fn from_bytes(data: Vec<u8>) -> Self {
         Self { data }
     }
 
     /// Get the ICC profile bytes.
+    #[allow(dead_code)]
     pub fn as_bytes(&self) -> &[u8] {
         &self.data
     }
@@ -236,6 +239,7 @@ impl IccProfile {
     /// Check if this is a valid ICC profile.
     ///
     /// Performs basic validation by checking the magic bytes.
+    #[allow(dead_code)]
     pub fn is_valid(&self) -> bool {
         if self.data.len() < 40 {
             return false;

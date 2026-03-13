@@ -1,6 +1,6 @@
 use clap::Parser;
 use rawshift::formats::RawFile;
-use rawshift::prelude::export::EncodeOptions;
+use rawshift::formats::export::EncodeOptions;
 use rawshift::processing::{BayerAlgorithm, DemosaicMethod, ProcessingOptions, XTransAlgorithm};
 use rawshift::transforms::BadPixelCorrectionMode;
 use std::fs::File;

@@ -14,6 +14,7 @@ use crate::transforms::BadPixelCorrectionMode;
 /// 6. Chromatic aberration correction (optional, on RGB data)
 /// 7. Gamma Correction
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProcessingOptions {
     /// The demosaicing method to use.
     pub demosaic: DemosaicMethod,

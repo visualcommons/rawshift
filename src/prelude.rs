@@ -8,7 +8,8 @@
 //!   `ImageMetadata`, and related structs.
 //! - **`data`** — Camera color-calibration database (`CameraCalibration`,
 //!   `get_camera_calibration`, `all_cameras`).
-//! - **`error`** — `RawError` and `RawResult`.
+//! - **`error`** — `RawError`, `ParseError`, `FormatError`, `ProcessingError`,
+//!   `EncodeError`, and `RawResult`.
 //! - **`formats`** — `RawFile`, `RawFormat`, `StandardFormat`,
 //!   `decode_standard_image`, `detect_standard_format`, `DngExportConfig`.
 //! - **`processing`** — `ProcessingOptions` and demosaicing types.
@@ -17,17 +18,51 @@
 //!   `apply_white_balance_raw`, `apply_color_matrix`, `apply_tone_reproduction`,
 //!   `apply_tonemap`, `compute_camera_to_srgb`, `ColorSpaceTransform`, and more.
 
-pub use crate::core::*;
-pub use crate::data::*;
-pub use crate::error::*;
-pub use crate::formats::*;
-pub use crate::processing::*;
-pub use crate::tiff::*;
+// core
+pub use crate::core::IccProfile;
+pub use crate::core::image::{CfaPattern, RawImage, Rect, RgbImage, Size, XTransPattern};
+pub use crate::core::metadata::{
+    CameraInfo, DateTimeInfo, DngCalibrationInfo, DngColorInfo, DngProfileInfo, ExifInfo, GpsInfo,
+    ImageInfo, ImageMetadata, MetadataExtractor,
+};
+pub use crate::core::pixel::{
+    FromF32, Rgb, Rgb8, Rgb16, RgbF32, Rgba, Rgba8, Rgba16, RgbaF32, Sample,
+};
+
+// data
+pub use crate::data::cameras::find_camera_calibration;
+#[allow(deprecated)]
+pub use crate::data::cameras::{CameraCalibration, all_cameras, get_camera_calibration};
+
+// error
+pub use crate::error::{
+    EncodeError, FormatError, ParseError, ProcessingError, RawError, RawResult,
+};
+
+// formats
+pub use crate::formats::export::EncodeOptions;
+pub use crate::formats::{
+    DngExportConfig, RawFile, RawFormat, StandardFormat, decode_standard_image,
+    detect_standard_format, encode_rgb_image, encode_rgb_image_to_writer, export_dng,
+};
+
+// processing
+pub use crate::processing::{
+    BayerAlgorithm, Demosaic, DemosaicMethod, ProcessingOptions, XTransAlgorithm,
+};
+
+// tiff
+pub use crate::tiff::{
+    ByteOrder, Ifd, IfdEntry, Rational, SRational, TiffParser, TiffTag, TiffValue, TiffWriter,
+};
+
+// transforms
 pub use crate::transforms::{
     BadPixelCorrectionMode, ColorSpaceTransform, ColorTemperature, apply_bad_pixel_correction,
-    apply_bilateral_filter, apply_black_level, apply_ca_correction, apply_color_matrix,
-    apply_gains_rgb, apply_gaussian_blur, apply_matrix_rgb, apply_tone_reproduction, apply_tonemap,
-    apply_white_balance, apply_white_balance_raw, compute_camera_to_srgb, correct_bad_pixels,
-    detect_bad_pixels, estimate_cct_from_as_shot_neutral, interpolate_color_matrix,
-    subtract_black_level_uniform,
+    apply_bilateral_filter, apply_black_level, apply_ca_correction, apply_color_matrix, apply_crop,
+    apply_gains_rgb, apply_gaussian_blur, apply_matrix_rgb, apply_orientation,
+    apply_tone_reproduction, apply_tonemap, apply_white_balance, apply_white_balance_raw,
+    compute_camera_to_srgb, correct_bad_pixels, detect_bad_pixels,
+    estimate_cct_from_as_shot_neutral, flip_horizontal, flip_vertical, interpolate_color_matrix,
+    rotate_90_ccw, rotate_90_cw, rotate_180, subtract_black_level_uniform,
 };

@@ -296,13 +296,7 @@ mod tests {
         use crate::processing::color::apply_white_balance;
 
         // Pixel near max with a large gain should clamp at 65535
-        let mut img = RgbImage {
-            width: 1,
-            height: 1,
-            data: vec![60000u16, 60000, 60000],
-            baseline_exposure: None,
-            default_crop: None,
-        };
+        let mut img = RgbImage::new(1, 1, vec![60000u16, 60000, 60000]);
         apply_white_balance(&mut img, (3.0, 3.0, 3.0));
         assert_eq!(img.data[0], 65535, "R should clamp at 65535");
         assert_eq!(img.data[1], 65535, "G should clamp at 65535");
@@ -334,13 +328,7 @@ mod tests {
         use crate::processing::color::apply_color_matrix;
 
         let any_matrix: [f32; 9] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let mut img = RgbImage {
-            width: 2,
-            height: 1,
-            data: vec![0u16; 6],
-            baseline_exposure: None,
-            default_crop: None,
-        };
+        let mut img = RgbImage::new(2, 1, vec![0u16; 6]);
         apply_color_matrix(&mut img, &any_matrix);
         for v in &img.data {
             assert_eq!(*v, 0, "Zero input should produce zero output");
@@ -362,13 +350,7 @@ mod tests {
         let inv: [f32; 9] = inv_f64.map(|v| v as f32);
 
         let original = vec![10000u16, 20000, 30000];
-        let mut img = RgbImage {
-            width: 1,
-            height: 1,
-            data: original.clone(),
-            baseline_exposure: None,
-            default_crop: None,
-        };
+        let mut img = RgbImage::new(1, 1, original.clone());
 
         apply_color_matrix(&mut img, &cm);
         apply_color_matrix(&mut img, &inv);
@@ -394,13 +376,7 @@ mod tests {
         let lut = GammaLut::new(2.2);
         // Create a minimal RgbImage with 0 and 65535
         use crate::core::image::RgbImage;
-        let mut img = RgbImage {
-            width: 1,
-            height: 1,
-            data: vec![0u16, 0, 65535],
-            baseline_exposure: None,
-            default_crop: None,
-        };
+        let mut img = RgbImage::new(1, 1, vec![0u16, 0, 65535]);
         lut.apply(&mut img);
         assert_eq!(img.data[0], 0, "0 should map to 0");
         assert_eq!(img.data[1], 0, "0 should map to 0");

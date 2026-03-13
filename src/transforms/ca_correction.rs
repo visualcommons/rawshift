@@ -30,8 +30,8 @@ use crate::core::image::RgbImage;
 /// * `red_scale`  - Relative scale factor for the R channel (typical: 0.999–1.001).
 /// * `blue_scale` - Relative scale factor for the B channel (typical: 0.999–1.001).
 pub fn apply_ca_correction(image: &mut RgbImage, red_scale: f32, blue_scale: f32) {
-    let width = image.width as usize;
-    let height = image.height as usize;
+    let width = image.width() as usize;
+    let height = image.height() as usize;
 
     if width == 0 || height == 0 {
         return;
@@ -128,8 +128,8 @@ mod tests {
         let mut img = make_rgb(2, 2, 1000);
         apply_ca_correction(&mut img, 0.999, 1.001);
         // Just verify the image is still 2×2 and no panic occurred.
-        assert_eq!(img.width, 2);
-        assert_eq!(img.height, 2);
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.height(), 2);
     }
 
     #[test]
@@ -138,8 +138,8 @@ mod tests {
         let h = 10u32;
         let mut img = make_rgb(w, h, 500);
         apply_ca_correction(&mut img, 1.002, 0.998);
-        assert_eq!(img.width, w, "width must not change");
-        assert_eq!(img.height, h, "height must not change");
+        assert_eq!(img.width(), w, "width must not change");
+        assert_eq!(img.height(), h, "height must not change");
         assert_eq!(img.data.len(), (w as usize) * (h as usize) * 3);
     }
 

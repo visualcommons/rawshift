@@ -1,4 +1,4 @@
-pub mod arw;
-pub mod bit_pump;
-pub mod jxl;
-pub mod ljpeg;
+pub(crate) mod arw;
+pub(crate) mod bit_pump;
+pub(crate) mod jxl;
+pub(crate) mod ljpeg;

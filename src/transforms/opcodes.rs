@@ -71,8 +71,8 @@ impl GainMap {
     /// Bilinearly interpolates gain values from the map grid and multiplies
     /// each affected pixel channel by the corresponding gain.
     pub fn apply_to_rgb(&self, image: &mut RgbImage) {
-        let img_w = image.width as usize;
-        let img_h = image.height as usize;
+        let img_w = image.width() as usize;
+        let img_h = image.height() as usize;
         if img_w == 0 || img_h == 0 {
             return;
         }

@@ -6,7 +6,7 @@
 use std::io::{Read, Seek};
 
 use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
-use crate::error::{RawError, RawResult};
+use crate::error::{FormatError, ParseError, RawError, RawResult};
 use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
 /// Metadata extracted from a Nikon NEF file.
@@ -133,9 +133,11 @@ impl<R: Read + Seek> NefFile<R> {
     /// Extract metadata from the parsed IFDs.
     fn extract_metadata(&mut self) -> RawResult<()> {
         // Clone the IFDs we need to avoid borrow issues
-        let ifd0 = self.ifd0().cloned().ok_or_else(|| RawError::InvalidIfd {
-            offset: 0,
-            reason: "No IFD0 found".to_string(),
+        let ifd0 = self.ifd0().cloned().ok_or_else(|| {
+            RawError::Parse(ParseError::InvalidIfd {
+                offset: 0,
+                reason: "No IFD0 found".to_string(),
+            })
         })?;
 
         // Extract Make
@@ -149,10 +151,10 @@ impl<R: Read + Seek> NefFile<R> {
         // Validate this is a Nikon file
         let make_upper = make.to_uppercase();
         if !make_upper.contains("NIKON") {
-            return Err(RawError::NefError(format!(
+            return Err(RawError::Format(FormatError::Nef(format!(
                 "Not a Nikon file (Make: {})",
                 make
-            )));
+            ))));
         }
 
         // Extract Model
@@ -167,18 +169,22 @@ impl<R: Read + Seek> NefFile<R> {
         let raw_ifd = self
             .raw_ifd()
             .cloned()
-            .ok_or_else(|| RawError::UnsupportedFormat("Could not find raw SubIFD".to_string()))?;
+            .ok_or_else(|| RawError::Unsupported("Could not find raw SubIFD".to_string()))?;
 
         // Extract dimensions from raw SubIFD
         let width = raw_ifd
             .get(TiffTag::ImageWidth)
             .map(|e| e.value_offset as u32)
-            .ok_or(RawError::TagNotFound(TiffTag::ImageWidth))?;
+            .ok_or(RawError::Parse(ParseError::TagNotFound(
+                TiffTag::ImageWidth,
+            )))?;
 
         let height = raw_ifd
             .get(TiffTag::ImageLength)
             .map(|e| e.value_offset as u32)
-            .ok_or(RawError::TagNotFound(TiffTag::ImageLength))?;
+            .ok_or(RawError::Parse(ParseError::TagNotFound(
+                TiffTag::ImageLength,
+            )))?;
 
         let sensor_size = Size::new(width, height);
 
@@ -264,27 +270,27 @@ impl<R: Read + Seek> NefFile<R> {
         let metadata = self
             .metadata
             .as_ref()
-            .ok_or_else(|| RawError::UnsupportedFormat("Metadata not extracted".to_string()))?;
+            .ok_or_else(|| RawError::Unsupported("Metadata not extracted".to_string()))?;
 
         // Check for Nikon
         if !metadata.make.to_uppercase().contains("NIKON") {
-            return Err(RawError::NefError(format!(
+            return Err(RawError::Format(FormatError::Nef(format!(
                 "Not a Nikon camera: {}",
                 metadata.make
-            )));
+            ))));
         }
 
         // Check for valid dimensions
         if metadata.sensor_size.width == 0 || metadata.sensor_size.height == 0 {
-            return Err(RawError::InvalidDimensions {
+            return Err(RawError::Parse(ParseError::InvalidDimensions {
                 width: metadata.sensor_size.width,
                 height: metadata.sensor_size.height,
-            });
+            }));
         }
 
         // Check for raw data
         if metadata.raw_data_offset == 0 || metadata.raw_data_size == 0 {
-            return Err(RawError::UnsupportedFormat("No raw data found".to_string()));
+            return Err(RawError::Unsupported("No raw data found".to_string()));
         }
 
         Ok(())
@@ -297,7 +303,7 @@ impl<R: Read + Seek> NefFile<R> {
         let metadata = self
             .metadata
             .as_ref()
-            .ok_or_else(|| RawError::UnsupportedFormat("Metadata not extracted".to_string()))?;
+            .ok_or_else(|| RawError::Unsupported("Metadata not extracted".to_string()))?;
 
         let offset = metadata.raw_data_offset;
         let size = metadata.raw_data_size as usize;
@@ -311,12 +317,46 @@ impl<R: Read + Seek> NefFile<R> {
         Ok(data)
     }
 
+    /// Extract the embedded JPEG thumbnail from IFD 0, if present.
+    pub fn thumbnail(&mut self) -> RawResult<Option<Vec<u8>>> {
+        let ifd0 = match self.ifd0() {
+            Some(ifd) => ifd,
+            None => return Ok(None),
+        };
+        let offset_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormat) {
+            Some(e) => e.clone(),
+            None => return Ok(None),
+        };
+        let length_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormatLength) {
+            Some(e) => e.clone(),
+            None => return Ok(None),
+        };
+        let offset = match self.parser.read_value(&offset_entry)? {
+            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
+            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
+            _ => return Ok(None),
+        };
+        let length = match self.parser.read_value(&length_entry)? {
+            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
+            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
+            _ => return Ok(None),
+        };
+        if length == 0 {
+            return Ok(None);
+        }
+        self.parser.seek_to(offset)?;
+        let data = self.parser.read_bytes(length)?;
+        Ok(Some(data))
+    }
+
     /// Decode the raw image data into a RawImage.
     pub fn decode_raw(&mut self) -> RawResult<RawImage> {
         let metadata = self
             .metadata
             .as_ref()
-            .ok_or_else(|| RawError::NefError("Metadata not available".to_string()))?
+            .ok_or_else(|| {
+                RawError::Format(FormatError::Nef("Metadata not available".to_string()))
+            })?
             .clone();
 
         match metadata.compression {
@@ -338,25 +378,23 @@ impl<R: Read + Seek> NefFile<R> {
                 }
 
                 if pixels.len() != expected_pixels {
-                    return Err(RawError::DecompressionError(format!(
+                    return Err(RawError::Format(FormatError::Decompression(format!(
                         "Uncompressed decode: got {} pixels, expected {}",
                         pixels.len(),
                         expected_pixels
-                    )));
+                    ))));
                 }
 
-                Ok(RawImage {
-                    size: metadata.sensor_size,
-                    active_area: metadata.active_area,
-                    bit_depth: metadata.bit_depth,
-                    cfa_pattern: metadata.cfa_pattern,
-                    xtrans_pattern: None,
-                    black_levels: metadata.black_levels,
-                    white_level: metadata.white_level,
-                    data: pixels,
-                    baseline_exposure: None,
-                    default_crop: None,
-                })
+                Ok(RawImage::builder(
+                    metadata.sensor_size,
+                    metadata.active_area,
+                    metadata.bit_depth,
+                    metadata.cfa_pattern,
+                )
+                .black_levels(metadata.black_levels)
+                .white_level(metadata.white_level)
+                .data(pixels)
+                .build())
             }
 
             // LJPEG compressed (6 = old JPEG/LJPEG, 34713 = Nikon LJPEG)
@@ -370,28 +408,26 @@ impl<R: Read + Seek> NefFile<R> {
 
                 let expected_pixels = metadata.sensor_size.pixel_count() as usize;
                 if output.len() != expected_pixels {
-                    return Err(RawError::DecompressionError(format!(
+                    return Err(RawError::Format(FormatError::Decompression(format!(
                         "LJPEG decoded {} pixels, expected {}",
                         output.len(),
                         expected_pixels
-                    )));
+                    ))));
                 }
 
-                Ok(RawImage {
-                    size: metadata.sensor_size,
-                    active_area: metadata.active_area,
-                    bit_depth: metadata.bit_depth,
-                    cfa_pattern: metadata.cfa_pattern,
-                    xtrans_pattern: None,
-                    black_levels: metadata.black_levels,
-                    white_level: metadata.white_level,
-                    data: output,
-                    baseline_exposure: None,
-                    default_crop: None,
-                })
+                Ok(RawImage::builder(
+                    metadata.sensor_size,
+                    metadata.active_area,
+                    metadata.bit_depth,
+                    metadata.cfa_pattern,
+                )
+                .black_levels(metadata.black_levels)
+                .white_level(metadata.white_level)
+                .data(output)
+                .build())
             }
 
-            other => Err(RawError::UnsupportedFormat(format!(
+            other => Err(RawError::Unsupported(format!(
                 "Nikon compression type {} not yet supported (supported: 1=Uncompressed, 6/34713=LJPEG)",
                 other
             ))),
@@ -567,7 +603,7 @@ mod tests {
         // The error should NOT be a "Not a Nikon file" error.
         let result = NefFile::parse(cursor);
         match result {
-            Err(RawError::NefError(msg)) => {
+            Err(RawError::Format(FormatError::Nef(msg))) => {
                 // Should not say "Not a Nikon file"
                 assert!(
                     !msg.contains("Not a Nikon file"),
@@ -575,7 +611,7 @@ mod tests {
                     msg
                 );
             }
-            Err(RawError::UnsupportedFormat(msg)) => {
+            Err(RawError::Unsupported(msg)) => {
                 // This is expected - no raw SubIFD found
                 assert!(
                     msg.contains("raw SubIFD"),
@@ -601,7 +637,7 @@ mod tests {
 
         let result = NefFile::parse(cursor);
         match result {
-            Err(RawError::NefError(msg)) => {
+            Err(RawError::Format(FormatError::Nef(msg))) => {
                 assert!(
                     msg.contains("Not a Nikon file"),
                     "Expected 'Not a Nikon file' error, got: {}",

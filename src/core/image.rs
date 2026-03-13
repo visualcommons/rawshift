@@ -19,6 +19,7 @@ pub fn white_level_from_bit_depth(bit_depth: u8) -> u16 {
 
 /// Image dimensions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Size {
     /// Width in pixels
     pub width: u32,
@@ -45,6 +46,7 @@ impl Size {
 
 /// A point in image coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Point {
     /// X coordinate
     pub x: u32,
@@ -64,6 +66,7 @@ impl Point {
 
 /// A rectangular region.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rect {
     /// Origin (top-left corner)
     pub origin: Point,
@@ -99,7 +102,8 @@ impl Rect {
 /// CFA (Color Filter Array) pattern.
 ///
 /// Represents the Bayer pattern used in the camera's sensor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CfaPattern {
     /// Red-Green / Green-Blue
     Rggb,
@@ -151,6 +155,7 @@ impl CfaPattern {
 /// Values: 0=Red, 1=Green, 2=Blue
 /// Row-major order, 36 elements total.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct XTransPattern {
     /// 6x6 grid of color indices: 0=Red, 1=Green, 2=Blue
     pub cells: [[u8; 6]; 6],
@@ -183,33 +188,21 @@ impl XTransPattern {
 /// Raw image data container.
 ///
 /// Holds the decoded raw sensor data along with associated metadata.
+/// Use [`RawImageBuilder`] to construct new instances.
 #[derive(Debug, Clone)]
 pub struct RawImage {
-    /// Full sensor dimensions
-    pub size: Size,
-    /// Active/crop area (usable image region)
-    pub active_area: Rect,
-    /// Bits per sample (typically 12, 14, or 16)
-    pub bit_depth: u8,
-    /// CFA pattern
-    pub cfa_pattern: CfaPattern,
-    /// X-Trans CFA pattern (6x6 tile). Set for Fujifilm X-Trans sensors.
-    /// When `Some`, the Markesteijn demosaic algorithm will use this pattern
-    /// instead of `cfa_pattern`.
-    pub xtrans_pattern: Option<XTransPattern>,
-    /// Black level values (per CFA color channel)
-    pub black_levels: [u16; 4],
-    /// White/saturation level
-    pub white_level: u16,
-    /// Raw pixel data (16-bit values, one per sensor pixel)
+    size: Size,
+    active_area: Rect,
+    bit_depth: u8,
+    cfa_pattern: CfaPattern,
+    xtrans_pattern: Option<XTransPattern>,
+    black_levels: [u16; 4],
+    white_level: u16,
+    /// Raw pixel data (16-bit values, one per sensor pixel).
     /// Stored in row-major order: data[y * width + x]
     pub data: Vec<u16>,
-    /// Baseline exposure offset in EV (e.g. -0.8).
-    /// Used by DNG to match the "baseline" look. None for standard ARW.
-    pub baseline_exposure: Option<f32>,
-    /// Default crop rectangle.
-    /// Used by DNG to define the final image composition area. None for standard ARW.
-    pub default_crop: Option<Rect>,
+    baseline_exposure: Option<f32>,
+    default_crop: Option<Rect>,
 }
 
 impl RawImage {
@@ -230,6 +223,118 @@ impl RawImage {
         }
     }
 
+    /// Create a builder for constructing a RawImage.
+    pub fn builder(
+        size: Size,
+        active_area: Rect,
+        bit_depth: u8,
+        cfa_pattern: CfaPattern,
+    ) -> RawImageBuilder {
+        RawImageBuilder {
+            size,
+            active_area,
+            bit_depth,
+            cfa_pattern,
+            xtrans_pattern: None,
+            black_levels: [0; 4],
+            white_level: white_level_from_bit_depth(bit_depth),
+            data: None,
+            baseline_exposure: None,
+            default_crop: None,
+        }
+    }
+
+    // ── Read accessors ───────────────────────────────────────────────────
+
+    /// Full sensor dimensions.
+    pub fn size(&self) -> Size {
+        self.size
+    }
+
+    /// Sensor width in pixels.
+    pub fn width(&self) -> u32 {
+        self.size.width
+    }
+
+    /// Sensor height in pixels.
+    pub fn height(&self) -> u32 {
+        self.size.height
+    }
+
+    /// Active/crop area (usable image region).
+    pub fn active_area(&self) -> Rect {
+        self.active_area
+    }
+
+    /// Bits per sample (typically 12, 14, or 16).
+    pub fn bit_depth(&self) -> u8 {
+        self.bit_depth
+    }
+
+    /// CFA (Bayer) pattern.
+    pub fn cfa_pattern(&self) -> CfaPattern {
+        self.cfa_pattern
+    }
+
+    /// X-Trans CFA pattern, if applicable.
+    pub fn xtrans_pattern(&self) -> Option<&XTransPattern> {
+        self.xtrans_pattern.as_ref()
+    }
+
+    /// Black level values (per CFA color channel).
+    pub fn black_levels(&self) -> &[u16; 4] {
+        &self.black_levels
+    }
+
+    /// White/saturation level.
+    pub fn white_level(&self) -> u16 {
+        self.white_level
+    }
+
+    /// Baseline exposure offset in EV.
+    pub fn baseline_exposure(&self) -> Option<f32> {
+        self.baseline_exposure
+    }
+
+    /// Default crop rectangle.
+    pub fn default_crop(&self) -> Option<Rect> {
+        self.default_crop
+    }
+
+    // ── Write accessors ──────────────────────────────────────────────────
+
+    /// Set black level values.
+    pub fn set_black_levels(&mut self, levels: [u16; 4]) {
+        self.black_levels = levels;
+    }
+
+    /// Set white/saturation level.
+    pub fn set_white_level(&mut self, level: u16) {
+        self.white_level = level;
+    }
+
+    /// Set baseline exposure offset.
+    pub fn set_baseline_exposure(&mut self, ev: Option<f32>) {
+        self.baseline_exposure = ev;
+    }
+
+    /// Set default crop rectangle.
+    pub fn set_default_crop(&mut self, crop: Option<Rect>) {
+        self.default_crop = crop;
+    }
+
+    /// Set X-Trans pattern.
+    pub fn set_xtrans_pattern(&mut self, pattern: Option<XTransPattern>) {
+        self.xtrans_pattern = pattern;
+    }
+
+    /// Set bit depth.
+    pub fn set_bit_depth(&mut self, bit_depth: u8) {
+        self.bit_depth = bit_depth;
+    }
+
+    // ── Pixel access ─────────────────────────────────────────────────────
+
     /// Get pixel value at (x, y).
     pub fn get_pixel(&self, x: u32, y: u32) -> Option<u16> {
         if x < self.size.width && y < self.size.height {
@@ -249,31 +354,140 @@ impl RawImage {
     }
 }
 
-/// A simple container for RGB image data
+/// Builder for constructing [`RawImage`] instances.
+pub struct RawImageBuilder {
+    size: Size,
+    active_area: Rect,
+    bit_depth: u8,
+    cfa_pattern: CfaPattern,
+    xtrans_pattern: Option<XTransPattern>,
+    black_levels: [u16; 4],
+    white_level: u16,
+    data: Option<Vec<u16>>,
+    baseline_exposure: Option<f32>,
+    default_crop: Option<Rect>,
+}
+
+impl RawImageBuilder {
+    /// Set black level values.
+    pub fn black_levels(mut self, levels: [u16; 4]) -> Self {
+        self.black_levels = levels;
+        self
+    }
+
+    /// Set white/saturation level.
+    pub fn white_level(mut self, level: u16) -> Self {
+        self.white_level = level;
+        self
+    }
+
+    /// Set X-Trans pattern.
+    pub fn xtrans_pattern(mut self, pattern: XTransPattern) -> Self {
+        self.xtrans_pattern = Some(pattern);
+        self
+    }
+
+    /// Set baseline exposure offset in EV.
+    pub fn baseline_exposure(mut self, ev: f32) -> Self {
+        self.baseline_exposure = Some(ev);
+        self
+    }
+
+    /// Set default crop rectangle.
+    pub fn default_crop(mut self, crop: Rect) -> Self {
+        self.default_crop = Some(crop);
+        self
+    }
+
+    /// Set pixel data.
+    pub fn data(mut self, data: Vec<u16>) -> Self {
+        self.data = Some(data);
+        self
+    }
+
+    /// Build the RawImage.
+    pub fn build(self) -> RawImage {
+        let data = self
+            .data
+            .unwrap_or_else(|| vec![0u16; self.size.pixel_count() as usize]);
+        RawImage {
+            size: self.size,
+            active_area: self.active_area,
+            bit_depth: self.bit_depth,
+            cfa_pattern: self.cfa_pattern,
+            xtrans_pattern: self.xtrans_pattern,
+            black_levels: self.black_levels,
+            white_level: self.white_level,
+            data,
+            baseline_exposure: self.baseline_exposure,
+            default_crop: self.default_crop,
+        }
+    }
+}
+
+/// A simple container for RGB image data.
 #[derive(Debug, Clone)]
 pub struct RgbImage {
-    pub width: u32,
-    pub height: u32,
+    size: Size,
     /// Interleaved RGB data (R, G, B, R, G, B...)
     pub data: Vec<u16>,
-    /// Baseline exposure offset in EV (e.g. -0.8).
-    /// Used by DNG to match the "baseline" look. None for standard ARW.
-    pub baseline_exposure: Option<f32>,
-    /// Default crop rectangle.
-    /// Used by DNG to define the final image composition area. None for standard ARW.
-    pub default_crop: Option<Rect>,
+    baseline_exposure: Option<f32>,
+    default_crop: Option<Rect>,
 }
 
 impl RgbImage {
-    /// Create a new RgbImage
+    /// Create a new RgbImage.
     pub fn new(width: u32, height: u32, data: Vec<u16>) -> Self {
         Self {
-            width,
-            height,
+            size: Size::new(width, height),
             data,
             baseline_exposure: None,
             default_crop: None,
         }
+    }
+
+    // ── Read accessors ───────────────────────────────────────────────────
+
+    /// Image dimensions.
+    pub fn size(&self) -> Size {
+        self.size
+    }
+
+    /// Image width in pixels.
+    pub fn width(&self) -> u32 {
+        self.size.width
+    }
+
+    /// Image height in pixels.
+    pub fn height(&self) -> u32 {
+        self.size.height
+    }
+
+    /// Baseline exposure offset in EV.
+    pub fn baseline_exposure(&self) -> Option<f32> {
+        self.baseline_exposure
+    }
+
+    /// Default crop rectangle.
+    pub fn default_crop(&self) -> Option<Rect> {
+        self.default_crop
+    }
+
+    // ── Write accessors ──────────────────────────────────────────────────
+
+    /// Set baseline exposure offset.
+    pub fn set_baseline_exposure(&mut self, ev: Option<f32>) {
+        self.baseline_exposure = ev;
+    }
+
+    /// Set default crop rectangle.
+    pub fn set_default_crop(&mut self, crop: Option<Rect>) {
+        self.default_crop = crop;
+    }
+
+    /// Set image dimensions (used by orientation transforms).
+    pub fn set_size(&mut self, size: Size) {
+        self.size = size;
     }
 }
 
@@ -364,8 +578,8 @@ mod tests {
         assert_eq!(img.data[4], 500, "pixel 1 G");
         assert_eq!(img.data[5], 600, "pixel 1 B");
 
-        assert_eq!(img.width, 2);
-        assert_eq!(img.height, 1);
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.height(), 1);
         assert_eq!(img.data.len(), 6);
     }
 
@@ -392,5 +606,67 @@ mod tests {
         assert_eq!(r.size.height, 200);
         assert_eq!(r.right(), 110);
         assert_eq!(r.bottom(), 220);
+    }
+
+    #[test]
+    fn test_raw_image_builder() {
+        let size = Size::new(10, 10);
+        let active = Rect::from_coords(0, 0, 10, 10);
+        let img = RawImage::builder(size, active, 14, CfaPattern::Rggb)
+            .black_levels([100, 100, 100, 100])
+            .white_level(16383)
+            .build();
+
+        assert_eq!(img.size(), size);
+        assert_eq!(img.active_area(), active);
+        assert_eq!(img.bit_depth(), 14);
+        assert_eq!(img.cfa_pattern(), CfaPattern::Rggb);
+        assert_eq!(*img.black_levels(), [100, 100, 100, 100]);
+        assert_eq!(img.white_level(), 16383);
+        assert_eq!(img.data.len(), 100);
+    }
+
+    #[test]
+    fn test_raw_image_builder_with_data() {
+        let size = Size::new(2, 2);
+        let active = Rect::from_coords(0, 0, 2, 2);
+        let img = RawImage::builder(size, active, 14, CfaPattern::Rggb)
+            .data(vec![1000, 2000, 3000, 4000])
+            .build();
+
+        assert_eq!(img.data, vec![1000, 2000, 3000, 4000]);
+    }
+
+    #[test]
+    fn test_rgb_image_accessors() {
+        let img = RgbImage::new(100, 200, vec![0u16; 100 * 200 * 3]);
+        assert_eq!(img.width(), 100);
+        assert_eq!(img.height(), 200);
+        assert_eq!(img.size(), Size::new(100, 200));
+        assert_eq!(img.baseline_exposure(), None);
+        assert_eq!(img.default_crop(), None);
+    }
+
+    #[test]
+    fn test_raw_image_setters() {
+        let size = Size::new(4, 4);
+        let active = Rect::from_coords(0, 0, 4, 4);
+        let mut img = RawImage::new(size, active, 14, CfaPattern::Rggb);
+
+        img.set_black_levels([100, 100, 100, 100]);
+        assert_eq!(*img.black_levels(), [100, 100, 100, 100]);
+
+        img.set_white_level(4095);
+        assert_eq!(img.white_level(), 4095);
+
+        img.set_baseline_exposure(Some(-0.8));
+        assert_eq!(img.baseline_exposure(), Some(-0.8));
+
+        let crop = Rect::from_coords(1, 1, 2, 2);
+        img.set_default_crop(Some(crop));
+        assert_eq!(img.default_crop(), Some(crop));
+
+        img.set_xtrans_pattern(Some(XTransPattern::standard()));
+        assert!(img.xtrans_pattern().is_some());
     }
 }

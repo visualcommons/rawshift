@@ -48,9 +48,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let image = decode_standard_image(&data, format)?;
     println!(
         "Dimensions: {}x{} ({} pixels)",
-        image.width,
-        image.height,
-        image.width as u64 * image.height as u64
+        image.width(),
+        image.height(),
+        image.width() as u64 * image.height() as u64
     );
     println!("Pixel data length: {} u16 values", image.data.len());
 

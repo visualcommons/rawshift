@@ -81,11 +81,13 @@ fn arw_decode_raw_dimensions() {
     if let RawFile::Arw(ref mut arw) = raw {
         let raw_image = arw.decode_raw().unwrap();
         assert_eq!(
-            raw_image.size.width, gt.primary_raw_frame.width,
+            raw_image.size().width,
+            gt.primary_raw_frame.width,
             "ARW raw width mismatch"
         );
         assert_eq!(
-            raw_image.size.height, gt.primary_raw_frame.height,
+            raw_image.size().height,
+            gt.primary_raw_frame.height,
             "ARW raw height mismatch"
         );
     } else {

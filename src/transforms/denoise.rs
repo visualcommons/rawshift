@@ -30,8 +30,8 @@ pub fn apply_bilateral_filter(
     range_sigma: f32,
     radius: u32,
 ) {
-    let width = image.width as usize;
-    let height = image.height as usize;
+    let width = image.width() as usize;
+    let height = image.height() as usize;
 
     if width == 0 || height == 0 {
         return;
@@ -109,8 +109,8 @@ pub fn apply_bilateral_filter(
 /// * `sigma`  - Gaussian sigma in pixels.
 /// * `radius` - Filter half-width in pixels.
 pub fn apply_gaussian_blur(image: &mut RgbImage, sigma: f32, radius: u32) {
-    let width = image.width as usize;
-    let height = image.height as usize;
+    let width = image.width() as usize;
+    let height = image.height() as usize;
 
     if width == 0 || height == 0 {
         return;

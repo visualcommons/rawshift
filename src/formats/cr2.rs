@@ -19,7 +19,7 @@
 use std::io::{Read, Seek};
 
 use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
-use crate::error::{RawError, RawResult};
+use crate::error::{FormatError, ParseError, RawError, RawResult};
 use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
 /// Magic marker bytes: byte offset 8-10 in a CR2 file.
@@ -88,7 +88,9 @@ impl<R: Read + Seek> Cr2File<R> {
         let ifds = parser.walk_ifd_chain()?;
 
         if ifds.is_empty() {
-            return Err(RawError::Cr2Error("No IFDs found in file".to_string()));
+            return Err(RawError::Format(FormatError::Cr2(
+                "No IFDs found in file".to_string(),
+            )));
         }
 
         let mut cr2 = Cr2File {
@@ -168,9 +170,11 @@ impl<R: Read + Seek> Cr2File<R> {
 
     /// Extract metadata from the parsed IFDs.
     fn extract_metadata(&mut self) -> RawResult<()> {
-        let ifd0 = self.ifd0().cloned().ok_or_else(|| RawError::InvalidIfd {
-            offset: 0,
-            reason: "No IFD0 found".to_string(),
+        let ifd0 = self.ifd0().cloned().ok_or_else(|| {
+            RawError::Parse(ParseError::InvalidIfd {
+                offset: 0,
+                reason: "No IFD0 found".to_string(),
+            })
         })?;
 
         // Extract Make
@@ -183,10 +187,10 @@ impl<R: Read + Seek> Cr2File<R> {
 
         // Validate that this is a Canon file
         if !make.to_uppercase().contains("CANON") {
-            return Err(RawError::Cr2Error(format!(
+            return Err(RawError::Format(FormatError::Cr2(format!(
                 "Not a Canon file (Make: {})",
                 make
-            )));
+            ))));
         }
 
         // Extract Model
@@ -198,21 +202,26 @@ impl<R: Read + Seek> Cr2File<R> {
         };
 
         // Get the raw IFD (IFD 3)
-        let raw_ifd = self
-            .raw_ifd()
-            .cloned()
-            .ok_or_else(|| RawError::Cr2Error("Could not find raw data IFD (IFD 3)".to_string()))?;
+        let raw_ifd = self.raw_ifd().cloned().ok_or_else(|| {
+            RawError::Format(FormatError::Cr2(
+                "Could not find raw data IFD (IFD 3)".to_string(),
+            ))
+        })?;
 
         // Extract dimensions from raw IFD
         let width = raw_ifd
             .get(TiffTag::ImageWidth)
             .map(|e| e.value_offset as u32)
-            .ok_or(RawError::TagNotFound(TiffTag::ImageWidth))?;
+            .ok_or(RawError::Parse(ParseError::TagNotFound(
+                TiffTag::ImageWidth,
+            )))?;
 
         let height = raw_ifd
             .get(TiffTag::ImageLength)
             .map(|e| e.value_offset as u32)
-            .ok_or(RawError::TagNotFound(TiffTag::ImageLength))?;
+            .ok_or(RawError::Parse(ParseError::TagNotFound(
+                TiffTag::ImageLength,
+            )))?;
 
         let sensor_size = Size::new(width, height);
 
@@ -285,10 +294,10 @@ impl<R: Read + Seek> Cr2File<R> {
         };
 
         if raw_data_offset == 0 || raw_data_size == 0 {
-            return Err(RawError::Cr2Error(
+            return Err(RawError::Format(FormatError::Cr2(
                 "No raw data strip found in IFD 3 (missing StripOffsets/StripByteCounts)"
                     .to_string(),
-            ));
+            )));
         }
 
         self.metadata = Some(Cr2Metadata {
@@ -307,15 +316,45 @@ impl<R: Read + Seek> Cr2File<R> {
         Ok(())
     }
 
+    /// Extract the embedded JPEG thumbnail from IFD 0, if present.
+    pub fn thumbnail(&mut self) -> RawResult<Option<Vec<u8>>> {
+        let ifd0 = match self.ifd0() {
+            Some(ifd) => ifd,
+            None => return Ok(None),
+        };
+        let offset_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormat) {
+            Some(e) => e.clone(),
+            None => return Ok(None),
+        };
+        let length_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormatLength) {
+            Some(e) => e.clone(),
+            None => return Ok(None),
+        };
+        let offset = match self.parser.read_value(&offset_entry)? {
+            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
+            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
+            _ => return Ok(None),
+        };
+        let length = match self.parser.read_value(&length_entry)? {
+            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
+            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
+            _ => return Ok(None),
+        };
+        if length == 0 {
+            return Ok(None);
+        }
+        self.parser.seek_to(offset)?;
+        let data = self.parser.read_bytes(length)?;
+        Ok(Some(data))
+    }
+
     /// Decode the raw image data into a [`RawImage`].
     ///
     /// Reads the LJPEG-compressed data from `raw_data_offset` and decodes it.
     pub fn decode_raw(&mut self) -> RawResult<RawImage> {
-        let metadata = self
-            .metadata
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| RawError::Cr2Error("Metadata not extracted".to_string()))?;
+        let metadata = self.metadata.as_ref().cloned().ok_or_else(|| {
+            RawError::Format(FormatError::Cr2("Metadata not extracted".to_string()))
+        })?;
 
         // Read the LJPEG-compressed data
         self.parser.seek_to(metadata.raw_data_offset)?;
@@ -330,27 +369,25 @@ impl<R: Read + Seek> Cr2File<R> {
 
         let expected = metadata.sensor_size.pixel_count() as usize;
         if pixels.len() != expected {
-            return Err(RawError::Cr2Error(format!(
+            return Err(RawError::Format(FormatError::Cr2(format!(
                 "Decoded {} pixels, expected {} ({}x{})",
                 pixels.len(),
                 expected,
                 metadata.sensor_size.width,
                 metadata.sensor_size.height,
-            )));
+            ))));
         }
 
-        Ok(RawImage {
-            size: metadata.sensor_size,
-            active_area: metadata.active_area,
-            bit_depth: metadata.bit_depth,
-            cfa_pattern: metadata.cfa_pattern,
-            xtrans_pattern: None,
-            black_levels: metadata.black_levels,
-            white_level: metadata.white_level,
-            data: pixels,
-            baseline_exposure: None,
-            default_crop: None,
-        })
+        Ok(RawImage::builder(
+            metadata.sensor_size,
+            metadata.active_area,
+            metadata.bit_depth,
+            metadata.cfa_pattern,
+        )
+        .black_levels(metadata.black_levels)
+        .white_level(metadata.white_level)
+        .data(pixels)
+        .build())
     }
 }
 
@@ -632,7 +669,7 @@ mod tests {
         let cursor = Cursor::new(tiff_data);
         let result = Cr2File::parse(cursor);
         assert!(
-            matches!(result, Err(RawError::Cr2Error(_))),
+            matches!(result, Err(RawError::Format(FormatError::Cr2(_)))),
             "Non-Canon Make should produce Cr2Error"
         );
     }
@@ -644,7 +681,7 @@ mod tests {
         let cursor = Cursor::new(tiff_data);
         let result = Cr2File::parse(cursor);
         assert!(
-            matches!(result, Err(RawError::Cr2Error(_))),
+            matches!(result, Err(RawError::Format(FormatError::Cr2(_)))),
             "Canon Make with no raw IFD should produce Cr2Error"
         );
     }

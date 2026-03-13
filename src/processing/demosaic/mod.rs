@@ -46,6 +46,7 @@ impl std::error::Error for DemosaicError {}
 /// Use [`to_demosaic()`](Self::to_demosaic) to get a trait object that implements
 /// the actual algorithm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DemosaicMethod {
     /// Automatically detects sensor pattern (Bayer vs X-Trans) from metadata
     /// and chooses the best algorithm for the ISO/exposure.
@@ -60,6 +61,17 @@ pub enum DemosaicMethod {
 
     /// Returns the raw monochrome CFA data without color reconstruction.
     None,
+}
+
+impl std::fmt::Display for DemosaicMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DemosaicMethod::Auto => write!(f, "Auto"),
+            DemosaicMethod::Bayer(algo) => write!(f, "Bayer({})", algo),
+            DemosaicMethod::XTrans(algo) => write!(f, "XTrans({})", algo),
+            DemosaicMethod::None => write!(f, "None"),
+        }
+    }
 }
 
 impl DemosaicMethod {
@@ -82,6 +94,7 @@ impl DemosaicMethod {
 
 /// Valid algorithms for standard Bayer sensors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BayerAlgorithm {
     /// Industry standard for high-detail, low-noise images.
     #[default]
@@ -92,6 +105,17 @@ pub enum BayerAlgorithm {
     Rcd,
     /// Very fast; low-quality. Suitable for previews.
     Bilinear,
+}
+
+impl std::fmt::Display for BayerAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BayerAlgorithm::Amaze => write!(f, "AMaZE"),
+            BayerAlgorithm::Lmmse => write!(f, "LMMSE"),
+            BayerAlgorithm::Rcd => write!(f, "RCD"),
+            BayerAlgorithm::Bilinear => write!(f, "Bilinear"),
+        }
+    }
 }
 
 impl BayerAlgorithm {
@@ -108,6 +132,7 @@ impl BayerAlgorithm {
 
 /// Valid algorithms for Fujifilm X-Trans sensors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum XTransAlgorithm {
     /// The standard for X-Trans; handles the complex 6x6 grid.
     #[default]
@@ -116,6 +141,16 @@ pub enum XTransAlgorithm {
     Markesteijn3Pass,
     /// Faster, simpler interpolation for X-Trans previews.
     Fast,
+}
+
+impl std::fmt::Display for XTransAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            XTransAlgorithm::Markesteijn => write!(f, "Markesteijn"),
+            XTransAlgorithm::Markesteijn3Pass => write!(f, "Markesteijn 3-Pass"),
+            XTransAlgorithm::Fast => write!(f, "Fast"),
+        }
+    }
 }
 
 impl XTransAlgorithm {
@@ -165,18 +200,12 @@ pub trait Demosaic {
     /// and calls [`demosaic_into`](Self::demosaic_into).
     #[must_use]
     fn demosaic(&self, raw: &RawImage) -> RgbImage {
-        let width = raw.active_area.size.width;
-        let height = raw.active_area.size.height;
+        let width = raw.active_area().size.width;
+        let height = raw.active_area().size.height;
         let mut data = vec![0u16; (width as usize) * (height as usize) * 3];
         self.demosaic_into(raw, &mut data)
             .expect("demosaic_into failed with correctly sized buffer");
-        RgbImage {
-            width,
-            height,
-            data,
-            baseline_exposure: None,
-            default_crop: None,
-        }
+        RgbImage::new(width, height, data)
     }
 }
 
@@ -202,11 +231,11 @@ pub struct NoDemosaic;
 
 impl Demosaic for NoDemosaic {
     fn demosaic_into(&self, raw: &RawImage, output: &mut [u16]) -> Result<(), DemosaicError> {
-        let width = raw.active_area.size.width as usize;
-        let height = raw.active_area.size.height as usize;
-        let x_offset = raw.active_area.origin.x as usize;
-        let y_offset = raw.active_area.origin.y as usize;
-        let raw_width = raw.size.width as usize;
+        let width = raw.active_area().size.width as usize;
+        let height = raw.active_area().size.height as usize;
+        let x_offset = raw.active_area().origin.x as usize;
+        let y_offset = raw.active_area().origin.y as usize;
+        let raw_width = raw.width() as usize;
 
         let expected_size = width * height * 3;
         if output.len() != expected_size {

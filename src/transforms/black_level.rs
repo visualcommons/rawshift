@@ -12,12 +12,12 @@ use crate::core::image::RawImage;
 ///
 /// This is a no-op if all black levels are zero.
 pub fn apply_black_level(raw: &mut RawImage) {
-    let bl = raw.black_levels;
+    let bl = *raw.black_levels();
     if bl[0] == 0 && bl[1] == 0 && bl[2] == 0 && bl[3] == 0 {
         return;
     }
 
-    let width = raw.size.width as usize;
+    let width = raw.width() as usize;
     for (i, pixel) in raw.data.iter_mut().enumerate() {
         let x = i % width;
         let y = i / width;
@@ -36,7 +36,7 @@ mod tests {
         let active = Rect::from_coords(0, 0, width, height);
         let mut raw = RawImage::new(size, active, 14, CfaPattern::Rggb);
         raw.data = data;
-        raw.black_levels = black_levels;
+        raw.set_black_levels(black_levels);
         raw
     }
 

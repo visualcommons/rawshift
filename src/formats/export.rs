@@ -2,6 +2,7 @@ use crate::formats::dng_export::DngExportConfig;
 
 /// Options for encoding the output image.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum EncodeOptions {
     /// PNG format options
     Png(PngOptions),
@@ -49,8 +50,10 @@ impl EncodeOptions {
 
 /// Options for PNG encoding.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PngOptions {
     /// Bit depth (8 or 16). Default: 16
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub bit_depth: zune_core::bit_depth::BitDepth,
 }
 
@@ -64,6 +67,7 @@ impl Default for PngOptions {
 
 /// Options for JPEG encoding.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct JpegOptions {
     /// Quality (1-100). Default: 90
     pub quality: u8,
@@ -85,6 +89,7 @@ impl Default for JpegOptions {
 
 /// Options for WebP encoding.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct WebPOptions {
     /// Quality (1-100). Default: 80
     pub quality: f32,
@@ -110,6 +115,7 @@ impl Default for WebPOptions {
 /// Options for AVIF encoding (requires `avif` feature).
 #[cfg(feature = "avif")]
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AvifOptions {
     /// Quality (0-100, lower is better). Default: 80
     pub quality: u8,
@@ -133,6 +139,7 @@ impl Default for AvifOptions {
 /// Options for JPEG XL encoding (requires `jxl-encode` feature).
 #[cfg(feature = "jxl-encode")]
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct JxlOptions {
     /// Quality (0.0-100.0, 0 for lossless). Default: 0.0 (lossless)
     pub quality: f32,
