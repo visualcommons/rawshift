@@ -548,13 +548,13 @@ mod tests {
     #[test]
     fn test_cfa_pattern_parsing_from_bytes() {
         // RGGB = [0, 1, 1, 2]
-        let bytes = vec![0u8, 1, 1, 2];
+        let bytes = [0u8, 1, 1, 2];
         let pattern = CfaPattern::from_array([bytes[0], bytes[1], bytes[2], bytes[3]])
             .unwrap_or(CfaPattern::Rggb);
         assert_eq!(pattern, CfaPattern::Rggb);
 
         // BGGR = [2, 1, 1, 0]
-        let bytes_bggr = vec![2u8, 1, 1, 0];
+        let bytes_bggr = [2u8, 1, 1, 0];
         let pattern_bggr =
             CfaPattern::from_array([bytes_bggr[0], bytes_bggr[1], bytes_bggr[2], bytes_bggr[3]])
                 .unwrap_or(CfaPattern::Rggb);

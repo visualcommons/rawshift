@@ -488,7 +488,7 @@ mod tests {
         // For a more realistic daylight value use slightly less B:
         let cct = estimate_cct_from_as_shot_neutral([0.6, 1.0, 0.55]);
         assert!(
-            cct >= 4000.0 && cct <= 10000.0,
+            (4000.0..=10000.0).contains(&cct),
             "daylight WB should give CCT 4000–10000 K, got {cct}"
         );
     }

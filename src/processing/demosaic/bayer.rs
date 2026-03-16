@@ -1195,7 +1195,7 @@ mod tests {
         let rgb = Amaze.demosaic(&raw);
         // Green channel at (1,0) should be exactly 7000
         // pixel (1, 0): row=0, col=1, so index = 1 * 3 + 1 = 4
-        let g = rgb.data[1 * 3 + 1];
+        let g = rgb.data[3 + 1];
         assert_eq!(
             g, 7000,
             "green pixel should be preserved exactly, got {}",

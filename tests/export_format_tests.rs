@@ -28,10 +28,12 @@ fn temp_path(name: &str) -> PathBuf {
 /// Check if JPEG data contains EXIF APP1 marker
 fn jpeg_has_exif(data: &[u8]) -> bool {
     for i in 0..data.len().saturating_sub(10) {
-        if data[i] == 0xFF && data[i + 1] == 0xE1 {
-            if i + 8 < data.len() && &data[i + 4..i + 8] == b"Exif" {
-                return true;
-            }
+        if data[i] == 0xFF
+            && data[i + 1] == 0xE1
+            && i + 8 < data.len()
+            && &data[i + 4..i + 8] == b"Exif"
+        {
+            return true;
         }
     }
     false
@@ -40,10 +42,12 @@ fn jpeg_has_exif(data: &[u8]) -> bool {
 /// Check if JPEG data contains ICC APP2 marker
 fn jpeg_has_icc(data: &[u8]) -> bool {
     for i in 0..data.len().saturating_sub(16) {
-        if data[i] == 0xFF && data[i + 1] == 0xE2 {
-            if i + 15 < data.len() && &data[i + 4..i + 15] == b"ICC_PROFILE" {
-                return true;
-            }
+        if data[i] == 0xFF
+            && data[i + 1] == 0xE2
+            && i + 15 < data.len()
+            && &data[i + 4..i + 15] == b"ICC_PROFILE"
+        {
+            return true;
         }
     }
     false

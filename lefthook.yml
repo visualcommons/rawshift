@@ -1,15 +1,21 @@
 pre-commit:
-  parallel: true
+  piped: true
   commands:
     fmt:
-      run: cargo fmt --check
-      fail_text: "Run `cargo fmt` to fix formatting"
-    clippy:
-      run: cargo clippy -- -D warnings
-      fail_text: "Fix clippy warnings before committing"
+      priority: 1
+      run: just fmt
+    clippy-fix:
+      priority: 2
+      run: just clippy-fix
+    check-modified:
+      priority: 3
+      run: git diff --exit-code || { echo "Auto-fixes were applied. Stage the changes and re-commit."; exit 1; }
 
 pre-push:
   commands:
+    fmt:
+      run: just fmt-check
+    clippy:
+      run: just clippy
     test:
-      run: cargo test
-      fail_text: "Tests must pass before pushing"
+      run: just test
