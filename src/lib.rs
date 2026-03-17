@@ -14,7 +14,9 @@
 //! - Fujifilm RAF
 //!
 //! ### Standard Formats (direct RGB decode)
-//! - JPEG, PNG, WebP, JPEG XL
+//! - GIF, JPEG, PNG, WebP, JPEG XL, TIFF
+//! - SVG (requires `svg` feature)
+//! - AVIF, HEIC, APV (detection only; decode not yet supported)
 //!
 //! ## Quick Start
 //!
@@ -46,6 +48,7 @@
 //! - `serde`: Enable serialization for metadata types
 //! - `avif`: Enable AVIF encoding (requires `ravif`)
 //! - `jxl-encode`: Enable JXL encoding
+//! - `svg`: Enable SVG decoding (requires `resvg`)
 
 pub(crate) mod codecs;
 pub mod core;

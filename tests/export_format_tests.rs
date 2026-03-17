@@ -254,8 +254,6 @@ mod webp_tests {
         let path = temp_path("export_with_exif.webp");
 
         let opts = WebPOptions {
-            quality: 80.0,
-            lossless: true,
             embed_exif: true,
             embed_icc: false,
         };
@@ -281,8 +279,6 @@ mod webp_tests {
         let path = temp_path("export_no_exif.webp");
 
         let opts = WebPOptions {
-            quality: 80.0,
-            lossless: true,
             embed_exif: false,
             embed_icc: false,
         };
@@ -401,8 +397,6 @@ mod encode_options_tests {
     #[test]
     fn test_webp_options_defaults() {
         let opts = WebPOptions::default();
-        assert_eq!(opts.quality, 80.0, "WebP default quality should be 80");
-        assert!(opts.lossless, "WebP should be lossless by default");
         assert!(opts.embed_exif, "WebP should embed EXIF by default");
         assert!(opts.embed_icc, "WebP should embed ICC by default");
     }

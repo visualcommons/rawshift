@@ -55,9 +55,98 @@ impl StandardFormat {
             StandardFormat::Apv => "APV",
         }
     }
+
+    /// Primary file extension (without dot).
+    pub fn extension(self) -> &'static str {
+        match self {
+            StandardFormat::Gif => "gif",
+            StandardFormat::Jpeg => "jpg",
+            StandardFormat::Png => "png",
+            StandardFormat::WebP => "webp",
+            StandardFormat::Jxl => "jxl",
+            StandardFormat::Tiff => "tiff",
+            StandardFormat::Avif => "avif",
+            StandardFormat::Heic => "heic",
+            StandardFormat::Svg => "svg",
+            StandardFormat::Apv => "apv",
+        }
+    }
+
+    /// Look up a format by file extension (case-insensitive).
+    ///
+    /// Common aliases are supported (e.g. `jpeg`/`jpe`/`jfif` for JPEG,
+    /// `tif` for TIFF, `heif` for HEIC, `svgz` for SVG).
+    pub fn from_extension(ext: &str) -> Option<StandardFormat> {
+        match ext.to_ascii_lowercase().as_str() {
+            "gif" => Some(StandardFormat::Gif),
+            "jpg" | "jpeg" | "jpe" | "jfif" => Some(StandardFormat::Jpeg),
+            "png" => Some(StandardFormat::Png),
+            "webp" => Some(StandardFormat::WebP),
+            "jxl" => Some(StandardFormat::Jxl),
+            "tiff" | "tif" => Some(StandardFormat::Tiff),
+            "avif" => Some(StandardFormat::Avif),
+            "heic" | "heif" => Some(StandardFormat::Heic),
+            "svg" | "svgz" => Some(StandardFormat::Svg),
+            "apv" => Some(StandardFormat::Apv),
+            _ => None,
+        }
+    }
+
+    /// Standard MIME type for this format.
+    pub fn mime_type(self) -> &'static str {
+        match self {
+            StandardFormat::Gif => "image/gif",
+            StandardFormat::Jpeg => "image/jpeg",
+            StandardFormat::Png => "image/png",
+            StandardFormat::WebP => "image/webp",
+            StandardFormat::Jxl => "image/jxl",
+            StandardFormat::Tiff => "image/tiff",
+            StandardFormat::Avif => "image/avif",
+            StandardFormat::Heic => "image/heic",
+            StandardFormat::Svg => "image/svg+xml",
+            StandardFormat::Apv => "video/apv",
+        }
+    }
+
+    /// Whether this format can be decoded to an [`RgbImage`].
+    pub fn supports_decode(self) -> bool {
+        match self {
+            StandardFormat::Gif
+            | StandardFormat::Jpeg
+            | StandardFormat::Png
+            | StandardFormat::WebP
+            | StandardFormat::Jxl
+            | StandardFormat::Tiff => true,
+            #[cfg(feature = "svg")]
+            StandardFormat::Svg => true,
+            _ => false,
+        }
+    }
+
+    /// Whether this format can be encoded from an [`RgbImage`].
+    pub fn supports_encode(self) -> bool {
+        match self {
+            StandardFormat::Png | StandardFormat::Jpeg | StandardFormat::WebP => true,
+            #[cfg(feature = "avif")]
+            StandardFormat::Avif => true,
+            #[cfg(feature = "jxl-encode")]
+            StandardFormat::Jxl => true,
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Display for StandardFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
 }
 
 /// Detect a standard image format from the first bytes of image data.
+///
+/// Note: TIFF-based RAW formats (DNG, ARW, NEF, CR2) share the TIFF magic
+/// bytes and will be detected as `StandardFormat::Tiff`. Use [`RawFile::open()`]
+/// to distinguish RAW formats first.
 ///
 /// Returns `None` if the format is not recognised or if `data` is too short.
 pub fn detect_standard_format(data: &[u8]) -> Option<StandardFormat> {
@@ -1101,6 +1190,147 @@ mod tests {
         assert_eq!(StandardFormat::Heic.name(), "HEIC");
         assert_eq!(StandardFormat::Svg.name(), "SVG");
         assert_eq!(StandardFormat::Apv.name(), "APV");
+    }
+
+    // ── Display ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn standard_format_display() {
+        let all = [
+            (StandardFormat::Gif, "GIF"),
+            (StandardFormat::Jpeg, "JPEG"),
+            (StandardFormat::Png, "PNG"),
+            (StandardFormat::WebP, "WebP"),
+            (StandardFormat::Jxl, "JXL"),
+            (StandardFormat::Tiff, "TIFF"),
+            (StandardFormat::Avif, "AVIF"),
+            (StandardFormat::Heic, "HEIC"),
+            (StandardFormat::Svg, "SVG"),
+            (StandardFormat::Apv, "APV"),
+        ];
+        for (fmt, expected) in all {
+            assert_eq!(format!("{}", fmt), expected);
+            assert_eq!(fmt.to_string(), expected);
+        }
+    }
+
+    // ── extension / from_extension / mime_type ──────────────────────────
+
+    #[test]
+    fn extension_roundtrip() {
+        let all = [
+            StandardFormat::Gif,
+            StandardFormat::Jpeg,
+            StandardFormat::Png,
+            StandardFormat::WebP,
+            StandardFormat::Jxl,
+            StandardFormat::Tiff,
+            StandardFormat::Avif,
+            StandardFormat::Heic,
+            StandardFormat::Svg,
+            StandardFormat::Apv,
+        ];
+        for fmt in all {
+            let ext = fmt.extension();
+            assert_eq!(
+                StandardFormat::from_extension(ext),
+                Some(fmt),
+                "roundtrip failed for {:?} (ext={ext})",
+                fmt
+            );
+        }
+    }
+
+    #[test]
+    fn from_extension_case_insensitive() {
+        assert_eq!(
+            StandardFormat::from_extension("JPG"),
+            Some(StandardFormat::Jpeg)
+        );
+        assert_eq!(
+            StandardFormat::from_extension("Png"),
+            Some(StandardFormat::Png)
+        );
+        assert_eq!(
+            StandardFormat::from_extension("WEBP"),
+            Some(StandardFormat::WebP)
+        );
+    }
+
+    #[test]
+    fn from_extension_aliases() {
+        // JPEG aliases
+        for ext in ["jpg", "jpeg", "jpe", "jfif"] {
+            assert_eq!(
+                StandardFormat::from_extension(ext),
+                Some(StandardFormat::Jpeg),
+                "alias {ext}"
+            );
+        }
+        // TIFF alias
+        assert_eq!(
+            StandardFormat::from_extension("tif"),
+            Some(StandardFormat::Tiff)
+        );
+        // HEIC alias
+        assert_eq!(
+            StandardFormat::from_extension("heif"),
+            Some(StandardFormat::Heic)
+        );
+        // SVG alias
+        assert_eq!(
+            StandardFormat::from_extension("svgz"),
+            Some(StandardFormat::Svg)
+        );
+    }
+
+    #[test]
+    fn from_extension_unknown_returns_none() {
+        assert_eq!(StandardFormat::from_extension("bmp"), None);
+        assert_eq!(StandardFormat::from_extension(""), None);
+        assert_eq!(StandardFormat::from_extension("raw"), None);
+    }
+
+    #[test]
+    fn mime_types() {
+        assert_eq!(StandardFormat::Gif.mime_type(), "image/gif");
+        assert_eq!(StandardFormat::Jpeg.mime_type(), "image/jpeg");
+        assert_eq!(StandardFormat::Png.mime_type(), "image/png");
+        assert_eq!(StandardFormat::WebP.mime_type(), "image/webp");
+        assert_eq!(StandardFormat::Jxl.mime_type(), "image/jxl");
+        assert_eq!(StandardFormat::Tiff.mime_type(), "image/tiff");
+        assert_eq!(StandardFormat::Avif.mime_type(), "image/avif");
+        assert_eq!(StandardFormat::Heic.mime_type(), "image/heic");
+        assert_eq!(StandardFormat::Svg.mime_type(), "image/svg+xml");
+        assert_eq!(StandardFormat::Apv.mime_type(), "video/apv");
+    }
+
+    // ── supports_decode / supports_encode ───────────────────────────────
+
+    #[test]
+    fn supports_decode_standard_formats() {
+        assert!(StandardFormat::Gif.supports_decode());
+        assert!(StandardFormat::Jpeg.supports_decode());
+        assert!(StandardFormat::Png.supports_decode());
+        assert!(StandardFormat::WebP.supports_decode());
+        assert!(StandardFormat::Jxl.supports_decode());
+        assert!(StandardFormat::Tiff.supports_decode());
+        // Stubbed formats
+        assert!(!StandardFormat::Avif.supports_decode());
+        assert!(!StandardFormat::Heic.supports_decode());
+        assert!(!StandardFormat::Apv.supports_decode());
+    }
+
+    #[test]
+    fn supports_encode_standard_formats() {
+        assert!(StandardFormat::Png.supports_encode());
+        assert!(StandardFormat::Jpeg.supports_encode());
+        assert!(StandardFormat::WebP.supports_encode());
+        // Formats without encoding support
+        assert!(!StandardFormat::Gif.supports_encode());
+        assert!(!StandardFormat::Tiff.supports_encode());
+        assert!(!StandardFormat::Heic.supports_encode());
+        assert!(!StandardFormat::Apv.supports_encode());
     }
 
     // ── HEIC detection and decode ─────────────────────────────────────────

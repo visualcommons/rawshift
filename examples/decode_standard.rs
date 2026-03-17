@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
     };
-    println!("Detected format: {}", format.name());
+    println!("Detected format: {}", format);
 
     // Decode to RGB
     let image = decode_standard_image(&data, format)?;

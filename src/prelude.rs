@@ -11,7 +11,8 @@
 //! - **`error`** — `RawError`, `ParseError`, `FormatError`, `ProcessingError`,
 //!   `EncodeError`, and `RawResult`.
 //! - **`formats`** — `RawFile`, `RawFormat`, `StandardFormat`,
-//!   `decode_standard_image`, `detect_standard_format`, `DngExportConfig`.
+//!   `decode_standard_image`, `detect_standard_format`, `DngExportConfig`,
+//!   `EncodeOptions`, `PngOptions`, `JpegOptions`, `WebPOptions`.
 //! - **`processing`** — `ProcessingOptions` and demosaicing types.
 //! - **`tiff`** — `TiffParser`, `TiffTag`, `TiffValue`, and related TIFF types.
 //! - **`transforms`** — `apply_black_level`, `apply_white_balance`,
@@ -40,7 +41,11 @@ pub use crate::error::{
 };
 
 // formats
-pub use crate::formats::export::EncodeOptions;
+#[cfg(feature = "avif")]
+pub use crate::formats::export::AvifOptions;
+#[cfg(feature = "jxl-encode")]
+pub use crate::formats::export::JxlOptions;
+pub use crate::formats::export::{EncodeOptions, JpegOptions, PngOptions, WebPOptions};
 pub use crate::formats::{
     DngExportConfig, RawFile, RawFormat, StandardFormat, decode_standard_image,
     detect_standard_format, encode_rgb_image, encode_rgb_image_to_writer, export_dng,

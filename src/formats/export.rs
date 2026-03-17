@@ -20,6 +20,12 @@ pub enum EncodeOptions {
     Dng(DngExportConfig),
 }
 
+impl Default for EncodeOptions {
+    fn default() -> Self {
+        Self::Png(PngOptions::default())
+    }
+}
+
 impl EncodeOptions {
     pub fn png() -> Self {
         Self::Png(PngOptions::default())
@@ -88,13 +94,12 @@ impl Default for JpegOptions {
 }
 
 /// Options for WebP encoding.
+///
+/// Encoding uses VP8L (lossless). Lossy encoding will be supported
+/// when a suitable encoder dependency becomes available.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct WebPOptions {
-    /// Quality (1-100). Default: 80
-    pub quality: f32,
-    /// Lossless mode. Default: true
-    pub lossless: bool,
     /// Whether to embed EXIF metadata. Default: true
     pub embed_exif: bool,
     /// Whether to embed ICC profile. Default: true
@@ -104,8 +109,6 @@ pub struct WebPOptions {
 impl Default for WebPOptions {
     fn default() -> Self {
         Self {
-            quality: 80.0,
-            lossless: true,
             embed_exif: true,
             embed_icc: true,
         }
