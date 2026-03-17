@@ -8,6 +8,10 @@
 use rawshift::core::image::RgbImage;
 use rawshift::core::metadata::ImageMetadata;
 use rawshift::formats::encode_rgb_image;
+#[cfg(feature = "avif")]
+use rawshift::formats::export::AvifOptions;
+#[cfg(feature = "jxl-encode")]
+use rawshift::formats::export::JxlOptions;
 use rawshift::formats::export::{EncodeOptions, JpegOptions, PngOptions, WebPMode, WebPOptions};
 use std::fs;
 use std::path::PathBuf;
@@ -483,6 +487,228 @@ mod png_tests {
         .expect("Export 8-bit PNG");
 
         assert!(path.exists());
+        fs::remove_file(&path).ok();
+    }
+}
+
+/// Check if AVIF data contains a `colr rICC` or `colr prof` box (embedded ICC profile).
+#[cfg(feature = "avif")]
+fn avif_has_icc(data: &[u8]) -> bool {
+    data.windows(8)
+        .any(|w| &w[..4] == b"colr" && (&w[4..8] == b"rICC" || &w[4..8] == b"prof"))
+}
+
+/// Check if JXL container data contains an `iccp` box.
+#[cfg(feature = "jxl-encode")]
+fn jxl_has_icc(data: &[u8]) -> bool {
+    let mut pos = 0;
+    while pos + 8 <= data.len() {
+        let sz = u32::from_be_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
+        if &data[pos + 4..pos + 8] == b"iccp" {
+            return true;
+        }
+        if sz < 8 {
+            break;
+        }
+        pos += sz;
+    }
+    false
+}
+
+/// Check if data is a JXL container (has "JXL " signature at offset 4).
+#[cfg(feature = "jxl-encode")]
+fn jxl_is_container(data: &[u8]) -> bool {
+    data.get(4..8) == Some(b"JXL ")
+}
+
+// ============================================================================
+// AVIF Export Tests
+// ============================================================================
+
+#[cfg(feature = "avif")]
+mod avif_tests {
+    use super::*;
+
+    #[test]
+    fn test_avif_export_with_icc_enabled() {
+        let img = synthetic_image();
+        let path = temp_path("avif_icc_on.avif");
+        let opts = AvifOptions {
+            embed_exif: false,
+            embed_icc: true,
+            ..AvifOptions::default()
+        };
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::Avif(opts),
+        )
+        .expect("Export AVIF");
+        let data = fs::read(&path).expect("Read AVIF");
+        assert!(avif_has_icc(&data), "AVIF should contain ICC profile");
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_avif_export_with_icc_disabled() {
+        let img = synthetic_image();
+        let path = temp_path("avif_icc_off.avif");
+        let opts = AvifOptions {
+            embed_exif: false,
+            embed_icc: false,
+            ..AvifOptions::default()
+        };
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::Avif(opts),
+        )
+        .expect("Export AVIF");
+        let data = fs::read(&path).expect("Read AVIF");
+        assert!(!avif_has_icc(&data), "AVIF should NOT contain ICC profile");
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_avif_export_with_icc_and_exif() {
+        let img = synthetic_image();
+        let path = temp_path("avif_icc_exif.avif");
+        let opts = AvifOptions {
+            embed_exif: true,
+            embed_icc: true,
+            ..AvifOptions::default()
+        };
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::Avif(opts),
+        )
+        .expect("Export AVIF");
+        let data = fs::read(&path).expect("Read AVIF");
+        assert!(
+            avif_has_icc(&data),
+            "AVIF should still contain ICC after EXIF embedding"
+        );
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_avif_default_options_embed_icc() {
+        let img = synthetic_image();
+        let path = temp_path("avif_default.avif");
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::avif(),
+        )
+        .expect("Export AVIF");
+        let data = fs::read(&path).expect("Read AVIF");
+        assert!(avif_has_icc(&data), "Default AVIF should embed ICC");
+        fs::remove_file(&path).ok();
+    }
+}
+
+// ============================================================================
+// JXL Export Tests
+// ============================================================================
+
+#[cfg(feature = "jxl-encode")]
+mod jxl_tests {
+    use super::*;
+
+    #[test]
+    fn test_jxl_options_default_has_embed_icc() {
+        assert!(
+            JxlOptions::default().embed_icc,
+            "JxlOptions default should have embed_icc=true"
+        );
+    }
+
+    #[test]
+    fn test_jxl_export_with_icc_enabled() {
+        let img = synthetic_image();
+        let path = temp_path("jxl_icc_on.jxl");
+        let opts = JxlOptions {
+            embed_exif: false,
+            embed_icc: true,
+            ..JxlOptions::default()
+        };
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::Jxl(opts),
+        )
+        .expect("Export JXL");
+        let data = fs::read(&path).expect("Read JXL");
+        assert!(jxl_is_container(&data), "JXL should be container format");
+        assert!(jxl_has_icc(&data), "JXL should contain ICC profile");
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_jxl_export_with_icc_disabled() {
+        let img = synthetic_image();
+        let path = temp_path("jxl_icc_off.jxl");
+        let opts = JxlOptions {
+            embed_exif: false,
+            embed_icc: false,
+            ..JxlOptions::default()
+        };
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::Jxl(opts),
+        )
+        .expect("Export JXL");
+        let data = fs::read(&path).expect("Read JXL");
+        assert!(!jxl_has_icc(&data), "JXL should NOT contain ICC profile");
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_jxl_export_with_icc_and_exif() {
+        let img = synthetic_image();
+        let path = temp_path("jxl_icc_exif.jxl");
+        let opts = JxlOptions {
+            embed_exif: true,
+            embed_icc: true,
+            ..JxlOptions::default()
+        };
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::Jxl(opts),
+        )
+        .expect("Export JXL");
+        let data = fs::read(&path).expect("Read JXL");
+        assert!(jxl_has_icc(&data), "JXL should contain ICC");
+        assert!(
+            data.windows(4).any(|w| w == b"Exif"),
+            "JXL should contain Exif box"
+        );
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_jxl_default_options_embed_icc() {
+        let img = synthetic_image();
+        let path = temp_path("jxl_default.jxl");
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::jxl(),
+        )
+        .expect("Export JXL");
+        let data = fs::read(&path).expect("Read JXL");
+        assert!(jxl_has_icc(&data), "Default JXL should embed ICC");
         fs::remove_file(&path).ok();
     }
 }

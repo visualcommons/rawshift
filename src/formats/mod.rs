@@ -714,19 +714,23 @@ pub fn encode_rgb_image(
                 .with_speed(opts.speed);
 
             let result = encoder.encode_rgba(img).expect("Encode AVIF");
-            std::fs::write(path, result.avif_file)?;
+            let mut avif_bytes = result.avif_file;
+
+            if opts.embed_icc {
+                use crate::metadata::icc::IccProfile;
+                match IccProfile::srgb().append_to_avif(avif_bytes.clone()) {
+                    Ok(data) => avif_bytes = data,
+                    Err(e) => tracing::warn!("Failed to embed ICC in AVIF: {}", e),
+                }
+            }
+
+            std::fs::write(path, avif_bytes)?;
 
             if opts.embed_exif {
                 let exif_builder = ExifBuilder::new(metadata);
                 if let Err(e) = exif_builder.append_to_avif_file(path) {
                     tracing::warn!("Failed to embed EXIF in AVIF: {}", e);
                 }
-            }
-
-            if opts.embed_icc {
-                tracing::debug!(
-                    "ICC profile embedding in AVIF is not yet supported by the encoder."
-                );
             }
         }
         #[cfg(feature = "jxl-encode")]
@@ -758,6 +762,21 @@ pub fn encode_rgb_image(
                 let exif_builder = ExifBuilder::new(metadata);
                 if let Err(e) = exif_builder.append_to_jxl_file(path) {
                     tracing::warn!("Failed to embed EXIF in JXL: {}", e);
+                }
+            }
+
+            if opts.embed_icc {
+                use crate::metadata::icc::IccProfile;
+                match std::fs::read(path) {
+                    Ok(jxl_bytes) => match IccProfile::srgb().append_to_jxl(jxl_bytes) {
+                        Ok(data) => {
+                            if let Err(e) = std::fs::write(path, data) {
+                                tracing::warn!("Failed to write JXL with ICC: {}", e);
+                            }
+                        }
+                        Err(e) => tracing::warn!("Failed to embed ICC in JXL: {}", e),
+                    },
+                    Err(e) => tracing::warn!("Failed to read JXL for ICC embedding: {}", e),
                 }
             }
         }

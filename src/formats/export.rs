@@ -174,9 +174,6 @@ pub struct AvifOptions {
     /// Whether to embed EXIF metadata. Default: true
     pub embed_exif: bool,
     /// Whether to embed sRGB ICC profile. Default: true
-    ///
-    /// Note: ICC embedding in AVIF is not yet supported by the underlying encoder.
-    /// This flag is reserved for future use; enabling it currently has no effect.
     pub embed_icc: bool,
 }
 
@@ -203,6 +200,8 @@ pub struct JxlOptions {
     pub effort: u8,
     /// Whether to embed EXIF metadata. Default: true
     pub embed_exif: bool,
+    /// Whether to embed sRGB ICC profile. Default: true
+    pub embed_icc: bool,
 }
 
 #[cfg(feature = "jxl-encode")]
@@ -212,6 +211,7 @@ impl Default for JxlOptions {
             quality: 0.0,
             effort: 7,
             embed_exif: true,
+            embed_icc: true,
         }
     }
 }
