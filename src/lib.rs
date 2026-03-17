@@ -16,7 +16,9 @@
 //! ### Standard Formats (direct RGB decode)
 //! - GIF, JPEG, PNG, WebP, JPEG XL, TIFF
 //! - SVG (requires `svg` feature)
-//! - AVIF, HEIC, APV (detection only; decode not yet supported)
+//! - AVIF decode + encode (requires `avif` feature)
+//! - HEIC (detection only; decode requires a licensed H.265 library)
+//! - APV (detection only; no Rust decoder exists yet)
 //!
 //! ## Quick Start
 //!
@@ -46,7 +48,7 @@
 //!
 //! ## Feature Flags
 //! - `serde`: Enable serialization for metadata types
-//! - `avif`: Enable AVIF encoding (requires `ravif`)
+//! - `avif`: Enable AVIF encode (via `ravif`) and decode (via `dav1d`)
 //! - `jxl-encode`: Enable JXL encoding
 //! - `svg`: Enable SVG decoding (requires `resvg`)
 

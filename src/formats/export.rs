@@ -173,6 +173,11 @@ pub struct AvifOptions {
     pub speed: u8,
     /// Whether to embed EXIF metadata. Default: true
     pub embed_exif: bool,
+    /// Whether to embed sRGB ICC profile. Default: true
+    ///
+    /// Note: ICC embedding in AVIF is not yet supported by the underlying encoder.
+    /// This flag is reserved for future use; enabling it currently has no effect.
+    pub embed_icc: bool,
 }
 
 #[cfg(feature = "avif")]
@@ -182,6 +187,7 @@ impl Default for AvifOptions {
             quality: 80,
             speed: 6,
             embed_exif: true,
+            embed_icc: true,
         }
     }
 }

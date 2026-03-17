@@ -6,6 +6,7 @@
 use crate::core::metadata::ImageMetadata;
 use little_exif::exif_tag::ExifTag;
 use little_exif::filetype::FileExtension;
+use little_exif::ifd::ExifTagGroup;
 use little_exif::metadata::Metadata;
 use little_exif::rational::{iR64, uR64};
 
@@ -251,7 +252,7 @@ impl<'a> ExifBuilder<'a> {
     /// Append EXIF metadata to existing AVIF file.
     ///
     /// Uses little_exif's native HEIF support (AVIF uses the HEIF/ISOBMFF container).
-    #[allow(dead_code)]
+    #[cfg_attr(not(feature = "avif"), allow(dead_code))]
     pub fn append_to_avif_file(&self, path: &std::path::Path) -> Result<(), ExifError> {
         let exif = self.build();
         exif.write_to_file(path)
@@ -261,11 +262,247 @@ impl<'a> ExifBuilder<'a> {
     /// Append EXIF metadata to existing JXL file.
     ///
     /// Uses little_exif's native JXL support.
-    #[allow(dead_code)]
+    #[cfg_attr(not(feature = "jxl-encode"), allow(dead_code))]
     pub fn append_to_jxl_file(&self, path: &std::path::Path) -> Result<(), ExifError> {
         let exif = self.build();
         exif.write_to_file(path)
             .map_err(|e| ExifError::Container(format!("JXL EXIF embedding failed: {}", e)))
+    }
+}
+
+// ── ExifParser ────────────────────────────────────────────────────────────────
+
+/// Parses EXIF metadata from image file bytes into an [`ImageMetadata`].
+///
+/// Supports all formats that `little_exif` can read: JPEG, WebP, PNG, TIFF,
+/// and HEIF/AVIF.
+pub struct ExifParser;
+
+impl ExifParser {
+    /// Read EXIF from `file_data` (autodetects format) and convert to [`ImageMetadata`].
+    ///
+    /// Returns a default (empty) [`ImageMetadata`] if the file has no EXIF or
+    /// if the format is not supported for metadata extraction.
+    pub fn parse_from_bytes(file_data: &[u8], file_type: FileExtension) -> ImageMetadata {
+        let exif = match Metadata::new_from_vec(&file_data.to_vec(), file_type) {
+            Ok(m) => m,
+            Err(_) => return ImageMetadata::default(),
+        };
+        Self::parse_metadata(&exif)
+    }
+
+    /// Convert an already-parsed `little_exif::Metadata` into [`ImageMetadata`].
+    pub fn parse_metadata(exif: &Metadata) -> ImageMetadata {
+        use crate::core::metadata::*;
+        use crate::tiff::{Rational as URational, SRational};
+
+        let mut md = ImageMetadata::default();
+
+        // ── Camera info ───────────────────────────────────────────────────────
+        if let Some(ExifTag::Make(s)) = exif.get_tag_by_hex(0x010f, None).next() {
+            md.camera.make = s.trim_end_matches('\0').to_string();
+        }
+        if let Some(ExifTag::Model(s)) = exif.get_tag_by_hex(0x0110, None).next() {
+            md.camera.model = s.trim_end_matches('\0').to_string();
+        }
+        if let Some(ExifTag::LensMake(s)) = exif.get_tag_by_hex(0xa433, None).next() {
+            let v = s.trim_end_matches('\0').to_string();
+            if !v.is_empty() {
+                md.camera.lens_make = Some(v);
+            }
+        }
+        if let Some(ExifTag::LensModel(s)) = exif.get_tag_by_hex(0xa434, None).next() {
+            let v = s.trim_end_matches('\0').to_string();
+            if !v.is_empty() {
+                md.camera.lens_model = Some(v);
+            }
+        }
+        if let Some(ExifTag::SerialNumber(s)) = exif.get_tag_by_hex(0xa431, None).next() {
+            let v = s.trim_end_matches('\0').to_string();
+            if !v.is_empty() {
+                md.camera.serial_number = Some(v);
+            }
+        }
+
+        // ── EXIF exposure settings ────────────────────────────────────────────
+        if let Some(ExifTag::ISO(v)) = exif.get_tag_by_hex(0x8827, None).next() {
+            if let Some(&iso) = v.first() {
+                md.exif.iso = Some(iso as u32);
+            }
+        }
+        if let Some(ExifTag::ExposureTime(v)) = exif.get_tag_by_hex(0x829a, None).next() {
+            if let Some(r) = v.first() {
+                md.exif.exposure_time = Some(URational::new(r.nominator, r.denominator));
+            }
+        }
+        if let Some(ExifTag::FNumber(v)) = exif.get_tag_by_hex(0x829d, None).next() {
+            if let Some(r) = v.first() {
+                md.exif.f_number = Some(URational::new(r.nominator, r.denominator));
+            }
+        }
+        if let Some(ExifTag::FocalLength(v)) = exif.get_tag_by_hex(0x920a, None).next() {
+            if let Some(r) = v.first() {
+                md.exif.focal_length = Some(URational::new(r.nominator, r.denominator));
+            }
+        }
+        if let Some(ExifTag::FocalLengthIn35mmFormat(v)) = exif.get_tag_by_hex(0xa405, None).next()
+        {
+            if let Some(&fl) = v.first() {
+                md.exif.focal_length_35mm = Some(fl);
+            }
+        }
+        if let Some(ExifTag::ExposureProgram(v)) = exif.get_tag_by_hex(0x8822, None).next() {
+            if let Some(&ep) = v.first() {
+                md.exif.exposure_program = Some(ep);
+            }
+        }
+        if let Some(ExifTag::MeteringMode(v)) = exif.get_tag_by_hex(0x9207, None).next() {
+            if let Some(&mm) = v.first() {
+                md.exif.metering_mode = Some(mm);
+            }
+        }
+        if let Some(ExifTag::Flash(v)) = exif.get_tag_by_hex(0x9209, None).next() {
+            if let Some(&fl) = v.first() {
+                md.exif.flash = Some(fl);
+            }
+        }
+        if let Some(ExifTag::ExposureCompensation(v)) = exif.get_tag_by_hex(0x9204, None).next() {
+            if let Some(r) = v.first() {
+                md.exif.exposure_compensation = Some(SRational::new(r.nominator, r.denominator));
+            }
+        }
+        if let Some(ExifTag::MaxApertureValue(v)) = exif.get_tag_by_hex(0x9205, None).next() {
+            if let Some(r) = v.first() {
+                md.exif.max_aperture = Some(URational::new(r.nominator, r.denominator));
+            }
+        }
+        if let Some(ExifTag::BrightnessValue(v)) = exif.get_tag_by_hex(0x9203, None).next() {
+            if let Some(r) = v.first() {
+                md.exif.brightness_value = Some(SRational::new(r.nominator, r.denominator));
+            }
+        }
+
+        // ── Date/time ─────────────────────────────────────────────────────────
+        if let Some(ExifTag::DateTimeOriginal(s)) = exif.get_tag_by_hex(0x9003, None).next() {
+            let v = s.trim_end_matches('\0').to_string();
+            if !v.is_empty() {
+                md.datetime.datetime_original = Some(v);
+            }
+        }
+        if let Some(ExifTag::CreateDate(s)) = exif.get_tag_by_hex(0x9004, None).next() {
+            let v = s.trim_end_matches('\0').to_string();
+            if !v.is_empty() {
+                md.datetime.create_date = Some(v);
+            }
+        }
+        if let Some(ExifTag::ModifyDate(s)) = exif.get_tag_by_hex(0x0132, None).next() {
+            let v = s.trim_end_matches('\0').to_string();
+            if !v.is_empty() {
+                md.datetime.modify_date = Some(v);
+            }
+        }
+        if let Some(ExifTag::OffsetTime(s)) = exif.get_tag_by_hex(0x9010, None).next() {
+            let v = s.trim_end_matches('\0').to_string();
+            if !v.is_empty() {
+                md.datetime.offset_time = Some(v);
+            }
+        }
+        if let Some(ExifTag::SubSecTime(s)) = exif.get_tag_by_hex(0x9290, None).next() {
+            let v = s.trim_end_matches('\0').to_string();
+            if !v.is_empty() {
+                md.datetime.subsec_time = Some(v);
+            }
+        }
+
+        // ── GPS ───────────────────────────────────────────────────────────────
+        if let Some(ExifTag::GPSLatitude(v)) =
+            exif.get_tag_by_hex(0x0002, Some(ExifTagGroup::GPS)).next()
+        {
+            if v.len() >= 3 {
+                md.gps.latitude = Some([
+                    URational::new(v[0].nominator, v[0].denominator),
+                    URational::new(v[1].nominator, v[1].denominator),
+                    URational::new(v[2].nominator, v[2].denominator),
+                ]);
+            }
+        }
+        if let Some(ExifTag::GPSLatitudeRef(s)) =
+            exif.get_tag_by_hex(0x0001, Some(ExifTagGroup::GPS)).next()
+        {
+            md.gps.latitude_ref = s.chars().next().filter(|c| !c.is_ascii_control());
+        }
+        if let Some(ExifTag::GPSLongitude(v)) =
+            exif.get_tag_by_hex(0x0004, Some(ExifTagGroup::GPS)).next()
+        {
+            if v.len() >= 3 {
+                md.gps.longitude = Some([
+                    URational::new(v[0].nominator, v[0].denominator),
+                    URational::new(v[1].nominator, v[1].denominator),
+                    URational::new(v[2].nominator, v[2].denominator),
+                ]);
+            }
+        }
+        if let Some(ExifTag::GPSLongitudeRef(s)) =
+            exif.get_tag_by_hex(0x0003, Some(ExifTagGroup::GPS)).next()
+        {
+            md.gps.longitude_ref = s.chars().next().filter(|c| !c.is_ascii_control());
+        }
+        if let Some(ExifTag::GPSAltitude(v)) =
+            exif.get_tag_by_hex(0x0006, Some(ExifTagGroup::GPS)).next()
+        {
+            if let Some(r) = v.first() {
+                md.gps.altitude = Some(URational::new(r.nominator, r.denominator));
+            }
+        }
+        if let Some(ExifTag::GPSAltitudeRef(v)) =
+            exif.get_tag_by_hex(0x0005, Some(ExifTagGroup::GPS)).next()
+        {
+            if let Some(&ar) = v.first() {
+                md.gps.altitude_ref = Some(ar);
+            }
+        }
+        if let Some(ExifTag::GPSTimeStamp(v)) =
+            exif.get_tag_by_hex(0x0007, Some(ExifTagGroup::GPS)).next()
+        {
+            if v.len() >= 3 {
+                md.gps.timestamp = Some([
+                    URational::new(v[0].nominator, v[0].denominator),
+                    URational::new(v[1].nominator, v[1].denominator),
+                    URational::new(v[2].nominator, v[2].denominator),
+                ]);
+            }
+        }
+        if let Some(ExifTag::GPSDateStamp(s)) =
+            exif.get_tag_by_hex(0x001d, Some(ExifTagGroup::GPS)).next()
+        {
+            let v = s.trim_end_matches('\0').to_string();
+            if !v.is_empty() {
+                md.gps.datestamp = Some(v);
+            }
+        }
+        if let Some(ExifTag::GPSSpeed(v)) =
+            exif.get_tag_by_hex(0x000d, Some(ExifTagGroup::GPS)).next()
+        {
+            if let Some(r) = v.first() {
+                md.gps.speed = Some(URational::new(r.nominator, r.denominator));
+            }
+        }
+        if let Some(ExifTag::GPSImgDirection(v)) =
+            exif.get_tag_by_hex(0x0011, Some(ExifTagGroup::GPS)).next()
+        {
+            if let Some(r) = v.first() {
+                md.gps.img_direction = Some(URational::new(r.nominator, r.denominator));
+            }
+        }
+
+        // ── Image info ────────────────────────────────────────────────────────
+        if let Some(ExifTag::Orientation(v)) = exif.get_tag_by_hex(0x0112, None).next() {
+            if let Some(&o) = v.first() {
+                md.image.orientation = Some(o);
+            }
+        }
+
+        md
     }
 }
 
