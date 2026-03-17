@@ -11,7 +11,8 @@
 //! - **`error`** — `RawError`, `ParseError`, `FormatError`, `ProcessingError`,
 //!   `EncodeError`, and `RawResult`.
 //! - **`formats`** — `RawFile`, `RawFormat`, `StandardFormat`,
-//!   `decode_standard_image`, `detect_standard_format`, `DngExportConfig`,
+//!   `decode_standard_image`, `detect_standard_format`,
+//!   `read_standard_image_metadata`, `DngExportConfig`,
 //!   `EncodeOptions`, `PngOptions`, `JpegOptions`, `WebPOptions`.
 //! - **`processing`** — `ProcessingOptions` and demosaicing types.
 //! - **`tiff`** — `TiffParser`, `TiffTag`, `TiffValue`, and related TIFF types.
@@ -49,6 +50,7 @@ pub use crate::formats::export::{EncodeOptions, JpegOptions, PngOptions, WebPOpt
 pub use crate::formats::{
     DngExportConfig, RawFile, RawFormat, StandardFormat, decode_standard_image,
     detect_standard_format, encode_rgb_image, encode_rgb_image_to_writer, export_dng,
+    read_standard_image_metadata,
 };
 
 // processing

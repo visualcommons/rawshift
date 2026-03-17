@@ -218,6 +218,29 @@ fn generate_svg(data_dir: &Path, fixture_dir: &Path) {
     println!("  Generated {}", name);
 }
 
+#[cfg(feature = "avif")]
+fn generate_avif(data_dir: &Path, fixture_dir: &Path) {
+    use ravif::{Encoder, Img, RGBA8};
+
+    let (w, h, pixels) = reference_pixels_u8();
+    let dir = data_dir.join("avif");
+    let fdir = fixture_dir.join("avif");
+    fs::create_dir_all(&dir).unwrap();
+    fs::create_dir_all(&fdir).unwrap();
+
+    let rgba: Vec<RGBA8> = pixels
+        .chunks_exact(3)
+        .map(|c| RGBA8::new(c[0], c[1], c[2], 255))
+        .collect();
+    let img = Img::new(rgba.as_slice(), w as usize, h as usize);
+    let encoder = Encoder::new().with_quality(90.0).with_speed(10);
+    let result = encoder.encode_rgba(img).expect("encode AVIF fixture");
+    let name = "test_8x8.avif";
+    fs::write(dir.join(name), result.avif_file).expect("write AVIF");
+    write_expected_json(&fdir, name, w, h, "AVIF");
+    println!("  Generated {}", name);
+}
+
 fn main() {
     let data_dir = test_data_dir();
     let fixture_dir = test_fixtures_dir();
@@ -233,8 +256,12 @@ fn main() {
     generate_tiff(&data_dir, &fixture_dir);
     generate_webp(&data_dir, &fixture_dir);
     generate_svg(&data_dir, &fixture_dir);
+    #[cfg(feature = "avif")]
+    generate_avif(&data_dir, &fixture_dir);
 
     println!();
     println!("Done. Run integration tests with:");
     println!("  cargo test --test standard_decode_fixtures");
+    #[cfg(feature = "avif")]
+    println!("  cargo test --features avif --test standard_decode_fixtures");
 }

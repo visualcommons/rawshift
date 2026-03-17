@@ -24,6 +24,7 @@ jpeg-encoder = "0.7"
 jxl-oxide = "0.12.5"
 little_exif = "0.6"
 rayon = "1.11.0"
+image = { version = "0.25", default-features = false, features = ["avif-native"], optional = true }
 ravif = { version = "0.13", optional = true }
 resvg = { version = "0.44", optional = true }
 serde = { version = "1.0", optional = true, features = ["derive"] }
@@ -49,7 +50,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 serde = ["dep:serde"]
-avif = ["ravif"]
+avif = ["dep:image", "ravif"]
 jxl-encode = ["zune-jpegxl"]
 # Placeholder: HEIC/HEIF decode support (no dependencies yet)
 heic = []

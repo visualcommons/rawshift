@@ -15,7 +15,9 @@ pub(crate) mod raf;
 pub(crate) mod standard;
 
 pub use dng_export::{DngExportConfig, export_dng};
-pub use standard::{StandardFormat, decode_standard_image, detect_standard_format};
+pub use standard::{
+    StandardFormat, decode_standard_image, detect_standard_format, read_standard_image_metadata,
+};
 
 use std::io::{Read, Seek, SeekFrom};
 
@@ -666,6 +668,7 @@ pub fn encode_rgb_image(
         }
         #[cfg(feature = "avif")]
         EncodeOptions::Avif(opts) => {
+            use crate::metadata::exif::ExifBuilder;
             use ravif::{Encoder, Img, RGBA8};
 
             let rgba_data: Vec<RGBA8> = image
@@ -695,9 +698,15 @@ pub fn encode_rgb_image(
             std::fs::write(path, result.avif_file)?;
 
             if opts.embed_exif {
-                tracing::warn!(
-                    "AVIF EXIF embedding is currently disabled due to file corruption. \
-                     The image was saved without EXIF metadata."
+                let exif_builder = ExifBuilder::new(metadata);
+                if let Err(e) = exif_builder.append_to_avif_file(path) {
+                    tracing::warn!("Failed to embed EXIF in AVIF: {}", e);
+                }
+            }
+
+            if opts.embed_icc {
+                tracing::debug!(
+                    "ICC profile embedding in AVIF is not yet supported by the encoder."
                 );
             }
         }

@@ -117,6 +117,8 @@ impl StandardFormat {
             | StandardFormat::WebP
             | StandardFormat::Jxl
             | StandardFormat::Tiff => true,
+            #[cfg(feature = "avif")]
+            StandardFormat::Avif => true,
             #[cfg(feature = "svg")]
             StandardFormat::Svg => true,
             _ => false,
@@ -613,13 +615,35 @@ fn decode_tiff(data: &[u8]) -> RawResult<RgbImage> {
 
 // ── AVIF ─────────────────────────────────────────────────────────────────────
 
+#[cfg(feature = "avif")]
+fn decode_avif(data: &[u8]) -> RawResult<RgbImage> {
+    use image::DynamicImage;
+    use image::codecs::avif::AvifDecoder;
+
+    let decoder = AvifDecoder::new(Cursor::new(data)).map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "AVIF",
+            message: format!("{e}"),
+        })
+    })?;
+
+    let img = DynamicImage::from_decoder(decoder).map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "AVIF",
+            message: format!("{e}"),
+        })
+    })?;
+
+    let rgb = img.into_rgb16();
+    let w = rgb.width();
+    let h = rgb.height();
+    Ok(RgbImage::new(w, h, rgb.into_raw()))
+}
+
+#[cfg(not(feature = "avif"))]
 fn decode_avif(_data: &[u8]) -> RawResult<RgbImage> {
-    // `ravif` (the only AVIF crate in Cargo.toml) is an *encoder* only.
-    // There is no AVIF *decoder* dependency available.
     Err(RawError::Unsupported(
-        "AVIF decoding is not yet implemented. \
-         Add the `libavif` or `avif-decode` crate as a dependency to enable this."
-            .to_string(),
+        "AVIF decoding requires the `avif` feature flag.".to_string(),
     ))
 }
 
@@ -727,6 +751,44 @@ pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<R
         StandardFormat::Svg => decode_svg(data),
         StandardFormat::Apv => decode_apv(data),
     }
+}
+
+/// Extract EXIF metadata from a standard image without decoding pixel data.
+///
+/// Reads embedded EXIF from image file bytes and maps the tags to the unified
+/// [`ImageMetadata`] type.  Returns a default (empty) [`ImageMetadata`] when
+/// the format carries no EXIF or when the format is not supported for metadata
+/// extraction (e.g. GIF, SVG, APV).
+///
+/// # Supported formats
+/// | Format | Metadata source |
+/// |--------|----------------|
+/// | JPEG   | APP1 EXIF segment |
+/// | TIFF   | IFD0 EXIF tags |
+/// | WebP   | EXIF chunk |
+/// | AVIF   | HEIF/ISOBMFF Exif item |
+/// | PNG    | eXIf chunk |
+/// | GIF / JXL / SVG / APV / HEIC | returns empty metadata |
+pub fn read_standard_image_metadata(
+    data: &[u8],
+    format: StandardFormat,
+) -> crate::core::metadata::ImageMetadata {
+    use crate::metadata::exif::ExifParser;
+    use little_exif::filetype::FileExtension;
+
+    let file_type = match format {
+        StandardFormat::Jpeg => FileExtension::JPEG,
+        StandardFormat::Tiff => FileExtension::TIFF,
+        StandardFormat::WebP => FileExtension::WEBP,
+        StandardFormat::Avif => FileExtension::HEIF,
+        StandardFormat::Png => FileExtension::PNG {
+            as_zTXt_chunk: false,
+        },
+        // Formats with no EXIF support in little_exif
+        _ => return crate::core::metadata::ImageMetadata::default(),
+    };
+
+    ExifParser::parse_from_bytes(data, file_type)
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -1173,8 +1235,9 @@ mod tests {
         assert_eq!(img.data[2], 0); // B of red pixel
     }
 
+    #[cfg(not(feature = "avif"))]
     #[test]
-    fn avif_returns_unsupported() {
+    fn avif_returns_unsupported_without_feature() {
         let mut magic = [0u8; 12];
         magic[4..8].copy_from_slice(b"ftyp");
         magic[8..12].copy_from_slice(b"avif");
@@ -1315,8 +1378,12 @@ mod tests {
         assert!(StandardFormat::WebP.supports_decode());
         assert!(StandardFormat::Jxl.supports_decode());
         assert!(StandardFormat::Tiff.supports_decode());
-        // Stubbed formats
+        // AVIF decode requires the `avif` feature
+        #[cfg(feature = "avif")]
+        assert!(StandardFormat::Avif.supports_decode());
+        #[cfg(not(feature = "avif"))]
         assert!(!StandardFormat::Avif.supports_decode());
+        // Stubbed formats
         assert!(!StandardFormat::Heic.supports_decode());
         assert!(!StandardFormat::Apv.supports_decode());
     }
@@ -1483,5 +1550,97 @@ mod tests {
         assert_eq!(img.width(), 4);
         assert_eq!(img.height(), 4);
         assert_eq!(img.data.len(), 4 * 4 * 3);
+    }
+
+    // ── read_standard_image_metadata ─────────────────────────────────────
+
+    #[test]
+    fn read_metadata_unsupported_format_returns_default() {
+        // GIF has no EXIF support → returns empty metadata (no panic)
+        let gif_header = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\x00\x00\x00\x00\x00\x3b";
+        let md = read_standard_image_metadata(gif_header, StandardFormat::Gif);
+        assert!(md.camera.make.is_empty());
+        assert!(md.exif.iso.is_none());
+    }
+
+    #[test]
+    fn read_metadata_invalid_data_returns_default() {
+        // Garbage data → little_exif returns error → we return default
+        let junk = b"\x00\x01\x02\x03\x04\x05\x06\x07";
+        let md = read_standard_image_metadata(junk, StandardFormat::Jpeg);
+        assert!(md.camera.make.is_empty());
+    }
+
+    #[cfg(feature = "avif")]
+    #[test]
+    fn avif_exif_round_trip() {
+        use crate::core::metadata::*;
+        use crate::formats::encode_rgb_image;
+        use crate::formats::export::{AvifOptions, EncodeOptions};
+
+        // Build a 2×2 synthetic image (solid red).
+        let data: Vec<u16> = vec![65535, 0, 0, 65535, 0, 0, 65535, 0, 0, 65535, 0, 0];
+        let rgb = RgbImage::new(2, 2, data);
+
+        // Build metadata with known EXIF values.
+        let md = ImageMetadata {
+            camera: CameraInfo {
+                make: "TestMake".to_string(),
+                model: "TestModel".to_string(),
+                ..Default::default()
+            },
+            exif: ExifInfo {
+                iso: Some(400),
+                focal_length: Some(URational::new(50, 1)),
+                ..Default::default()
+            },
+            datetime: DateTimeInfo {
+                datetime_original: Some("2025:06:15 12:00:00".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let tmp = std::env::temp_dir().join("rawshift_avif_exif_test.avif");
+        let opts = EncodeOptions::Avif(AvifOptions {
+            quality: 60,
+            speed: 10,
+            embed_exif: true,
+            embed_icc: false,
+        });
+        encode_rgb_image(&rgb, &md, &tmp, &opts).expect("encode AVIF");
+
+        // Read back the AVIF file and extract metadata.
+        let avif_bytes = std::fs::read(&tmp).expect("read back AVIF");
+        let read_md = read_standard_image_metadata(&avif_bytes, StandardFormat::Avif);
+
+        // Verify core EXIF tags survived the round-trip.
+        assert_eq!(read_md.camera.make, "TestMake", "make round-trip");
+        assert_eq!(read_md.camera.model, "TestModel", "model round-trip");
+        assert_eq!(read_md.exif.iso, Some(400), "ISO round-trip");
+        assert_eq!(
+            read_md.exif.focal_length.map(|r| r.numerator),
+            Some(50),
+            "focal_length round-trip"
+        );
+        assert_eq!(
+            read_md.datetime.datetime_original,
+            Some("2025:06:15 12:00:00".to_string()),
+            "datetime_original round-trip"
+        );
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[cfg(feature = "avif")]
+    #[test]
+    fn avif_supports_decode_with_feature() {
+        assert!(StandardFormat::Avif.supports_decode());
+    }
+
+    #[cfg(feature = "avif")]
+    #[test]
+    fn avif_supports_encode_with_feature() {
+        assert!(StandardFormat::Avif.supports_encode());
     }
 }

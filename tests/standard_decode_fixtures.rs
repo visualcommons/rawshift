@@ -215,6 +215,12 @@ fn decode_svg_dimensions_from_file() {
     assert_decode_dimensions("svg", StandardFormat::Svg);
 }
 
+#[cfg(feature = "avif")]
+#[test]
+fn decode_avif_dimensions_from_file() {
+    assert_decode_dimensions("avif", StandardFormat::Avif);
+}
+
 // ============================================================================
 // Full Detect + Decode Pipeline from File
 // ============================================================================
@@ -273,6 +279,12 @@ fn detect_then_decode_webp_from_file() {
 #[test]
 fn detect_then_decode_svg_from_file() {
     assert_detect_then_decode("svg", StandardFormat::Svg);
+}
+
+#[cfg(feature = "avif")]
+#[test]
+fn detect_then_decode_avif_from_file() {
+    assert_detect_then_decode("avif", StandardFormat::Avif);
 }
 
 // ============================================================================
