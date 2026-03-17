@@ -246,6 +246,7 @@ impl<R: Read + Seek> crate::core::MetadataExtractor for CrwFile<R> {
                 default_crop_origin: m.map(|x| (x.active_area.origin.x, x.active_area.origin.y)),
                 default_crop_size: m.map(|x| (x.active_area.size.width, x.active_area.size.height)),
             },
+            xmp: None,
         }
     }
 }

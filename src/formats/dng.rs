@@ -1350,6 +1350,7 @@ impl<R: Read + Seek> crate::core::MetadataExtractor for DngFile<R> {
                 default_crop_origin: m.and_then(|x| x.default_crop_origin),
                 default_crop_size: m.and_then(|x| x.default_crop_size),
             },
+            xmp: None,
         }
     }
 }

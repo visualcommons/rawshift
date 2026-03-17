@@ -8,7 +8,7 @@
 use rawshift::core::image::RgbImage;
 use rawshift::core::metadata::ImageMetadata;
 use rawshift::formats::encode_rgb_image;
-use rawshift::formats::export::{EncodeOptions, JpegOptions, PngOptions, WebPOptions};
+use rawshift::formats::export::{EncodeOptions, JpegOptions, PngOptions, WebPMode, WebPOptions};
 use std::fs;
 use std::path::PathBuf;
 
@@ -55,12 +55,17 @@ fn jpeg_has_icc(data: &[u8]) -> bool {
 
 /// Check if WebP data contains EXIF chunk
 fn webp_has_exif(data: &[u8]) -> bool {
-    for i in 0..data.len().saturating_sub(4) {
-        if &data[i..i + 4] == b"EXIF" {
-            return true;
-        }
-    }
-    false
+    data.windows(4).any(|w| w == b"EXIF")
+}
+
+/// Check if WebP data contains ICC profile chunk
+fn webp_has_icc(data: &[u8]) -> bool {
+    data.windows(4).any(|w| w == b"ICCP")
+}
+
+/// Check if WebP data contains XMP chunk
+fn webp_has_xmp(data: &[u8]) -> bool {
+    data.windows(4).any(|w| w == b"XMP ")
 }
 
 // ============================================================================
@@ -249,14 +254,13 @@ mod webp_tests {
     use super::*;
 
     #[test]
-    fn test_webp_export_with_exif_enabled() {
+    fn test_webp_export_lossy_with_exif() {
         let img = synthetic_image();
-        let path = temp_path("export_with_exif.webp");
+        let path = temp_path("export_lossy_exif.webp");
 
-        let opts = WebPOptions {
-            embed_exif: true,
-            embed_icc: false,
-        };
+        let mut opts = WebPOptions::lossy();
+        opts.embed_icc = false;
+        opts.embed_xmp = false;
         encode_rgb_image(
             &img,
             &ImageMetadata::default(),
@@ -274,14 +278,34 @@ mod webp_tests {
     }
 
     #[test]
-    fn test_webp_export_without_exif() {
+    fn test_webp_export_lossless() {
         let img = synthetic_image();
-        let path = temp_path("export_no_exif.webp");
+        let path = temp_path("export_lossless.webp");
 
-        let opts = WebPOptions {
-            embed_exif: false,
-            embed_icc: false,
-        };
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::webp_lossless(),
+        )
+        .expect("Export lossless WebP");
+
+        let data = fs::read(&path).expect("Read WebP");
+        assert_eq!(&data[0..4], b"RIFF", "Should start with RIFF");
+        assert_eq!(&data[8..12], b"WEBP", "Should have WEBP FourCC");
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_webp_export_without_metadata() {
+        let img = synthetic_image();
+        let path = temp_path("export_no_meta.webp");
+
+        let mut opts = WebPOptions::lossy();
+        opts.embed_exif = false;
+        opts.embed_icc = false;
+        opts.embed_xmp = false;
         encode_rgb_image(
             &img,
             &ImageMetadata::default(),
@@ -292,6 +316,51 @@ mod webp_tests {
 
         let data = fs::read(&path).expect("Read WebP");
         assert!(!webp_has_exif(&data), "WebP should NOT contain EXIF");
+        assert!(!webp_has_icc(&data), "WebP should NOT contain ICC");
+        assert!(!webp_has_xmp(&data), "WebP should NOT contain XMP");
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_webp_export_with_icc() {
+        let img = synthetic_image();
+        let path = temp_path("export_icc.webp");
+
+        let mut opts = WebPOptions::lossy();
+        opts.embed_exif = false;
+        opts.embed_xmp = false;
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path,
+            &EncodeOptions::WebP(opts),
+        )
+        .expect("Export WebP");
+
+        let data = fs::read(&path).expect("Read WebP");
+        assert!(webp_has_icc(&data), "WebP should contain ICC profile");
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_webp_export_with_xmp() {
+        let img = synthetic_image();
+        let path = temp_path("export_xmp.webp");
+
+        let meta = ImageMetadata {
+            xmp: Some(b"<x:xmpmeta>test</x:xmpmeta>".to_vec()),
+            ..Default::default()
+        };
+
+        let mut opts = WebPOptions::lossy();
+        opts.embed_exif = false;
+        opts.embed_icc = false;
+        encode_rgb_image(&img, &meta, &path, &EncodeOptions::WebP(opts)).expect("Export WebP");
+
+        let data = fs::read(&path).expect("Read WebP");
+        assert!(webp_has_xmp(&data), "WebP should contain XMP metadata");
 
         fs::remove_file(&path).ok();
     }
@@ -305,14 +374,65 @@ mod webp_tests {
             &img,
             &ImageMetadata::default(),
             &path,
-            &EncodeOptions::webp(),
+            &EncodeOptions::webp_lossy(),
         )
         .expect("Export WebP");
 
         let data = fs::read(&path).expect("Read WebP");
         assert!(webp_has_exif(&data), "Default WebP should contain EXIF");
+        assert!(webp_has_icc(&data), "Default WebP should contain ICC");
 
         fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_webp_quality_affects_file_size() {
+        let data: Vec<u16> = (0..64 * 64 * 3)
+            .map(|i| ((i * 997) % 65536) as u16)
+            .collect();
+        let img = RgbImage::new(64, 64, data);
+
+        let path_low = temp_path("webp_quality_low.webp");
+        let path_high = temp_path("webp_quality_high.webp");
+
+        let mut opts_low = WebPOptions::lossy();
+        opts_low.quality = 10.0;
+        opts_low.embed_exif = false;
+        opts_low.embed_icc = false;
+        opts_low.embed_xmp = false;
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path_low,
+            &EncodeOptions::WebP(opts_low),
+        )
+        .expect("Export low quality");
+
+        let mut opts_high = WebPOptions::lossy();
+        opts_high.quality = 95.0;
+        opts_high.embed_exif = false;
+        opts_high.embed_icc = false;
+        opts_high.embed_xmp = false;
+        encode_rgb_image(
+            &img,
+            &ImageMetadata::default(),
+            &path_high,
+            &EncodeOptions::WebP(opts_high),
+        )
+        .expect("Export high quality");
+
+        let size_low = fs::metadata(&path_low).expect("Get size").len();
+        let size_high = fs::metadata(&path_high).expect("Get size").len();
+
+        assert!(
+            size_high > size_low,
+            "High quality ({}) should be larger than low quality ({})",
+            size_high,
+            size_low
+        );
+
+        fs::remove_file(&path_low).ok();
+        fs::remove_file(&path_high).ok();
     }
 }
 
@@ -378,7 +498,8 @@ mod encode_options_tests {
     fn test_encode_options_constructors() {
         let _ = EncodeOptions::png();
         let _ = EncodeOptions::jpeg();
-        let _ = EncodeOptions::webp();
+        let _ = EncodeOptions::webp_lossy();
+        let _ = EncodeOptions::webp_lossless();
         #[cfg(feature = "avif")]
         let _ = EncodeOptions::avif();
         #[cfg(feature = "jxl-encode")]
@@ -397,7 +518,31 @@ mod encode_options_tests {
     #[test]
     fn test_webp_options_defaults() {
         let opts = WebPOptions::default();
+        assert_eq!(
+            opts.mode,
+            WebPMode::Lossy,
+            "WebP default mode should be Lossy"
+        );
+        assert!(
+            (opts.quality - 75.0).abs() < f32::EPSILON,
+            "WebP default quality should be 75"
+        );
+        assert_eq!(opts.method, 4, "WebP default method should be 4");
+        assert_eq!(
+            opts.near_lossless, 100,
+            "WebP default near_lossless should be 100"
+        );
         assert!(opts.embed_exif, "WebP should embed EXIF by default");
         assert!(opts.embed_icc, "WebP should embed ICC by default");
+        assert!(opts.embed_xmp, "WebP should embed XMP by default");
+    }
+
+    #[test]
+    fn test_webp_named_constructors() {
+        let lossy = WebPOptions::lossy();
+        assert_eq!(lossy.mode, WebPMode::Lossy);
+
+        let lossless = WebPOptions::lossless();
+        assert_eq!(lossless.mode, WebPMode::Lossless);
     }
 }

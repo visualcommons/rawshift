@@ -179,22 +179,31 @@ fn generate_tiff(data_dir: &Path, fixture_dir: &Path) {
 }
 
 fn generate_webp(data_dir: &Path, fixture_dir: &Path) {
-    use image_webp::WebPEncoder;
+    use rawshift::core::image::RgbImage;
+    use rawshift::core::metadata::ImageMetadata;
+    use rawshift::formats::encode_rgb_image;
+    use rawshift::formats::export::EncodeOptions;
 
     let dir = data_dir.join("webp");
     let fdir = fixture_dir.join("webp");
     fs::create_dir_all(&dir).unwrap();
     fs::create_dir_all(&fdir).unwrap();
 
-    let (w, h, pixels) = reference_pixels_u8();
-    let mut encoded = Vec::new();
-    let encoder = WebPEncoder::new(&mut encoded);
-    encoder
-        .encode(&pixels, w, h, image_webp::ColorType::Rgb8)
-        .expect("WebP encode");
+    let (w, h, pixels_u8) = reference_pixels_u8();
+    // Convert 8-bit to 16-bit (same as u8_to_u16: val * 257)
+    let pixels_u16: Vec<u16> = pixels_u8.iter().map(|&v| v as u16 * 257).collect();
+    let img = RgbImage::new(w, h, pixels_u16);
 
     let name = "test_8x8.webp";
-    fs::write(dir.join(name), &encoded).expect("write WebP");
+    let out_path = dir.join(name);
+    encode_rgb_image(
+        &img,
+        &ImageMetadata::default(),
+        &out_path,
+        &EncodeOptions::webp_lossless(),
+    )
+    .expect("WebP encode");
+
     write_expected_json(&fdir, name, w, h, "WebP");
     println!("  Generated {}", name);
 }

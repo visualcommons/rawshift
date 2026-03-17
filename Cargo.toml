@@ -18,7 +18,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 binrw = "0.15"
-image-webp = "0.2"
+libwebp-sys = "0.14"
 img-parts = "0.4"
 jpeg-encoder = "0.7"
 jxl-oxide = "0.12.5"

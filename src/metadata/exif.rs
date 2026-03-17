@@ -248,23 +248,6 @@ impl<'a> ExifBuilder<'a> {
         Ok(output.into_inner())
     }
 
-    /// Append EXIF metadata to existing WebP data.
-    ///
-    /// Uses img-parts for zero-copy segment manipulation.
-    pub fn append_to_webp(&self, webp_data: Vec<u8>) -> Result<Vec<u8>, ExifError> {
-        use img_parts::webp::WebP;
-        use img_parts::{Bytes, ImageEXIF};
-        use std::io::Cursor;
-
-        let exif_bytes = self.build_bytes()?;
-        let mut webp = WebP::from_bytes(Bytes::from(webp_data))?;
-        webp.set_exif(Some(Bytes::from(exif_bytes)));
-
-        let mut output = Cursor::new(Vec::new());
-        webp.encoder().write_to(&mut output)?;
-        Ok(output.into_inner())
-    }
-
     /// Append EXIF metadata to existing AVIF file.
     ///
     /// Uses little_exif's native HEIF support (AVIF uses the HEIF/ISOBMFF container).

@@ -299,6 +299,7 @@ impl<R: Read + Seek> crate::core::MetadataExtractor for RafFile<R> {
                 default_crop_origin: None,
                 default_crop_size: None,
             },
+            xmp: None,
         }
     }
 }

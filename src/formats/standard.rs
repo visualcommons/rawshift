@@ -3,7 +3,7 @@
 //! This module provides decoders for common non-RAW image formats that decode
 //! directly to RGB pixel data stored in an [`RgbImage`].
 
-use std::io::{BufReader, Cursor};
+use std::io::Cursor;
 
 use zune_core::bytestream::ZCursor;
 use zune_core::colorspace::ColorSpace;
@@ -408,42 +408,14 @@ fn decode_png(data: &[u8]) -> RawResult<RgbImage> {
 // ── WebP ─────────────────────────────────────────────────────────────────────
 
 fn decode_webp(data: &[u8]) -> RawResult<RgbImage> {
-    let cursor = BufReader::new(Cursor::new(data));
-    let mut decoder = image_webp::WebPDecoder::new(cursor).map_err(|e| {
+    let (w, h, rgb) = crate::codecs::webp::decode_webp_rgb(data).map_err(|e| {
         RawError::Format(FormatError::ImageDecode {
             format: "WebP",
-            message: format!("{e}"),
+            message: e,
         })
     })?;
 
-    let (w, h) = decoder.dimensions();
-    let has_alpha = decoder.has_alpha();
-    let bytes_per_pixel: usize = if has_alpha { 4 } else { 3 };
-
-    let buf_size = decoder.output_buffer_size().ok_or_else(|| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "WebP",
-            message: "image too large to fit in memory".to_string(),
-        })
-    })?;
-
-    let mut raw_pixels = vec![0u8; buf_size];
-    decoder.read_image(&mut raw_pixels).map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "WebP",
-            message: format!("{e}"),
-        })
-    })?;
-
-    // Strip alpha channel if present, converting to plain RGB
-    let data_u16: Vec<u16> = if has_alpha {
-        raw_pixels
-            .chunks_exact(bytes_per_pixel)
-            .flat_map(|px| [u8_to_u16(px[0]), u8_to_u16(px[1]), u8_to_u16(px[2])])
-            .collect()
-    } else {
-        raw_pixels.iter().map(|&v| u8_to_u16(v)).collect()
-    };
+    let data_u16: Vec<u16> = rgb.iter().map(|&v| u8_to_u16(v)).collect();
 
     Ok(RgbImage::new(w, h, data_u16))
 }

@@ -171,8 +171,8 @@ pub enum EncodeError {
     Jpeg(#[from] jpeg_encoder::EncodingError),
 
     /// WebP encoding error.
-    #[error("WebP encoding error: {0:?}")]
-    WebP(#[from] image_webp::EncodingError),
+    #[error("WebP error: {0}")]
+    WebP(String),
 }
 
 impl From<binrw::Error> for RawError {
@@ -184,12 +184,6 @@ impl From<binrw::Error> for RawError {
 impl From<jpeg_encoder::EncodingError> for RawError {
     fn from(err: jpeg_encoder::EncodingError) -> Self {
         RawError::Encode(EncodeError::Jpeg(err))
-    }
-}
-
-impl From<image_webp::EncodingError> for RawError {
-    fn from(err: image_webp::EncodingError) -> Self {
-        RawError::Encode(EncodeError::WebP(err))
     }
 }
 

@@ -631,36 +631,55 @@ pub fn encode_rgb_image(
             }
         }
         EncodeOptions::WebP(opts) => {
+            use crate::codecs::webp::{build_webp_config, encode_webp_rgb, mux_webp};
+            use crate::formats::export::WebPMode;
             use crate::metadata::exif::ExifBuilder;
-            use image_webp::WebPEncoder;
+            use crate::metadata::icc::IccProfile;
+
+            let lossless = opts.mode == WebPMode::Lossless;
+            let config = build_webp_config(lossless, opts.quality, opts.method, opts.near_lossless)
+                .map_err(|e| RawError::Encode(EncodeError::WebP(e)))?;
 
             let mut data_8bit = Vec::with_capacity(image.data.len());
             for &pixel in &image.data {
                 data_8bit.push((pixel >> 8) as u8);
             }
 
-            let mut output = Vec::new();
-            let encoder = WebPEncoder::new(&mut output);
-            encoder.encode(
-                &data_8bit,
-                image.width(),
-                image.height(),
-                image_webp::ColorType::Rgb8,
-            )?;
+            let encoded = encode_webp_rgb(&data_8bit, image.width(), image.height(), &config)
+                .map_err(|e| RawError::Encode(EncodeError::WebP(e)))?;
 
-            if opts.embed_exif || opts.embed_icc {
-                if opts.embed_exif {
-                    let exif_builder = ExifBuilder::new(metadata);
-                    match exif_builder.append_to_webp(output.clone()) {
-                        Ok(data) => output = data,
-                        Err(e) => tracing::warn!("Failed to embed EXIF in WebP: {}", e),
+            let exif_bytes = if opts.embed_exif {
+                let exif_builder = ExifBuilder::new(metadata);
+                match exif_builder.build_bytes() {
+                    Ok(bytes) => Some(bytes),
+                    Err(e) => {
+                        tracing::warn!("Failed to build EXIF for WebP: {}", e);
+                        None
                     }
                 }
+            } else {
+                None
+            };
 
-                if opts.embed_icc {
-                    tracing::debug!("ICC profile embedding in WebP not yet supported");
-                }
-            }
+            let icc_bytes = if opts.embed_icc {
+                Some(IccProfile::srgb().as_bytes().to_vec())
+            } else {
+                None
+            };
+
+            let xmp_bytes = if opts.embed_xmp {
+                metadata.xmp.as_deref()
+            } else {
+                None
+            };
+
+            let output = mux_webp(
+                &encoded,
+                exif_bytes.as_deref(),
+                icc_bytes.as_deref(),
+                xmp_bytes,
+            )
+            .map_err(|e| RawError::Encode(EncodeError::WebP(e)))?;
 
             std::fs::write(path, output)?;
         }
@@ -827,30 +846,55 @@ pub fn encode_rgb_image_to_writer<W: std::io::Write>(
             writer.write_all(&jpeg_buf)?;
         }
         EncodeOptions::WebP(opts) => {
+            use crate::codecs::webp::{build_webp_config, encode_webp_rgb, mux_webp};
+            use crate::formats::export::WebPMode;
             use crate::metadata::exif::ExifBuilder;
-            use image_webp::WebPEncoder;
+            use crate::metadata::icc::IccProfile;
+
+            let lossless = opts.mode == WebPMode::Lossless;
+            let config = build_webp_config(lossless, opts.quality, opts.method, opts.near_lossless)
+                .map_err(|e| RawError::Encode(EncodeError::WebP(e)))?;
 
             let mut data_8bit = Vec::with_capacity(image.data.len());
             for &pixel in &image.data {
                 data_8bit.push((pixel >> 8) as u8);
             }
 
-            let mut output = Vec::new();
-            let encoder = WebPEncoder::new(&mut output);
-            encoder.encode(
-                &data_8bit,
-                image.width(),
-                image.height(),
-                image_webp::ColorType::Rgb8,
-            )?;
+            let encoded = encode_webp_rgb(&data_8bit, image.width(), image.height(), &config)
+                .map_err(|e| RawError::Encode(EncodeError::WebP(e)))?;
 
-            if opts.embed_exif {
+            let exif_bytes = if opts.embed_exif {
                 let exif_builder = ExifBuilder::new(metadata);
-                match exif_builder.append_to_webp(output.clone()) {
-                    Ok(data) => output = data,
-                    Err(e) => tracing::warn!("Failed to embed EXIF in WebP: {}", e),
+                match exif_builder.build_bytes() {
+                    Ok(bytes) => Some(bytes),
+                    Err(e) => {
+                        tracing::warn!("Failed to build EXIF for WebP: {}", e);
+                        None
+                    }
                 }
-            }
+            } else {
+                None
+            };
+
+            let icc_bytes = if opts.embed_icc {
+                Some(IccProfile::srgb().as_bytes().to_vec())
+            } else {
+                None
+            };
+
+            let xmp_bytes = if opts.embed_xmp {
+                metadata.xmp.as_deref()
+            } else {
+                None
+            };
+
+            let output = mux_webp(
+                &encoded,
+                exif_bytes.as_deref(),
+                icc_bytes.as_deref(),
+                xmp_bytes,
+            )
+            .map_err(|e| RawError::Encode(EncodeError::WebP(e)))?;
 
             writer.write_all(&output)?;
         }

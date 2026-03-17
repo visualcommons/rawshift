@@ -35,8 +35,12 @@ impl EncodeOptions {
         Self::Jpeg(JpegOptions::default())
     }
 
-    pub fn webp() -> Self {
-        Self::WebP(WebPOptions::default())
+    pub fn webp_lossy() -> Self {
+        Self::WebP(WebPOptions::lossy())
+    }
+
+    pub fn webp_lossless() -> Self {
+        Self::WebP(WebPOptions::lossless())
     }
 
     #[cfg(feature = "avif")]
@@ -93,24 +97,67 @@ impl Default for JpegOptions {
     }
 }
 
+/// WebP encoding mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum WebPMode {
+    /// VP8L lossless compression
+    Lossless,
+    /// VP8 lossy compression
+    Lossy,
+}
+
 /// Options for WebP encoding.
-///
-/// Encoding uses VP8L (lossless). Lossy encoding will be supported
-/// when a suitable encoder dependency becomes available.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct WebPOptions {
+    /// Lossy or lossless mode
+    pub mode: WebPMode,
+    /// Quality (0-100). For lossy: image quality. For lossless: compression effort. Default: 75
+    pub quality: f32,
+    /// Compression method (0=fast, 6=slowest/best). Default: 4
+    pub method: u32,
+    /// Near-lossless preprocessing (0-100, 100=off). Only used in Lossless mode. Default: 100
+    pub near_lossless: u32,
     /// Whether to embed EXIF metadata. Default: true
     pub embed_exif: bool,
     /// Whether to embed ICC profile. Default: true
     pub embed_icc: bool,
+    /// Whether to embed XMP metadata. Default: true
+    pub embed_xmp: bool,
 }
 
 impl Default for WebPOptions {
     fn default() -> Self {
+        Self::lossy()
+    }
+}
+
+impl WebPOptions {
+    /// Lossy encoding with sensible defaults.
+    pub fn lossy() -> Self {
         Self {
+            mode: WebPMode::Lossy,
+            quality: 75.0,
+            method: 4,
+            near_lossless: 100,
             embed_exif: true,
             embed_icc: true,
+            embed_xmp: true,
+        }
+    }
+
+    /// Lossless encoding with sensible defaults.
+    pub fn lossless() -> Self {
+        Self {
+            mode: WebPMode::Lossless,
+            quality: 75.0,
+            method: 4,
+            near_lossless: 100,
+            embed_exif: true,
+            embed_icc: true,
+            embed_xmp: true,
         }
     }
 }

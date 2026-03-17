@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let encode_options = match output.extension().and_then(|e| e.to_str()) {
         Some("png") => EncodeOptions::png(),
         Some("jpg") | Some("jpeg") => EncodeOptions::jpeg(),
-        Some("webp") => EncodeOptions::webp(),
+        Some("webp") => EncodeOptions::webp_lossy(),
         Some("dng") => EncodeOptions::dng(),
         _ => {
             eprintln!("Unsupported output format. Defaulting to JPEG.");

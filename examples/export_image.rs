@@ -113,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let encode_options = match output.extension().and_then(|ext| ext.to_str()) {
         Some("png") => EncodeOptions::png(),
         Some("jpg") | Some("jpeg") => EncodeOptions::jpeg(),
-        Some("webp") => EncodeOptions::webp(),
+        Some("webp") => EncodeOptions::webp_lossy(),
         #[cfg(feature = "avif")]
         Some("avif") => EncodeOptions::avif(),
         #[cfg(feature = "jxl-encode")]

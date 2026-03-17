@@ -189,6 +189,8 @@ pub struct ImageMetadata {
     pub dng_profile: DngProfileInfo,
     /// Image-level metadata
     pub image: ImageInfo,
+    /// Raw XMP (XML) metadata bytes, if present in source image
+    pub xmp: Option<Vec<u8>>,
 }
 
 /// Trait for extracting unified metadata from format-specific structures.
