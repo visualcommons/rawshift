@@ -8,7 +8,7 @@ pub struct MetadataEmbedOptions {
     pub embed_exif: bool,
     /// Embed ICC colour profile. Default: `true`
     pub embed_icc: bool,
-    /// Embed XMP metadata (WebP only for now). Default: `true`
+    /// Embed XMP metadata (JPEG, PNG, WebP, AVIF, JXL). Default: `true`
     pub embed_xmp: bool,
 }
 
@@ -87,7 +87,7 @@ pub struct PngOptions {
     /// Bit depth (8 or 16). Default: 16
     #[cfg_attr(feature = "serde", serde(skip))]
     pub bit_depth: zune_core::bit_depth::BitDepth,
-    /// Metadata embedding options (embedding is currently a NOP for PNG).
+    /// Metadata embedding options.
     pub metadata: MetadataEmbedOptions,
 }
 

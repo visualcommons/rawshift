@@ -587,6 +587,53 @@ pub fn encode_rgb_image(
                     message: format!("PNG encoding error: {:?}", e),
                 })
             })?;
+
+            if opts.metadata.embed_exif || opts.metadata.embed_icc || opts.metadata.embed_xmp {
+                use crate::metadata::exif::ExifBuilder;
+                use crate::metadata::icc::IccProfile;
+                use img_parts::png::{Png, PngChunk};
+                use img_parts::{Bytes, ImageEXIF, ImageICC};
+
+                match Png::from_bytes(Bytes::from(output.clone())) {
+                    Ok(mut png) => {
+                        if opts.metadata.embed_icc {
+                            let icc = IccProfile::srgb();
+                            png.set_icc_profile(Some(Bytes::from(icc.as_bytes().to_vec())));
+                        }
+                        if opts.metadata.embed_exif {
+                            let exif_builder = ExifBuilder::new(metadata);
+                            match exif_builder.build_bytes() {
+                                Ok(bytes) => png.set_exif(Some(Bytes::from(bytes))),
+                                Err(e) => tracing::warn!("Failed to embed EXIF in PNG: {}", e),
+                            }
+                        }
+                        if opts.metadata.embed_xmp {
+                            if let Some(xmp_data) = &metadata.xmp {
+                                // iTXt: keyword\0 + compression_flag + compression_method
+                                //       + language_tag\0 + translated_keyword\0 + text
+                                let mut chunk_data = Vec::with_capacity(22 + xmp_data.len());
+                                chunk_data.extend_from_slice(b"XML:com.adobe.xmp\0");
+                                chunk_data.push(0); // compression_flag = 0
+                                chunk_data.push(0); // compression_method = 0
+                                chunk_data.push(0); // language_tag (empty)
+                                chunk_data.push(0); // translated_keyword (empty)
+                                chunk_data.extend_from_slice(xmp_data);
+                                let chunk = PngChunk::new(*b"iTXt", Bytes::from(chunk_data));
+                                let idx = png.chunks().len().saturating_sub(1);
+                                png.chunks_mut().insert(idx, chunk);
+                            }
+                        }
+                        use std::io::Cursor;
+                        let mut buf = Cursor::new(Vec::new());
+                        match png.encoder().write_to(&mut buf) {
+                            Ok(_) => output = buf.into_inner(),
+                            Err(e) => tracing::warn!("Failed to write PNG with metadata: {}", e),
+                        }
+                    }
+                    Err(e) => tracing::warn!("Failed to parse PNG for metadata embedding: {}", e),
+                }
+            }
+
             let mut file = std::fs::File::create(path)?;
             use std::io::Write;
             file.write_all(&output)?;
@@ -610,7 +657,7 @@ pub fn encode_rgb_image(
                 ColorType::Rgb,
             )?;
 
-            if opts.metadata.embed_exif || opts.metadata.embed_icc {
+            if opts.metadata.embed_exif || opts.metadata.embed_icc || opts.metadata.embed_xmp {
                 let mut jpeg_data = std::fs::read(path)?;
 
                 if opts.metadata.embed_exif {
@@ -626,6 +673,16 @@ pub fn encode_rgb_image(
                     match icc.append_to_jpeg(jpeg_data.clone()) {
                         Ok(data) => jpeg_data = data,
                         Err(e) => tracing::warn!("Failed to embed ICC: {}", e),
+                    }
+                }
+
+                if opts.metadata.embed_xmp {
+                    if let Some(xmp_data) = &metadata.xmp {
+                        use crate::metadata::xmp::append_xmp_to_jpeg;
+                        match append_xmp_to_jpeg(xmp_data, jpeg_data.clone()) {
+                            Ok(data) => jpeg_data = data,
+                            Err(e) => tracing::warn!("Failed to embed XMP in JPEG: {}", e),
+                        }
                     }
                 }
 
@@ -732,6 +789,15 @@ pub fn encode_rgb_image(
                     tracing::warn!("Failed to embed EXIF in AVIF: {}", e);
                 }
             }
+
+            if opts.metadata.embed_xmp {
+                if let Some(xmp_data) = &metadata.xmp {
+                    use crate::metadata::xmp::append_xmp_to_avif_file;
+                    if let Err(e) = append_xmp_to_avif_file(path, xmp_data) {
+                        tracing::warn!("Failed to embed XMP in AVIF: {}", e);
+                    }
+                }
+            }
         }
         #[cfg(feature = "jxl-encode")]
         EncodeOptions::Jxl(opts) => {
@@ -777,6 +843,23 @@ pub fn encode_rgb_image(
                         Err(e) => tracing::warn!("Failed to embed ICC in JXL: {}", e),
                     },
                     Err(e) => tracing::warn!("Failed to read JXL for ICC embedding: {}", e),
+                }
+            }
+
+            if opts.metadata.embed_xmp {
+                if let Some(xmp_data) = &metadata.xmp {
+                    use crate::metadata::xmp::append_xmp_to_jxl;
+                    match std::fs::read(path) {
+                        Ok(jxl_bytes) => match append_xmp_to_jxl(xmp_data, jxl_bytes) {
+                            Ok(data) => {
+                                if let Err(e) = std::fs::write(path, data) {
+                                    tracing::warn!("Failed to write JXL with XMP: {}", e);
+                                }
+                            }
+                            Err(e) => tracing::warn!("Failed to embed XMP in JXL: {}", e),
+                        },
+                        Err(e) => tracing::warn!("Failed to read JXL for XMP embedding: {}", e),
+                    }
                 }
             }
         }
@@ -833,6 +916,51 @@ pub fn encode_rgb_image_to_writer<W: std::io::Write>(
                     message: format!("PNG encoding error: {:?}", e),
                 })
             })?;
+
+            if opts.metadata.embed_exif || opts.metadata.embed_icc || opts.metadata.embed_xmp {
+                use crate::metadata::exif::ExifBuilder;
+                use crate::metadata::icc::IccProfile;
+                use img_parts::png::{Png, PngChunk};
+                use img_parts::{Bytes, ImageEXIF, ImageICC};
+
+                match Png::from_bytes(Bytes::from(output.clone())) {
+                    Ok(mut png) => {
+                        if opts.metadata.embed_icc {
+                            let icc = IccProfile::srgb();
+                            png.set_icc_profile(Some(Bytes::from(icc.as_bytes().to_vec())));
+                        }
+                        if opts.metadata.embed_exif {
+                            let exif_builder = ExifBuilder::new(metadata);
+                            match exif_builder.build_bytes() {
+                                Ok(bytes) => png.set_exif(Some(Bytes::from(bytes))),
+                                Err(e) => tracing::warn!("Failed to embed EXIF in PNG: {}", e),
+                            }
+                        }
+                        if opts.metadata.embed_xmp {
+                            if let Some(xmp_data) = &metadata.xmp {
+                                let mut chunk_data = Vec::with_capacity(22 + xmp_data.len());
+                                chunk_data.extend_from_slice(b"XML:com.adobe.xmp\0");
+                                chunk_data.push(0); // compression_flag = 0
+                                chunk_data.push(0); // compression_method = 0
+                                chunk_data.push(0); // language_tag (empty)
+                                chunk_data.push(0); // translated_keyword (empty)
+                                chunk_data.extend_from_slice(xmp_data);
+                                let chunk = PngChunk::new(*b"iTXt", Bytes::from(chunk_data));
+                                let idx = png.chunks().len().saturating_sub(1);
+                                png.chunks_mut().insert(idx, chunk);
+                            }
+                        }
+                        use std::io::Cursor;
+                        let mut buf = Cursor::new(Vec::new());
+                        match png.encoder().write_to(&mut buf) {
+                            Ok(_) => output = buf.into_inner(),
+                            Err(e) => tracing::warn!("Failed to write PNG with metadata: {}", e),
+                        }
+                    }
+                    Err(e) => tracing::warn!("Failed to parse PNG for metadata embedding: {}", e),
+                }
+            }
+
             writer.write_all(&output)?;
         }
         EncodeOptions::Jpeg(opts) => {
@@ -868,6 +996,16 @@ pub fn encode_rgb_image_to_writer<W: std::io::Write>(
                 match icc.append_to_jpeg(jpeg_buf.clone()) {
                     Ok(data) => jpeg_buf = data,
                     Err(e) => tracing::warn!("Failed to embed ICC: {}", e),
+                }
+            }
+
+            if opts.metadata.embed_xmp {
+                if let Some(xmp_data) = &metadata.xmp {
+                    use crate::metadata::xmp::append_xmp_to_jpeg;
+                    match append_xmp_to_jpeg(xmp_data, jpeg_buf.clone()) {
+                        Ok(data) => jpeg_buf = data,
+                        Err(e) => tracing::warn!("Failed to embed XMP in JPEG: {}", e),
+                    }
                 }
             }
 

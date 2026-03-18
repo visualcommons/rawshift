@@ -5,3 +5,4 @@
 
 pub mod exif;
 pub mod icc;
+pub mod xmp;
