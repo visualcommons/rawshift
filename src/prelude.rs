@@ -54,15 +54,7 @@ pub use crate::formats::{
     encode_rgb_image_to_writer, read_standard_image_metadata,
 };
 
-#[cfg(any(
-    feature = "arw",
-    feature = "cr2",
-    feature = "cr3",
-    feature = "crw",
-    feature = "dng",
-    feature = "nef",
-    feature = "raf"
-))]
+#[cfg(any_raw)]
 pub use crate::formats::{RawFile, RawFormat};
 
 #[cfg(feature = "dng")]

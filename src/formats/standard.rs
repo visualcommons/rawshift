@@ -134,7 +134,12 @@ impl StandardFormat {
     /// Whether this format can be encoded from an [`RgbImage`].
     pub fn supports_encode(self) -> bool {
         match self {
-            StandardFormat::Png | StandardFormat::Jpeg | StandardFormat::WebP => true,
+            #[cfg(feature = "png-encode")]
+            StandardFormat::Png => true,
+            #[cfg(feature = "jpeg-encode")]
+            StandardFormat::Jpeg => true,
+            #[cfg(feature = "webp-encode")]
+            StandardFormat::WebP => true,
             #[cfg(feature = "avif-encode")]
             StandardFormat::Avif => true,
             #[cfg(feature = "jxl-encode")]

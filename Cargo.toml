@@ -152,3 +152,6 @@ required-features = ["tiff-parser"]
 [profile.bench]
 lto = "thin"
 codegen-units = 1
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(any_raw)'] }

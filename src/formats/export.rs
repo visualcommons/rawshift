@@ -27,11 +27,14 @@ impl Default for MetadataEmbedOptions {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum EncodeOptions {
-    /// PNG format options
+    /// PNG format options (requires `png-encode` feature)
+    #[cfg(feature = "png-encode")]
     Png(PngOptions),
-    /// JPEG format options
+    /// JPEG format options (requires `jpeg-encode` feature)
+    #[cfg(feature = "jpeg-encode")]
     Jpeg(JpegOptions),
-    /// WebP format options
+    /// WebP format options (requires `webp-encode` feature)
+    #[cfg(feature = "webp-encode")]
     WebP(WebPOptions),
     /// AVIF format options (requires `avif-encode` feature)
     #[cfg(feature = "avif-encode")]
@@ -44,6 +47,7 @@ pub enum EncodeOptions {
     Dng(DngExportConfig),
 }
 
+#[cfg(feature = "png-encode")]
 impl Default for EncodeOptions {
     fn default() -> Self {
         Self::Png(PngOptions::default())
@@ -51,18 +55,22 @@ impl Default for EncodeOptions {
 }
 
 impl EncodeOptions {
+    #[cfg(feature = "png-encode")]
     pub fn png() -> Self {
         Self::Png(PngOptions::default())
     }
 
+    #[cfg(feature = "jpeg-encode")]
     pub fn jpeg() -> Self {
         Self::Jpeg(JpegOptions::default())
     }
 
+    #[cfg(feature = "webp-encode")]
     pub fn webp_lossy() -> Self {
         Self::WebP(WebPOptions::lossy())
     }
 
+    #[cfg(feature = "webp-encode")]
     pub fn webp_lossless() -> Self {
         Self::WebP(WebPOptions::lossless())
     }

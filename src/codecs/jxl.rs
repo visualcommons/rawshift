@@ -4,10 +4,8 @@
 //! tiles used in DNG 1.7+ files (compression code 52546).
 
 /// JPEG XL tile decoder for DNG files.
-#[cfg(feature = "dng")]
 pub struct JxlDecoder;
 
-#[cfg(feature = "dng")]
 impl JxlDecoder {
     /// Decode a single JPEG XL tile to u16 RGB data.
     ///
@@ -101,7 +99,7 @@ impl JxlDecoder {
     }
 }
 
-#[cfg(all(test, feature = "dng"))]
+#[cfg(test)]
 mod tests {
     use super::JxlDecoder;
 

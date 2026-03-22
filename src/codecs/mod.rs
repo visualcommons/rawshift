@@ -2,7 +2,7 @@
 pub(crate) mod arw;
 #[cfg(feature = "tiff-parser")]
 pub(crate) mod bit_pump;
-#[cfg(feature = "jxl-decode")]
+#[cfg(feature = "dng")]
 pub(crate) mod jxl;
 #[cfg(feature = "tiff-parser")]
 pub(crate) mod ljpeg;
