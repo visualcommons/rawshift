@@ -1,0 +1,15 @@
+{
+  "repo": "justin13888/rawshift-test-fixtures",
+  "devices": {
+    "sony-ilce-6700": {
+      "version": 1,
+      "make": "SONY",
+      "model": "ILCE-6700"
+    },
+    "apple-iphone-17-pro-max": {
+      "version": 1,
+      "make": "Apple",
+      "model": "iPhone_17_Pro_Max"
+    }
+  }
+}

@@ -223,13 +223,25 @@ impl<'a> ExifBuilder<'a> {
         }
     }
 
-    /// Build raw EXIF bytes (APP1 segment content).
+    /// Build raw TIFF-level EXIF bytes (no APP1 wrapper or `Exif\0\0` prefix).
     ///
-    /// The returned bytes can be written directly to a file using img-parts.
+    /// These bytes can be passed directly to `img_parts::ImageEXIF::set_exif()`
+    /// for JPEG and PNG embedding (img_parts handles the format-specific
+    /// wrapping). For WebP, prepend `b"Exif\0\0"` before passing to the muxer.
     pub fn build_bytes(&self) -> Result<Vec<u8>, ExifError> {
         let exif = self.build();
-        exif.as_u8_vec(FileExtension::JPEG)
-            .map_err(|e| ExifError::Serialization(e.to_string()))
+        let jpeg_app1 = exif
+            .as_u8_vec(FileExtension::JPEG)
+            .map_err(|e| ExifError::Serialization(e.to_string()))?;
+        // as_u8_vec(JPEG) returns: [FF E1] [len_hi len_lo] [Exif\0\0] [TIFF data...]
+        // Strip the 10-byte APP1 wrapper to get raw TIFF data.
+        const APP1_WRAPPER_LEN: usize = 2 + 2 + 6; // marker + length + "Exif\0\0"
+        if jpeg_app1.len() <= APP1_WRAPPER_LEN {
+            return Err(ExifError::Serialization(
+                "EXIF data too short after APP1 header".into(),
+            ));
+        }
+        Ok(jpeg_app1[APP1_WRAPPER_LEN..].to_vec())
     }
 
     /// Append EXIF metadata to existing JPEG data.
@@ -240,9 +252,9 @@ impl<'a> ExifBuilder<'a> {
         use img_parts::{Bytes, ImageEXIF};
         use std::io::Cursor;
 
-        let exif_bytes = self.build_bytes()?;
+        let tiff_bytes = self.build_bytes()?;
         let mut jpeg = Jpeg::from_bytes(Bytes::from(jpeg_data))?;
-        jpeg.set_exif(Some(Bytes::from(exif_bytes)));
+        jpeg.set_exif(Some(Bytes::from(tiff_bytes)));
 
         let mut output = Cursor::new(Vec::new());
         jpeg.encoder().write_to(&mut output)?;

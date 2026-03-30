@@ -26,12 +26,13 @@ fn skip_if_no_test_data(filename: &str) -> bool {
 
 #[test]
 fn test_header_byte_order_jic7790() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let gt = load_ground_truth(&test_fixture_path("_JIC7790.json")).unwrap();
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let gt =
+        load_ground_truth(&test_fixture_path("SONY/ILCE-6700/_JIC7790/expected.json")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let parser = TiffParser::new(reader).unwrap();
 
@@ -47,12 +48,13 @@ fn test_header_byte_order_jic7790() {
 
 #[test]
 fn test_header_byte_order_jic7792() {
-    if skip_if_no_test_data("_JIC7792.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7792.ARW") {
         return;
     }
 
-    let gt = load_ground_truth(&test_fixture_path("_JIC7792.json")).unwrap();
-    let file = File::open(test_data_path("_JIC7792.ARW")).unwrap();
+    let gt =
+        load_ground_truth(&test_fixture_path("SONY/ILCE-6700/_JIC7792/expected.json")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7792.ARW")).unwrap();
     let reader = BufReader::new(file);
     let parser = TiffParser::new(reader).unwrap();
 
@@ -62,12 +64,13 @@ fn test_header_byte_order_jic7792() {
 
 #[test]
 fn test_is_not_bigtiff() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let gt = load_ground_truth(&test_fixture_path("_JIC7790.json")).unwrap();
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let gt =
+        load_ground_truth(&test_fixture_path("SONY/ILCE-6700/_JIC7790/expected.json")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let parser = TiffParser::new(reader).unwrap();
 
@@ -76,11 +79,11 @@ fn test_is_not_bigtiff() {
 
 #[test]
 fn test_magic_number() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let parser = TiffParser::new(reader).unwrap();
 
@@ -94,12 +97,13 @@ fn test_magic_number() {
 
 #[test]
 fn test_ifd_count_jic7790() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let gt = load_ground_truth(&test_fixture_path("_JIC7790.json")).unwrap();
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let gt =
+        load_ground_truth(&test_fixture_path("SONY/ILCE-6700/_JIC7790/expected.json")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let mut parser = TiffParser::new(reader).unwrap();
 
@@ -116,12 +120,13 @@ fn test_ifd_count_jic7790() {
 
 #[test]
 fn test_ifd_count_jic7792() {
-    if skip_if_no_test_data("_JIC7792.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7792.ARW") {
         return;
     }
 
-    let gt = load_ground_truth(&test_fixture_path("_JIC7792.json")).unwrap();
-    let file = File::open(test_data_path("_JIC7792.ARW")).unwrap();
+    let gt =
+        load_ground_truth(&test_fixture_path("SONY/ILCE-6700/_JIC7792/expected.json")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7792.ARW")).unwrap();
     let reader = BufReader::new(file);
     let mut parser = TiffParser::new(reader).unwrap();
 
@@ -135,11 +140,11 @@ fn test_ifd_count_jic7792() {
 
 #[test]
 fn test_required_tags_present() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let mut parser = TiffParser::new(reader).unwrap();
 
@@ -174,11 +179,11 @@ fn test_required_tags_present() {
 
 #[test]
 fn test_sub_ifd_parsing() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let mut parser = TiffParser::new(reader).unwrap();
 
@@ -197,12 +202,13 @@ fn test_sub_ifd_parsing() {
 
 #[test]
 fn test_raw_dimensions_jic7790() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let gt = load_ground_truth(&test_fixture_path("_JIC7790.json")).unwrap();
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let gt =
+        load_ground_truth(&test_fixture_path("SONY/ILCE-6700/_JIC7790/expected.json")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let mut parser = TiffParser::new(reader).unwrap();
 
@@ -243,12 +249,13 @@ fn test_raw_dimensions_jic7790() {
 
 #[test]
 fn test_bit_depth_jic7790() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let gt = load_ground_truth(&test_fixture_path("_JIC7790.json")).unwrap();
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let gt =
+        load_ground_truth(&test_fixture_path("SONY/ILCE-6700/_JIC7790/expected.json")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let mut parser = TiffParser::new(reader).unwrap();
 
@@ -279,12 +286,13 @@ fn test_bit_depth_jic7790() {
 
 #[test]
 fn test_strip_offsets_within_bounds_jic7790() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let gt = load_ground_truth(&test_fixture_path("_JIC7790.json")).unwrap();
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let gt =
+        load_ground_truth(&test_fixture_path("SONY/ILCE-6700/_JIC7790/expected.json")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let mut parser = TiffParser::new(reader).unwrap();
 
@@ -319,12 +327,13 @@ fn test_strip_offsets_within_bounds_jic7790() {
 
 #[test]
 fn test_make_model_extraction() {
-    if skip_if_no_test_data("_JIC7790.ARW") {
+    if skip_if_no_test_data("SONY/ILCE-6700/_JIC7790.ARW") {
         return;
     }
 
-    let gt = load_ground_truth(&test_fixture_path("_JIC7790.json")).unwrap();
-    let file = File::open(test_data_path("_JIC7790.ARW")).unwrap();
+    let gt =
+        load_ground_truth(&test_fixture_path("SONY/ILCE-6700/_JIC7790/expected.json")).unwrap();
+    let file = File::open(test_data_path("SONY/ILCE-6700/_JIC7790.ARW")).unwrap();
     let reader = BufReader::new(file);
     let mut parser = TiffParser::new(reader).unwrap();
 

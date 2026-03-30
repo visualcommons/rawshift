@@ -62,3 +62,22 @@ setup:
     lefthook install
     cargo build
 
+# Download test fixtures from rawshift-test-fixtures GitHub Releases
+fetch-fixtures *args:
+    bash scripts/fetch_test_fixtures.sh {{args}}
+
+# Generate standard format test fixtures (synthetic images)
+generate-fixtures:
+    cargo run --example generate_test_fixtures
+
+# Full test data setup: download real fixtures + generate synthetic ones
+setup-test-data: fetch-fixtures generate-fixtures
+
+# Show decoder test coverage report
+coverage-report:
+    python3 scripts/test_coverage_report.py
+
+# Run all fixture-based integration tests (fetches fixtures first)
+test-fixtures: setup-test-data
+    cargo test --features=full --test raw_decode_fixtures --test standard_decode_fixtures --test tiff_parser_tests --test dng_check
+

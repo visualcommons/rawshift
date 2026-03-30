@@ -1,149 +1,210 @@
 # Test Data & Fixtures
 
-This directory structure organizes camera raw files and their corresponding reference metadata.
+This document explains how rawshift's image-driven integration tests work,
+how to get test data, and how to add new test images.
+
+## Overview
+
+Real RAW test images and their reference sidecar files live in a **separate repo**:
+
+> **[justin13888/rawshift-test-fixtures](https://github.com/justin13888/rawshift-test-fixtures)**
+
+Each camera device (Make/Model) is independently versioned and released as a
+tarball via GitHub Releases. This repo pins specific device versions in
+`fixtures.json` and fetches only the devices it needs.
+
+Standard-format fixtures (JPEG, PNG, GIF, TIFF, WebP, SVG, AVIF, JXL) are
+generated locally by `examples/generate_test_fixtures.rs` with full EXIF, ICC,
+and XMP metadata embedded.
+
+---
+
+## Getting Test Data (Contributors)
+
+```bash
+# Download + extract all pinned device fixtures
+just fetch-fixtures
+
+# Also generate the tiny synthetic standard-format images
+just setup-test-data     # fetch-fixtures + generate-fixtures
+
+# Fetch a specific device only
+just fetch-fixtures sony-ilce-6700
+```
+
+Or manually:
+```bash
+bash scripts/fetch_test_fixtures.sh
+cargo run --example generate_test_fixtures
+```
+
+The download script is **idempotent** — re-running it is a no-op if you
+already have the correct version for each device.
+
+---
 
 ## Directory Structure
 
-Files are organized by Camera Make and Model (RAW formats) or by format name (standard formats).
+### `test_data/` (local, gitignored)
 
-### `test_data/`
-
-Contains the image files used for integration testing.
-
-```plaintext
+```
 test_data/
-├── <Make>/                         # RAW formats (by camera)
+├── <Make>/                         # RAW formats (from fixtures repo)
 │   └── <Model>/
 │       └── <Filename>.<Ext>
-└── standard/                       # Standard formats (synthetic)
-    ├── jpeg/
-    │   └── test_8x8.jpg
-    ├── png/
-    │   └── test_8x8.png
-    ├── gif/
-    │   └── test_4x4.gif
-    ├── tiff/
-    │   └── test_8x8.tiff
-    ├── webp/
-    │   └── test_8x8.webp
-    └── svg/
-        └── test_8x8.svg
+├── standard/                       # Standard formats (synthetic)
+│   ├── jpeg/test_8x8.jpg
+│   ├── png/test_8x8.png
+│   ├── gif/test_4x4.gif
+│   ├── tiff/test_8x8.tiff
+│   ├── webp/test_8x8.webp
+│   ├── svg/test_8x8.svg
+│   ├── avif/test_8x8.avif         # (with avif-encode feature)
+│   └── jxl/test_8x8.jxl           # (with jxl-encode feature)
+└── .device-versions/               # Per-device version stamps (written by fetch script)
+    ├── sony-ilce-6700              # contains "1"
+    └── apple-iphone-17-pro-max     # contains "1"
 ```
 
-### `test_fixtures/`
+### `test_fixtures/` (local, gitignored)
 
-Contains reference data (sidecar files) for verification.
-
-```plaintext
+```
 test_fixtures/
 ├── <Make>/                         # RAW format fixtures
 │   └── <Model>/
 │       └── <Filename>/
-│           ├── expected.json         # Primary source-of-truth for unit tests
-│           ├── exiftool.json         # Full output from `exiftool -j -g -struct`
-│           ├── libraw_identify.txt   # Output from `raw-identify -v`
-│           └── dcraw_identify.txt    # Output from `dcraw -i -v`
-└── standard/                       # Standard format fixtures
+│           ├── expected.json         # Source-of-truth for Rust tests
+│           ├── exiftool.json         # Full `exiftool -j -g -struct` output
+│           ├── file_identify.txt     # `file --mime-type --mime-encoding` output
+│           ├── libraw_identify.txt   # `raw-identify -v` output (if available)
+│           └── dcraw_identify.txt    # `dcraw -i -v` output (if available)
+└── standard/
     └── <format>/
-        └── expected.json             # Ground truth (dimensions, channels, etc.)
+        └── expected.json             # Ground truth (dimensions, channels, metadata)
 ```
 
-## Fixture Status by Format
+### `fixtures.json` (committed, project root)
 
-### RAW Formats
+Pins which device versions to fetch:
+```json
+{
+  "repo": "justin13888/rawshift-test-fixtures",
+  "devices": {
+    "sony-ilce-6700": { "version": 1, "make": "SONY", "model": "ILCE-6700" },
+    "apple-iphone-17-pro-max": { "version": 1, "make": "Apple", "model": "iPhone_17_Pro_Max" }
+  }
+}
+```
 
-| Format | Status | Test Data | Fixtures | Source |
-|--------|--------|-----------|----------|--------|
-| Sony ARW | Complete | `SONY/ILCE-6700/_JIC7790.ARW`, `_JIC7792.ARW` | Full (expected.json + reference tools) | Camera sample |
-| Adobe DNG | Complete | `Apple/iPhone_17_Pro_Max/IMG_1347.DNG` | Full (expected.json + reference tools) | Camera sample |
-| Canon CR2 | Needs sourcing | None | None | See sourcing guide below |
-| Canon CR3 | Needs sourcing | None | None | See sourcing guide below |
-| Canon CRW | Needs sourcing | None | None | See sourcing guide below |
-| Nikon NEF | Needs sourcing | None | None | See sourcing guide below |
-| Fujifilm RAF | Needs sourcing | None | None | See sourcing guide below |
+### Standard fixture `expected.json` format
 
-### Standard Formats
+Formats with metadata (JPEG, PNG, WebP, AVIF) include a `metadata` block:
+```json
+{
+  "format": "JPEG",
+  "file_name": "test_8x8.jpg",
+  "width": 8, "height": 8,
+  "channels": 3, "bit_depth_output": 16,
+  "metadata": {
+    "make": "rawshift-test",
+    "model": "Synthetic-v1",
+    "iso": 200,
+    "focal_length_num": 50,
+    "datetime_original": "2025:01:15 10:30:00",
+    "has_icc": true,
+    "has_xmp": true
+  }
+}
+```
 
-| Format | Status | Decode | Export | Fixture Type |
-|--------|--------|--------|--------|--------------|
-| JPEG | Complete | Full | Full | Synthetic (generate_test_fixtures) |
-| PNG | Complete | Full | Full | Synthetic (generate_test_fixtures) |
-| GIF | Complete | Full | N/A | Synthetic (generate_test_fixtures) |
-| TIFF | Complete | Full | N/A | Synthetic (generate_test_fixtures) |
-| WebP | Complete | Full | Full | Synthetic (generate_test_fixtures) |
-| SVG | Complete (feature-gated) | Full | N/A | Synthetic (generate_test_fixtures) |
-| JPEG XL | Unit tests only | Full | Optional | In-memory roundtrip tests exist |
-| AVIF | Detection only | Stub | Optional | Format detection unit tests exist |
-| HEIC | Detection only | Stub | N/A | Format detection unit tests exist |
-| APV | Detection only | Stub | N/A | Format detection unit tests exist |
+Formats without metadata support (GIF, SVG, TIFF) omit the `metadata` block.
 
-## Generating Standard Format Fixtures
+---
 
-Standard format fixtures are small synthetic images generated programmatically:
+## Test Coverage
+
+See which decoders have test data and which test aspects are covered:
 
 ```bash
-cargo run --example generate_test_fixtures
+just coverage-report
+# or:
+python3 scripts/test_coverage_report.py
 ```
 
-This creates test images in `test_data/standard/` and ground-truth JSON in `test_fixtures/standard/`.
+---
+
+## Standard Formats
+
+| Format | Status   | Metadata Embedded                   |
+|--------|----------|-------------------------------------|
+| JPEG   | Complete | EXIF + ICC + XMP                    |
+| PNG    | Complete | EXIF + ICC + XMP                    |
+| WebP   | Complete | EXIF + ICC + XMP                    |
+| GIF    | Complete | None (format limitation)            |
+| TIFF   | Complete | None (tiff crate encoder, no embed) |
+| SVG    | Complete | None (not raster metadata)          |
+| AVIF   | Feature  | EXIF + ICC + XMP (`avif-encode`)    |
+| JXL    | Feature  | EXIF + ICC + XMP (`jxl-encode`)     |
+| HEIC   | N/A      | Detection only (no decode)          |
+| APV    | N/A      | Detection only (no decode)          |
+
+---
 
 ## Adding New RAW Test Images
 
-1. Place new raw files into `test_data/` (root or any subfolder).
-2. Run the organization script:
+See the [rawshift-test-fixtures README](https://github.com/justin13888/rawshift-test-fixtures)
+for the full workflow. Summary:
 
-```bash
-python3 scripts/organize_test_data.py
-```
+1. Source a CC0-licensed sample from **raw.pixls.us** or **DPReview**
+2. In the fixtures repo: `bash ingest.sh /path/to/file.ARW`
+3. Review `expected.json`, commit, then `bash pack.sh <device-slug>`
+4. In this repo: add the device to `fixtures.json` with its version
+5. Run `bash scripts/fetch_test_fixtures.sh <device-slug>` to verify
 
-This script will:
-
-- Detect the Make/Model of the new files.
-- Move them to the correct `test_data/<Make>/<Model>/` folder.
-- Generate the `test_fixtures` folder structure.
-- Run `exiftool`, `raw-identify`, and `dcraw` to populate the sidecar files.
-
-3. Manually create `expected.json` with ground truth values (see existing examples).
-
-## Sourcing RAW Test Files
-
-RAW test files must be sourced from actual cameras or public sample repositories.
-
-### Recommended Sources
-
-- **raw.pixls.us**: Community collection of CC0-licensed raw samples from many cameras
-- **DPReview sample galleries**: Full-resolution samples from camera reviews
-- **Camera manufacturer sample images**: Some manufacturers provide sample RAW files
-- **Personal camera samples**: If you own the camera
-
-### What to Look For
-
-For each missing format, source **one representative file** from a common camera model:
-
-| Format | Suggested Camera | File Extension |
-|--------|-----------------|----------------|
-| Canon CR2 | Canon EOS 5D Mark IV, 6D Mark II, or similar | `.CR2` |
-| Canon CR3 | Canon EOS R5, R6, or similar | `.CR3` |
-| Canon CRW | Canon PowerShot G3/G5 or similar (legacy) | `.CRW` |
-| Nikon NEF | Nikon D850, Z6/Z7, or similar | `.NEF` |
-| Fujifilm RAF | Fujifilm X-T5, X-H2, or similar (X-Trans sensor) | `.RAF` |
-
-### After Sourcing
-
-1. Place the file in `test_data/` (root is fine)
-2. Run `python3 scripts/organize_test_data.py`
-3. Create `expected.json` based on exiftool output and the GroundTruth struct in `tests/common/mod.rs`
-4. Run tests: `cargo test --test raw_decode_fixtures`
+---
 
 ## Running Fixture Tests
 
 ```bash
-# All fixture-based tests (skips gracefully if files missing)
-cargo test --test standard_decode_fixtures
-cargo test --test raw_decode_fixtures
-cargo test --test tiff_parser_tests
-cargo test --test dng_check
+# Full test suite (fetches fixtures + generates standard ones first)
+just test-fixtures
 
-# Generate standard fixtures first, then test
-cargo run --example generate_test_fixtures && cargo test --test standard_decode_fixtures
+# Individual test files
+cargo test --features=experimental --test raw_decode_fixtures
+cargo test --test standard_decode_fixtures
+cargo test --features=tiff-parser --test tiff_parser_tests
+cargo test --features=tiff-parser --test dng_check
+
+# With specific features
+cargo test --features=full
 ```
+
+Tests skip gracefully when fixture files are missing — `cargo test` always
+passes even without test data.
+
+---
+
+## TODO
+
+### Infrastructure
+- [ ] End-to-end validation: pack → upload → fetch → test cycle
+- [ ] Windows CI compatibility — `fetch_test_fixtures.sh` uses bash; needs
+      validation on windows-latest runner (git-bash)
+
+### Test data gaps
+- [ ] RAW formats: CR2, CR3, CRW, NEF, RAF — need sample images sourced and
+      added to rawshift-test-fixtures repo
+- [ ] JXL fixtures — generator implemented but gated behind `jxl-encode` feature;
+      needs `expected.json` and decode test
+- [ ] TIFF metadata — library reads EXIF from TIFF but no metadata is embedded
+      in the TIFF test fixture (tiff crate encoder doesn't use encode_rgb_image path)
+- [ ] AVIF fixtures — generator implemented but gated behind `avif-encode` feature;
+      needs `expected.json` and decode test
+
+### Metadata coverage gaps
+- [ ] IPTC metadata — not implemented in rawshift at all
+- [ ] ICC profile round-trip — library embeds sRGB profiles but no test reads
+      them back and verifies the profile data
+- [ ] XMP round-trip — library embeds raw XMP bytes but no test reads them back
+- [ ] Custom ICC profiles — only hardcoded sRGB; no custom profile reading
+- [ ] Metadata loss detection — no tests verify what metadata is lost per format
