@@ -120,6 +120,9 @@ cargo test --features=serde
 - Integration tests (`tests/`): Ensure common workflows are functional.
 - Unit tests: All major functions should be rigorously tested. Please place them in the same module file when possible.
 
+## Sovereignty
+
+It is my intention (as developer and maintainer) to ensure Rawshift remains open permissively to all.
 
 ## License
 
