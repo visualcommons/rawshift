@@ -63,6 +63,7 @@ Note on encoding support: For formats that we do not support encoding, you may s
 | Sony a6700 (ILCE-6700) | ARW             |       |
 | iPhone 13 Pro (Max)    | DNG, HEIC, JPEG |       |
 | iPhone 16 Pro (Max)    | DNG, HEIC, JXL  |       |
+| iPhone 17 Pro (Max)    | DNG, HEIC, JXL  |       |
 
 ## MSRV
 
