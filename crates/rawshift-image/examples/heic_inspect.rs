@@ -2,12 +2,12 @@
 //!
 //! Decodes the primary image, enumerates auxiliary images (thumbnails, depth
 //! maps, HDR gain maps, alpha/auxiliary), and dumps all extracted metadata —
-//! demonstrating the full [`HeicFile`](rawshift::formats::HeicFile) API.
+//! demonstrating the full [`HeicFile`](rawshift_image::formats::HeicFile) API.
 //!
 //! Usage:
 //!   cargo run --example heic_inspect --features heic -- <input.heic>
 
-use rawshift::formats::HeicFile;
+use rawshift_image::formats::HeicFile;
 
 fn human_bytes(blob: Option<&Vec<u8>>) -> String {
     match blob {

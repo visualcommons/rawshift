@@ -13,15 +13,15 @@ use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use rawshift::core::image::RgbImage;
-use rawshift::core::metadata::{
+use rawshift_image::core::image::RgbImage;
+use rawshift_image::core::metadata::{
     CameraInfo, DateTimeInfo, ExifInfo, GpsInfo, ImageInfo, ImageMetadata, SRational, URational,
 };
-use rawshift::formats::encode_rgb_image;
-use rawshift::formats::export::EncodeOptions;
+use rawshift_image::formats::encode_rgb_image;
+use rawshift_image::formats::export::EncodeOptions;
 
 fn project_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 fn test_data_dir() -> PathBuf {

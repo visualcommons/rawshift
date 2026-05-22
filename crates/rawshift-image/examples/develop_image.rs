@@ -6,9 +6,9 @@
 //! Usage: cargo run --example develop_image -- <input.arw> <output.jpg>
 
 use clap::Parser;
-use rawshift::formats::RawFile;
-use rawshift::formats::export::EncodeOptions;
-use rawshift::processing::{BayerAlgorithm, DemosaicMethod, ProcessingOptions};
+use rawshift_image::formats::RawFile;
+use rawshift_image::formats::export::EncodeOptions;
+use rawshift_image::processing::{BayerAlgorithm, DemosaicMethod, ProcessingOptions};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;

@@ -7,7 +7,7 @@
 //! Generate fixtures with:
 //!   cargo run --example generate_test_fixtures
 
-use rawshift::formats::{
+use rawshift_image::formats::{
     StandardFormat, decode_standard_image, detect_standard_format, read_standard_image_metadata,
 };
 use serde::Deserialize;
@@ -42,6 +42,7 @@ struct MetadataGroundTruth {
 
 fn test_data_path(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
         .join("test_data")
         .join("standard")
         .join(rel)
@@ -49,6 +50,7 @@ fn test_data_path(rel: &str) -> PathBuf {
 
 fn test_fixture_path(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
         .join("test_fixtures")
         .join("standard")
         .join(rel)

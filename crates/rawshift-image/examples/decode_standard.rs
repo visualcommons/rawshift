@@ -8,7 +8,7 @@
 //!   cargo run --example decode_standard -- <input.png> --save-raw output.raw
 
 use clap::Parser;
-use rawshift::formats::{
+use rawshift_image::formats::{
     DecodeOptions, decode_standard_image, decode_standard_image_with, detect_standard_format,
 };
 use std::path::PathBuf;

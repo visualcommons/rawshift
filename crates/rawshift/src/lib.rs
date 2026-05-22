@@ -1,83 +1,41 @@
 //! # rawshift
 //!
-//! A high-performance RAW image processing library with support for multiple
-//! camera formats and a full processing pipeline.
+//! `rawshift` is a facade crate. It re-exports the workspace's image and video
+//! libraries behind two coarse feature flags so most consumers can depend on a
+//! single crate:
 //!
-//! ## Supported Formats
+//! - **`image`** (default) — re-exports [`rawshift-image`]: RAW decoding for
+//!   Sony/Canon/Nikon/Fujifilm/Adobe, standard formats (JPEG, PNG, WebP, JXL,
+//!   GIF, TIFF, AVIF, HEIC, SVG), the full RAW processing pipeline, and
+//!   encoding. Everything appears at the crate root, e.g. [`formats`],
+//!   [`core`], [`processing`], [`transforms`], [`prelude`].
+//! - **`video`** — re-exports `rawshift-video` as [`video`]. Video support is
+//!   planned but not yet implemented.
 //!
-//! ### RAW Formats (full pipeline)
-//! - Sony ARW (v1–v5)
-//! - Adobe DNG (v1.7, including Apple ProRAW)
-//! - Canon CR2
-//! - Canon CR3 (metadata + format detection; pixel decode pending CRX codec)
-//! - Nikon NEF
-//! - Fujifilm RAF
+//! ## Feature flags
 //!
-//! ### Standard Formats (direct RGB decode)
-//! - GIF, JPEG, PNG, WebP, JPEG XL, TIFF
-//! - SVG (requires `svg` feature)
-//! - AVIF decode + encode (requires `avif` feature)
-//! - HEIC decode (requires `heic` feature; via libheif)
-//! - APV (detection only; no Rust decoder exists yet)
-//!
-//! ## Quick Start
+//! This facade exposes only `image`, `video`, `serde`, and `full`. It does
+//! **not** surface per-format flags — Cargo cannot auto-forward a child crate's
+//! features, so re-listing them here would be duplicated, rot-prone state. For
+//! fine-grained control (individual formats, alternative codec backends, the
+//! `tiff-parser` API, `heic-vendored` linking) depend on [`rawshift-image`]
+//! directly; its own five-tier feature system is documented on that crate.
 //!
 //! ```no_run,ignore
-//! // Requires features = ["experimental"]
-//! use rawshift::formats::RawFile;
-//! use std::fs::File;
+//! // Default `image` feature is enough for standard-format decoding.
+//! use rawshift::formats::{decode_standard_image, detect_standard_format};
 //!
-//! let file = File::open("image.arw").expect("Failed to open file");
-//! let raw = RawFile::open(file).expect("Failed to parse RAW file");
-//! let metadata = raw.metadata();
-//! println!(
-//!     "Camera: {} {}",
-//!     metadata.camera.make,
-//!     metadata.camera.model
-//! );
+//! let bytes = std::fs::read("photo.jpg").expect("read");
+//! let format = detect_standard_format(&bytes).expect("detect");
+//! let image = decode_standard_image(&bytes).expect("decode");
+//! println!("{format:?}: {}x{}", image.width(), image.height());
 //! ```
 //!
-//! ## Processing Pipeline
-//!
-//! Raw images go through these steps:
-//! 1. Format decoding (ARW, DNG, CR2, NEF, RAF)
-//! 2. Black level subtraction
-//! 3. White balance
-//! 4. Demosaicing (AMaZE, RCD, LMMSE, Markesteijn)
-//! 5. Color matrix application
-//! 6. Tone mapping / gamma
-//!
-//! ## Feature Flags
-//!
-//! Cargo features are organised in five tiers, high-level to low-level. Each
-//! tier is defined in terms of the tier below; only tier-4 features (and RAW
-//! tier-3 features) pull in an external crate.
-//!
-//! 1. **Bundles** — `default`, `full`, `experimental`, `raw-stabilizing`,
-//!    `raw-incomplete`.
-//! 2. **Formats** — `jpeg`, `png`, `webp`, `jxl`, `avif`, `dng`, `gif`, `tiff`,
-//!    `heic`, `svg`, `arw`, `cr2`, `cr3`, `crw`, `nef`, `raf` (decode + encode
-//!    for that format).
-//! 3. **Directions** — `jpeg-decode`, `jpeg-encode`, `arw-decode`, … For
-//!    compressed formats a direction feature aliases the **default**
-//!    implementation; RAW formats have a single in-repo implementation.
-//! 4. **Implementations** — compressed formats only, named
-//!    `format-direction-impl` (e.g. `jpeg-decode-zune`). Multiple may be enabled
-//!    at once; the active backend is chosen via [`formats::DecodeOptions`] and
-//!    [`formats::export::EncodeOptions`].
-//! 5. **Infrastructure** — `tiff-parser`, `serde`, `heic-vendored`.
-//!
-//! See the "Feature Flags" section of the README for the full hierarchy.
+//! [`rawshift-image`]: https://docs.rs/rawshift-image
+#![forbid(unsafe_code)]
 
-pub(crate) mod codecs;
-pub mod core;
-pub mod data;
-pub mod error;
-pub mod formats;
-pub(crate) mod metadata;
-pub mod processing;
-#[cfg(feature = "tiff-parser")]
-pub mod tiff;
-pub mod transforms;
+#[cfg(feature = "image")]
+pub use rawshift_image::*;
 
-pub mod prelude;
+#[cfg(feature = "video")]
+pub use rawshift_video as video;

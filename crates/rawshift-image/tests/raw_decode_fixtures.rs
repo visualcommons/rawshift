@@ -10,7 +10,7 @@
 mod common;
 
 use common::{load_ground_truth, test_data_path, test_fixture_path};
-use rawshift::formats::RawFile;
+use rawshift_image::formats::RawFile;
 use std::fs::File;
 use std::io::BufReader;
 
@@ -252,7 +252,9 @@ fn raf_format_detection() {
 
 /// Search recursively under test_data/ for any file with the given extension.
 fn find_test_file_by_extension(ext: &str) -> Option<std::path::PathBuf> {
-    let test_data = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_data");
+    let test_data = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("test_data");
     if !test_data.exists() {
         return None;
     }

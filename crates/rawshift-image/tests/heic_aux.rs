@@ -7,14 +7,16 @@
 //! when present, otherwise against libheif's bundled sample HEIC, and skip
 //! gracefully when no HEIC file can be found.
 
-use rawshift::core::MetadataNamespace;
-use rawshift::formats::{HeicAuxKind, HeicFile};
+use rawshift_image::core::MetadataNamespace;
+use rawshift_image::formats::{HeicAuxKind, HeicFile};
 use std::path::PathBuf;
 
 /// Locate a HEIC file to test against, or `None` to skip.
 fn sample_heic() -> Option<Vec<u8>> {
     // Prefer a committed project fixture.
-    let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_data/standard/heic");
+    let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("test_data/standard/heic");
     if let Ok(entries) = std::fs::read_dir(&fixture_dir) {
         for entry in entries.flatten() {
             let path = entry.path();

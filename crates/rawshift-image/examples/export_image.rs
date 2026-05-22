@@ -1,8 +1,10 @@
 use clap::Parser;
-use rawshift::formats::RawFile;
-use rawshift::formats::export::EncodeOptions;
-use rawshift::processing::{BayerAlgorithm, DemosaicMethod, ProcessingOptions, XTransAlgorithm};
-use rawshift::transforms::BadPixelCorrectionMode;
+use rawshift_image::formats::RawFile;
+use rawshift_image::formats::export::EncodeOptions;
+use rawshift_image::processing::{
+    BayerAlgorithm, DemosaicMethod, ProcessingOptions, XTransAlgorithm,
+};
+use rawshift_image::transforms::BadPixelCorrectionMode;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;

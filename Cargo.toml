@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/rawshift",
     "crates/rawshift-core",
+    "crates/rawshift-image",
     "crates/rawshift-video",
 ]
 

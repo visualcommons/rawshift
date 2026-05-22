@@ -1,11 +1,11 @@
 //! Benchmarks for the processing pipeline stages.
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use rawshift::core::image::{CfaPattern, Point, RawImage, Rect, RgbImage, Size};
-use rawshift::processing::color::{apply_color_matrix, apply_white_balance};
-use rawshift::transforms::black_level::apply_black_level;
-use rawshift::transforms::color::compute_camera_to_srgb;
-use rawshift::transforms::tonemap::apply_tone_reproduction;
+use rawshift_image::core::image::{CfaPattern, Point, RawImage, Rect, RgbImage, Size};
+use rawshift_image::processing::color::{apply_color_matrix, apply_white_balance};
+use rawshift_image::transforms::black_level::apply_black_level;
+use rawshift_image::transforms::color::compute_camera_to_srgb;
+use rawshift_image::transforms::tonemap::apply_tone_reproduction;
 
 fn create_test_raw(width: u32, height: u32) -> RawImage {
     let size = Size::new(width, height);

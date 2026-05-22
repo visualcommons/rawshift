@@ -5,14 +5,14 @@
 //! These tests use a tiny synthetic RGB image via `encode_rgb_image` to avoid
 //! the expensive full RAW decode pipeline.
 
-use rawshift::core::image::RgbImage;
-use rawshift::core::metadata::ImageMetadata;
-use rawshift::formats::encode_rgb_image;
+use rawshift_image::core::image::RgbImage;
+use rawshift_image::core::metadata::ImageMetadata;
+use rawshift_image::formats::encode_rgb_image;
 #[cfg(feature = "avif-encode")]
-use rawshift::formats::export::AvifOptions;
+use rawshift_image::formats::export::AvifOptions;
 #[cfg(feature = "jxl-encode")]
-use rawshift::formats::export::JxlOptions;
-use rawshift::formats::export::{
+use rawshift_image::formats::export::JxlOptions;
+use rawshift_image::formats::export::{
     EncodeOptions, JpegOptions, MetadataEmbedOptions, PngOptions, WebPMode, WebPOptions,
 };
 use std::fs;

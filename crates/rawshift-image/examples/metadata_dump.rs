@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let file = File::open(path)?;
     let reader = BufReader::new(file);
-    let raw = rawshift::formats::RawFile::open(reader)?;
+    let raw = rawshift_image::formats::RawFile::open(reader)?;
 
     // Extract metadata
     let metadata = raw.metadata();

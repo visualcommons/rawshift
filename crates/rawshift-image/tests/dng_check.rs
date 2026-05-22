@@ -1,9 +1,10 @@
-use rawshift::tiff::{TiffParser, TiffTag};
+use rawshift_image::tiff::{TiffParser, TiffTag};
 use std::fs::File;
 use std::io::BufReader;
 
 fn skip_if_no_test_data(filename: &str) -> bool {
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
         .join("test_data")
         .join(filename);
     if !path.exists() {
@@ -15,6 +16,7 @@ fn skip_if_no_test_data(filename: &str) -> bool {
 
 fn test_data_path(filename: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
         .join("test_data")
         .join(filename)
 }
@@ -42,7 +44,7 @@ fn test_dng_strategy_check() {
     // 2. Breadth First (Tag Dump)
     let ifds = parser.walk_ifd_chain().unwrap();
     let mut all_tags = Vec::new();
-    fn collect_tags(ifd: &rawshift::tiff::Ifd, tags: &mut Vec<u16>) {
+    fn collect_tags(ifd: &rawshift_image::tiff::Ifd, tags: &mut Vec<u16>) {
         tags.extend(ifd.all_tag_ids());
         for sub_ifd in &ifd.sub_ifds {
             collect_tags(sub_ifd, tags);
@@ -69,7 +71,10 @@ fn test_dng_strategy_check() {
     let mut found_dims = false;
     for ifd in &ifds {
         // Helper to check an ifd
-        fn check_dims(ifd: &rawshift::tiff::Ifd, parser: &mut TiffParser<BufReader<File>>) -> bool {
+        fn check_dims(
+            ifd: &rawshift_image::tiff::Ifd,
+            parser: &mut TiffParser<BufReader<File>>,
+        ) -> bool {
             if let (Some(w_entry), Some(h_entry)) =
                 (ifd.get(TiffTag::ImageWidth), ifd.get(TiffTag::ImageLength))
             {
@@ -106,7 +111,7 @@ fn test_dng_strategy_check() {
     let mut checked_offsets = false;
 
     fn check_bounds(
-        ifd: &rawshift::tiff::Ifd,
+        ifd: &rawshift_image::tiff::Ifd,
         parser: &mut TiffParser<BufReader<File>>,
         file_size: u64,
         checked: &mut bool,

@@ -6,7 +6,7 @@
 mod common;
 
 use common::{load_ground_truth, test_data_path, test_fixture_path};
-use rawshift::tiff::{TiffParser, TiffTag};
+use rawshift_image::tiff::{TiffParser, TiffTag};
 use std::fs::File;
 use std::io::BufReader;
 
@@ -153,7 +153,7 @@ fn test_required_tags_present() {
     // Collect all tag IDs from all IFDs and SubIFDs
     let mut all_tags: Vec<u16> = Vec::new();
 
-    fn collect_tags(ifd: &rawshift::tiff::Ifd, tags: &mut Vec<u16>) {
+    fn collect_tags(ifd: &rawshift_image::tiff::Ifd, tags: &mut Vec<u16>) {
         tags.extend(ifd.all_tag_ids());
         for sub_ifd in &ifd.sub_ifds {
             collect_tags(sub_ifd, tags);

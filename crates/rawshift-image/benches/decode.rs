@@ -1,7 +1,7 @@
 //! Benchmarks for RAW image data structure creation and basic operations.
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use rawshift::core::image::{CfaPattern, Point, RawImage, Rect, Size};
+use rawshift_image::core::image::{CfaPattern, Point, RawImage, Rect, Size};
 
 /// Benchmark creating a RawImage (allocation + init).
 fn bench_raw_image_creation(c: &mut Criterion) {

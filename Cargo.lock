@@ -1743,6 +1743,22 @@ dependencies = [
 name = "rawshift"
 version = "0.1.0"
 dependencies = [
+ "rawshift-image",
+ "rawshift-video",
+]
+
+[[package]]
+name = "rawshift-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rawshift-image"
+version = "0.1.0"
+dependencies = [
  "binrw",
  "clap",
  "criterion",
@@ -1771,14 +1787,6 @@ dependencies = [
  "zune-jpeg 0.5.12",
  "zune-jpegxl",
  "zune-png",
-]
-
-[[package]]
-name = "rawshift-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]

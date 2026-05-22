@@ -97,6 +97,7 @@ pub fn load_ground_truth(
 /// Get the path to a test data file.
 pub fn test_data_path(filename: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
         .join("test_data")
         .join(filename)
 }
@@ -104,6 +105,7 @@ pub fn test_data_path(filename: &str) -> std::path::PathBuf {
 /// Get the path to a test fixture file.
 pub fn test_fixture_path(filename: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
         .join("test_fixtures")
         .join(filename)
 }

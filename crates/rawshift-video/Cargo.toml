@@ -12,3 +12,9 @@ keywords = ["video", "raw", "metadata"]
 categories = ["multimedia::video"]
 
 [dependencies]
+
+# The full video feature tree is laid out in a later stage. For now `full` is
+# an empty placeholder so the `rawshift` facade can forward to it.
+[features]
+default = []
+full = []
