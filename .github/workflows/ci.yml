@@ -16,12 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Pinned to the rust-toolchain.toml channel: a repo rust-toolchain.toml
-      # overrides whatever `@stable` installs, so the component must be added to
-      # that exact toolchain or `cargo fmt` can't find it.
+      # Must match rust-toolchain.toml exactly ("1.90.0" not "1.90"): rustup
+      # treats the two as different toolchain entries, so components installed
+      # under "1.90" are invisible when cargo activates "1.90.0" from the file.
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90"
+          toolchain: "1.90.0"
           components: rustfmt
       - run: cargo fmt --all -- --check
 
@@ -30,10 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Pinned to the rust-toolchain.toml channel — see the fmt job above.
+      # Must match rust-toolchain.toml exactly — see the fmt job comment above.
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90"
+          toolchain: "1.90.0"
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90"
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
       - name: Fetch test fixtures
         run: bash scripts/fetch_test_fixtures.sh
@@ -65,21 +65,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90"
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
-      # `rawshift-image/full` enables `avif` and `heic`, which link the system
-      # dav1d (via image/avif-native -> dav1d-sys) and libheif libraries.
+      # `rawshift-image/full` enables `avif` (links system dav1d) and `heic`.
+      # Ubuntu 24.04's libheif-dev is 1.17.x, but libheif-sys requires >= 1.21,
+      # so we add `heic-vendored` to build libheif 1.21.2 from source instead.
       - name: Install system libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libdav1d-dev libheif-dev
+          sudo apt-get install -y --no-install-recommends libdav1d-dev
       - name: Fetch test fixtures
         run: bash scripts/fetch_test_fixtures.sh
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Generate standard format fixtures
         run: cargo run -p rawshift-image --example generate_test_fixtures
-      - run: cargo test --workspace --features rawshift-image/full
+      - run: cargo test --workspace --features rawshift-image/full,rawshift-image/heic-vendored
 
   image-only:
     name: Build (image only)
@@ -88,7 +89,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90"
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
       # The facade with only the `image` feature, and the image crate standalone.
       - run: cargo build -p rawshift --no-default-features --features image
@@ -101,7 +102,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90"
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p rawshift --no-default-features --features video
       # Assert the video-only build pulls in zero image crates — this is the
@@ -124,7 +125,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90"
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
       - name: Fetch test fixtures
         run: bash scripts/fetch_test_fixtures.sh
@@ -148,7 +149,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90"
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace
 
