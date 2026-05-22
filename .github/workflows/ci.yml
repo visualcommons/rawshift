@@ -16,8 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned to the rust-toolchain.toml channel: a repo rust-toolchain.toml
+      # overrides whatever `@stable` installs, so the component must be added to
+      # that exact toolchain or `cargo fmt` can't find it.
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.90"
           components: rustfmt
       - run: cargo fmt --all -- --check
 
@@ -26,8 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned to the rust-toolchain.toml channel — see the fmt job above.
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.90"
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -57,6 +63,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # `rawshift-image/full` enables `avif` and `heic`, which link the system
+      # dav1d (via image/avif-native -> dav1d-sys) and libheif libraries.
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libdav1d-dev libheif-dev
       - name: Fetch test fixtures
         run: bash scripts/fetch_test_fixtures.sh
         env:
