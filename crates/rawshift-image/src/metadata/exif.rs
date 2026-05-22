@@ -30,6 +30,7 @@ impl std::fmt::Display for ExifError {
 
 impl std::error::Error for ExifError {}
 
+#[cfg(feature = "container-embed")]
 impl From<img_parts::Error> for ExifError {
     fn from(e: img_parts::Error) -> Self {
         ExifError::Container(e.to_string())
@@ -247,6 +248,7 @@ impl<'a> ExifBuilder<'a> {
     /// Append EXIF metadata to existing JPEG data.
     ///
     /// Uses img-parts for zero-copy segment manipulation.
+    #[cfg(feature = "container-embed")]
     pub fn append_to_jpeg(&self, jpeg_data: Vec<u8>) -> Result<Vec<u8>, ExifError> {
         use img_parts::jpeg::Jpeg;
         use img_parts::{Bytes, ImageEXIF};

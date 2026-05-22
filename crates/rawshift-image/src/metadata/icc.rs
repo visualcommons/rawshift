@@ -23,6 +23,7 @@ impl std::fmt::Display for IccError {
 
 impl std::error::Error for IccError {}
 
+#[cfg(feature = "container-embed")]
 impl From<img_parts::Error> for IccError {
     fn from(e: img_parts::Error) -> Self {
         IccError::Container(e.to_string())
@@ -251,6 +252,7 @@ impl IccProfile {
     /// Append ICC profile to existing JPEG data.
     ///
     /// Uses img-parts for segment manipulation.
+    #[cfg(feature = "container-embed")]
     pub fn append_to_jpeg(&self, jpeg_data: Vec<u8>) -> Result<Vec<u8>, IccError> {
         use img_parts::jpeg::Jpeg;
         use img_parts::{Bytes, ImageICC};

@@ -13,8 +13,36 @@ categories = ["multimedia::video"]
 
 [dependencies]
 
-# The full video feature tree is laid out in a later stage. For now `full` is
-# an empty placeholder so the `rawshift` facade can forward to it.
+# Feature flags mirror the tier structure of `rawshift-image`, so the two
+# libraries present a consistent surface. Video is not yet implemented: there
+# are no tier-4 implementation features and no dependencies — the tiers below
+# exist so the feature tree, public API, and `rawshift` facade can be laid out
+# ahead of the decoder work. See the README "Video" section for the roadmap.
+#
+#   tier 1  bundle      video, full
+#   tier 2  format      xavc-hs, xavc-s, hevc, h264, prores
+#   tier 3  direction   xavc-hs-decode, … (decode-only for now)
 [features]
 default = []
-full = []
+
+# ── Tier 1: bundle features ───────────────────────────────────────────────────
+full  = ["video"]
+video = ["xavc-hs", "xavc-s", "hevc", "h264", "prores"]
+
+# ── Tier 2: format features ───────────────────────────────────────────────────
+# One per roadmap format. Each is the codec+container pairing produced by a
+# supported device (see the device support table in the README).
+xavc-hs = ["xavc-hs-decode"] # Sony XAVC HS — H.265/HEVC in MP4
+xavc-s  = ["xavc-s-decode"]  # Sony XAVC S — H.264/AVC in MP4
+hevc    = ["hevc-decode"]    # HEVC (H.265) in QuickTime — default iPhone video
+h264    = ["h264-decode"]    # H.264 (AVC) in QuickTime — legacy/compatibility
+prores  = ["prores-decode"]  # Apple ProRes in QuickTime
+
+# ── Tier 3: direction features ────────────────────────────────────────────────
+# Decode-only for now. Encode directions and tier-4 implementation features
+# will be added when concrete decoder backends land.
+xavc-hs-decode = []
+xavc-s-decode  = []
+hevc-decode    = []
+h264-decode    = []
+prores-decode  = []

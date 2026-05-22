@@ -864,16 +864,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "image-webp"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
-dependencies = [
- "byteorder-lite",
- "quick-error",
-]
-
-[[package]]
 name = "imagesize"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1169,15 +1159,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kamadak-exif"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1130d80c7374efad55a117d715a3af9368f0fa7a2c54573afc15a188cd984837"
-dependencies = [
- "mutate_once",
-]
-
-[[package]]
 name = "kurbo"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1370,12 +1351,6 @@ dependencies = [
  "num-traits",
  "static_assertions",
 ]
-
-[[package]]
-name = "mutate_once"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13d2233c9842d08cfe13f9eac96e207ca6a2ea10b80259ebe8ad0268be27d2af"
 
 [[package]]
 name = "nasm-rs"
@@ -1783,7 +1758,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "zune-core 0.5.1",
- "zune-image",
  "zune-jpeg 0.5.12",
  "zune-jpegxl",
  "zune-png",
@@ -1858,7 +1832,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a325d5e8d1cebddd070b13f44cec8071594ab67d1012797c121f27a669b7958"
 dependencies = [
  "gif",
- "image-webp 0.1.3",
+ "image-webp",
  "log",
  "pico-args",
  "rgb",
@@ -2623,16 +2597,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[package]]
-name = "zune-bmp"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b77b890dbf6b1a32fc57d9f1f30e22175694c454581de7c6e466f2853cf9fe3"
-dependencies = [
- "log",
- "zune-core 0.5.1",
-]
-
-[[package]]
 name = "zune-core"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2643,52 +2607,6 @@ name = "zune-core"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb8a0807f7c01457d0379ba880ba6322660448ddebc890ce29bb64da71fb40f9"
-dependencies = [
- "log",
- "serde",
-]
-
-[[package]]
-name = "zune-farbfeld"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46689bf6c90702cba18ef876cc0d29affa8cda58e82a1246fced3a820e0e4c3d"
-dependencies = [
- "zune-core 0.5.1",
-]
-
-[[package]]
-name = "zune-hdr"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34f7d50f1e3f3a95efa12c3c5048ad84e9d7fd8b1bc5faf01fd35b8df1f103e9"
-dependencies = [
- "zune-core 0.5.1",
-]
-
-[[package]]
-name = "zune-image"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d67f66717c2ca4f5fe18894e4724c7d22076dea8f245ea5386a05a4b6b8f4a53"
-dependencies = [
- "bytemuck",
- "image-webp 0.2.4",
- "jpeg-encoder",
- "jxl-oxide",
- "kamadak-exif",
- "serde",
- "zune-bmp",
- "zune-core 0.5.1",
- "zune-farbfeld",
- "zune-hdr",
- "zune-jpeg 0.5.12",
- "zune-jpegxl",
- "zune-png",
- "zune-ppm",
- "zune-psd",
- "zune-qoi",
-]
 
 [[package]]
 name = "zune-inflate"
@@ -2734,31 +2652,4 @@ checksum = "af6dc406edc296451b9597ee98643df8606396066d8f0864682c266eda16f310"
 dependencies = [
  "zune-core 0.5.1",
  "zune-inflate",
-]
-
-[[package]]
-name = "zune-ppm"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fa3b8ca5bfe13b58735c3c8e56442390946e8e0e0ff50e12b9215afd278d422"
-dependencies = [
- "zune-core 0.5.1",
-]
-
-[[package]]
-name = "zune-psd"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a518b7a7bee76246a6c783d795c56204cd9184ce0e2e4483717f1b9438c902c"
-dependencies = [
- "zune-core 0.5.1",
-]
-
-[[package]]
-name = "zune-qoi"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdfb703f475bc1190ebece625c1ddf162214933188a3572af8e8f697ad043d5a"
-dependencies = [
- "zune-core 0.5.1",
 ]

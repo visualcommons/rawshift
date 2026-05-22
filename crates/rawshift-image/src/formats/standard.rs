@@ -3,11 +3,16 @@
 //! This module provides decoders for common non-RAW image formats that decode
 //! directly to RGB pixel data stored in an [`RgbImage`].
 
+#[cfg(any_standard_decode)]
 use std::io::Cursor;
 
+#[cfg(feature = "zune-runtime")]
 use zune_core::bytestream::ZCursor;
+#[cfg(feature = "zune-runtime")]
 use zune_core::colorspace::ColorSpace;
+#[cfg(feature = "zune-runtime")]
 use zune_core::options::DecoderOptions;
+#[cfg(feature = "zune-runtime")]
 use zune_core::result::DecodingResult;
 
 use crate::core::image::RgbImage;
@@ -235,6 +240,7 @@ pub fn detect_standard_format(data: &[u8]) -> Option<StandardFormat> {
 /// Scale an 8-bit sample to 16-bit by duplicating the byte in both halves.
 /// This is equivalent to `v * 257` and ensures that 255 maps to 65535.
 #[inline(always)]
+#[cfg_attr(not(any_standard_decode), allow(dead_code))]
 fn u8_to_u16(v: u8) -> u16 {
     (v as u16) * 257
 }
@@ -976,6 +982,7 @@ pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<R
 ///
 /// # Errors
 /// Returns a [`RawError`] if the selected backend fails to decode `data`.
+#[cfg_attr(not(any_standard_decode), allow(unused_variables))]
 pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawResult<RgbImage> {
     match options {
         #[cfg(feature = "jpeg-decode")]
@@ -1020,6 +1027,9 @@ pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawRe
 /// | PNG    | eXIf chunk |
 /// | HEIC   | HEIF Exif + ICC + XMP items (requires the `heic` feature) |
 /// | GIF / JXL / SVG / APV | returns empty metadata |
+/// When the `exif` feature is disabled the crate has no EXIF parser, so this
+/// degrades to returning empty metadata for every format.
+#[cfg(feature = "exif")]
 pub fn read_standard_image_metadata(
     data: &[u8],
     format: StandardFormat,
@@ -1046,6 +1056,19 @@ pub fn read_standard_image_metadata(
     };
 
     ExifParser::parse_from_bytes(data, file_type)
+}
+
+/// Extract EXIF metadata from a standard image without decoding pixel data.
+///
+/// This is the `exif`-feature-disabled build: the crate carries no EXIF parser,
+/// so empty metadata is always returned. See the `exif`-enabled variant for the
+/// documented behaviour.
+#[cfg(not(feature = "exif"))]
+pub fn read_standard_image_metadata(
+    _data: &[u8],
+    _format: StandardFormat,
+) -> crate::core::metadata::ImageMetadata {
+    crate::core::metadata::ImageMetadata::default()
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

@@ -490,7 +490,7 @@ mod png_tests {
         let path = temp_path("export_8bit.png");
 
         let opts = PngOptions {
-            bit_depth: zune_core::bit_depth::BitDepth::Eight,
+            bit_depth: rawshift_image::formats::export::BitDepth::Eight,
             metadata: MetadataEmbedOptions::default(),
         };
         encode_rgb_image(

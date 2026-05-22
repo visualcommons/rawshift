@@ -8,11 +8,31 @@ use std::path::Path;
 
 use crate::core::image::RgbImage;
 use crate::core::metadata::ImageMetadata;
-use crate::error::{EncodeError, RawError, RawResult};
+#[cfg(any_standard_encode)]
+use crate::error::EncodeError;
+use crate::error::{RawError, RawResult};
 
 use super::export::EncodeOptions;
 #[cfg(feature = "dng-encode")]
 use super::export_dng;
+
+/// Codec-facing conversion for the owned [`BitDepth`](super::export::BitDepth)
+/// enum. Lives here because `encode.rs` is only compiled when a zune-backed
+/// encoder (and therefore `zune-runtime`) is active.
+#[cfg(feature = "zune-runtime")]
+impl super::export::BitDepth {
+    /// Convert to the `zune-core` codec bit-depth representation.
+    ///
+    /// Only the PNG encode path consumes this; allow it to be unused when PNG
+    /// encoding is not compiled in.
+    #[cfg_attr(not(feature = "png-encode"), allow(dead_code))]
+    fn to_zune(self) -> zune_core::bit_depth::BitDepth {
+        match self {
+            super::export::BitDepth::Eight => zune_core::bit_depth::BitDepth::Eight,
+            super::export::BitDepth::Sixteen => zune_core::bit_depth::BitDepth::Sixteen,
+        }
+    }
+}
 
 /// Encode a linear RGB image to a file with optional EXIF/ICC metadata.
 ///
@@ -22,6 +42,7 @@ use super::export_dng;
 ///
 /// `image` must contain 16-bit scene-linear RGB data normalized to [0, 65535].
 /// Call `apply_tonemap` first if the image hasn't been tone-mapped yet.
+#[cfg_attr(not(any_standard_encode), allow(unused_variables, unreachable_code))]
 pub fn encode_rgb_image(
     image: &RgbImage,
     metadata: &ImageMetadata,
@@ -39,9 +60,9 @@ pub fn encode_rgb_image(
                 .set_width(image.width() as usize)
                 .set_height(image.height() as usize)
                 .set_colorspace(ColorSpace::RGB)
-                .set_depth(opts.bit_depth);
+                .set_depth(opts.bit_depth.to_zune());
 
-            let data_bytes = if opts.bit_depth == zune_core::bit_depth::BitDepth::Sixteen {
+            let data_bytes = if opts.bit_depth == crate::formats::export::BitDepth::Sixteen {
                 let mut bytes = Vec::with_capacity(image.data.len() * 2);
                 for &pixel in &image.data {
                     bytes.extend_from_slice(&pixel.to_be_bytes());
@@ -361,6 +382,7 @@ pub fn encode_rgb_image(
 /// Like [`encode_rgb_image`] but writes to any `Write` implementor instead of a file path.
 /// Currently supports PNG, JPEG, and WebP. For formats requiring post-processing
 /// (DNG, AVIF, JXL), use [`encode_rgb_image`] with a file path.
+#[cfg_attr(not(any_standard_encode), allow(unused_variables, unreachable_code))]
 pub fn encode_rgb_image_to_writer<W: std::io::Write>(
     image: &RgbImage,
     metadata: &ImageMetadata,
@@ -378,9 +400,9 @@ pub fn encode_rgb_image_to_writer<W: std::io::Write>(
                 .set_width(image.width() as usize)
                 .set_height(image.height() as usize)
                 .set_colorspace(ColorSpace::RGB)
-                .set_depth(opts.bit_depth);
+                .set_depth(opts.bit_depth.to_zune());
 
-            let data_bytes = if opts.bit_depth == zune_core::bit_depth::BitDepth::Sixteen {
+            let data_bytes = if opts.bit_depth == crate::formats::export::BitDepth::Sixteen {
                 let mut bytes = Vec::with_capacity(image.data.len() * 2);
                 for &pixel in &image.data {
                     bytes.extend_from_slice(&pixel.to_be_bytes());

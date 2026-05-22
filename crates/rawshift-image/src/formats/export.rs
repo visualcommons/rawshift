@@ -98,13 +98,27 @@ impl EncodeOptions {
     }
 }
 
+/// Bit depth of an encoded image's pixel samples.
+///
+/// This is an owned enum so that the public encode API does not leak the
+/// internal `zune-core` codec dependency. The codec-facing conversion lives in
+/// the `zune-runtime`-gated encode paths (see `formats/encode.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum BitDepth {
+    /// 8 bits per sample.
+    Eight,
+    /// 16 bits per sample.
+    #[default]
+    Sixteen,
+}
+
 /// Options for PNG encoding.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PngOptions {
     /// Bit depth (8 or 16). Default: 16
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub bit_depth: zune_core::bit_depth::BitDepth,
+    pub bit_depth: BitDepth,
     /// Metadata embedding options.
     pub metadata: MetadataEmbedOptions,
 }
@@ -112,7 +126,7 @@ pub struct PngOptions {
 impl Default for PngOptions {
     fn default() -> Self {
         Self {
-            bit_depth: zune_core::bit_depth::BitDepth::Sixteen,
+            bit_depth: BitDepth::Sixteen,
             metadata: MetadataEmbedOptions::default(),
         }
     }
