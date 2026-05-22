@@ -40,6 +40,7 @@ fn main() {
             "avif-decode",
             "heic-decode",
             "svg-decode",
+            "ppm-decode",
         ],
     );
     // `any_standard_encode` — at least one standard (non-RAW) encoder is on.

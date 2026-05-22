@@ -38,6 +38,7 @@ zune-core      = { version = "0.5",    optional = true }
 zune-jpeg      = { version = "0.5",    optional = true }
 zune-jpegxl    = { version = "0.5",    optional = true }
 zune-png       = { version = "0.5",    optional = true }
+zune-ppm       = { version = "0.5",    optional = true }
 gif            = { version = "0.13",   optional = true }
 tiff           = { version = "0.11",   optional = true }
 
@@ -62,10 +63,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 #   tier 5  infrastructure     tiff-parser, serde, zune-runtime, exif, …
 #
 # Only tier-4 features (and RAW tier-3 features) reference `dep:*`.
-default = ["jpeg", "png", "webp", "jxl-decode", "gif-decode", "tiff-decode"]
+default = ["jpeg", "png", "webp", "jxl-decode", "gif-decode", "tiff-decode", "ppm-decode"]
 
 # ── Tier 1: bundle features ───────────────────────────────────────────────────
-full = ["jpeg", "png", "webp", "jxl", "gif", "tiff", "avif", "heic", "svg",
+full = ["jpeg", "png", "webp", "jxl", "gif", "tiff", "avif", "heic", "svg", "ppm",
         "serde", "experimental"]
 experimental    = ["raw-stabilizing", "raw-incomplete"]
 raw-stabilizing = ["arw", "dng"]      # RAW formats with fixtures + working decode
@@ -81,6 +82,7 @@ gif  = ["gif-decode"]                 # decode-only
 tiff = ["tiff-decode"]                # decode-only
 heic = ["heic-decode"]                # decode-only
 svg  = ["svg-decode"]                 # decode-only
+ppm  = ["ppm-decode"]                 # decode-only
 arw  = ["arw-decode"]
 cr2  = ["cr2-decode"]
 cr3  = ["cr3-decode"]
@@ -108,6 +110,7 @@ avif-decode = ["avif-decode-image"]
 avif-encode = ["avif-encode-ravif"]
 heic-decode = ["heic-decode-libheif"]
 svg-decode  = ["svg-decode-resvg"]
+ppm-decode  = ["ppm-decode-zune"]
 arw-decode  = ["tiff-parser"]
 cr2-decode  = ["tiff-parser"]
 cr3-decode  = ["tiff-parser"]
@@ -139,6 +142,7 @@ avif-decode-image    = ["avif-decode", "dep:image", "exif"]
 avif-encode-ravif    = ["avif-encode", "dep:ravif", "exif", "container-embed"]
 heic-decode-libheif  = ["heic-decode", "dep:libheif-rs", "exif"]
 svg-decode-resvg     = ["svg-decode", "dep:resvg"]
+ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
 
 # ── Tier 5: infrastructure / linking features ─────────────────────────────────
 # Internal TIFF structure parser (used by TIFF-based RAW formats) + public API.

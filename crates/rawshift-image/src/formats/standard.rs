@@ -1,4 +1,4 @@
-//! Standard image format decoders (JPEG, PNG, WebP, TIFF, JXL, AVIF, HEIC, SVG, APV).
+//! Standard image format decoders (JPEG, PNG, WebP, TIFF, JXL, AVIF, HEIC, SVG, APV, PPM).
 //!
 //! This module provides decoders for common non-RAW image formats that decode
 //! directly to RGB pixel data stored in an [`RgbImage`].
@@ -42,6 +42,8 @@ pub enum StandardFormat {
     Svg,
     /// APV (All-intra Predictive Video codec)
     Apv,
+    /// PPM / Netpbm (Portable Pixmap family: P5, P6, P7, PFM)
+    Ppm,
 }
 
 impl StandardFormat {
@@ -58,6 +60,7 @@ impl StandardFormat {
             StandardFormat::Heic => "HEIC",
             StandardFormat::Svg => "SVG",
             StandardFormat::Apv => "APV",
+            StandardFormat::Ppm => "PPM",
         }
     }
 
@@ -74,13 +77,15 @@ impl StandardFormat {
             StandardFormat::Heic => "heic",
             StandardFormat::Svg => "svg",
             StandardFormat::Apv => "apv",
+            StandardFormat::Ppm => "ppm",
         }
     }
 
     /// Look up a format by file extension (case-insensitive).
     ///
     /// Common aliases are supported (e.g. `jpeg`/`jpe`/`jfif` for JPEG,
-    /// `tif` for TIFF, `heif` for HEIC, `svgz` for SVG).
+    /// `tif` for TIFF, `heif` for HEIC, `svgz` for SVG, `pgm`/`pnm`/`pam`/`pfm`
+    /// for PPM).
     pub fn from_extension(ext: &str) -> Option<StandardFormat> {
         match ext.to_ascii_lowercase().as_str() {
             "gif" => Some(StandardFormat::Gif),
@@ -93,6 +98,7 @@ impl StandardFormat {
             "heic" | "heif" => Some(StandardFormat::Heic),
             "svg" | "svgz" => Some(StandardFormat::Svg),
             "apv" => Some(StandardFormat::Apv),
+            "ppm" | "pgm" | "pnm" | "pam" | "pfm" => Some(StandardFormat::Ppm),
             _ => None,
         }
     }
@@ -110,6 +116,7 @@ impl StandardFormat {
             StandardFormat::Heic => "image/heic",
             StandardFormat::Svg => "image/svg+xml",
             StandardFormat::Apv => "video/apv",
+            StandardFormat::Ppm => "image/x-portable-pixmap",
         }
     }
 
@@ -134,6 +141,8 @@ impl StandardFormat {
             StandardFormat::Svg => true,
             #[cfg(feature = "heic-decode")]
             StandardFormat::Heic => true,
+            #[cfg(feature = "ppm-decode")]
+            StandardFormat::Ppm => true,
             _ => false,
         }
     }
@@ -220,6 +229,15 @@ pub fn detect_standard_format(data: &[u8]) -> Option<StandardFormat> {
             && (&d[8..12] == b"apv1" || &d[8..12] == b"apvx") =>
         {
             Some(StandardFormat::Apv)
+        }
+        // PPM / Netpbm: 'P' + version (5/6/7 binary, or F/f for PFM) + whitespace.
+        // P1-P4 (ASCII bitmaps / binary PBM) are intentionally excluded — the
+        // zune-ppm backend does not decode them.
+        d if d[0] == b'P'
+            && matches!(d[1], b'5' | b'6' | b'7' | b'F' | b'f')
+            && d[2].is_ascii_whitespace() =>
+        {
+            Some(StandardFormat::Ppm)
         }
         // SVG: XML starting with <?xml, <svg, or <!-- with <svg present in file
         d if d.len() >= 4
@@ -751,6 +769,72 @@ fn decode_apv(_data: &[u8]) -> RawResult<RgbImage> {
     }))
 }
 
+// ── PPM ──────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "ppm-decode")]
+fn decode_ppm(data: &[u8], _cfg: &ZunePpmDecodeConfig) -> RawResult<RgbImage> {
+    let cursor = ZCursor::new(data);
+    let mut decoder = zune_ppm::PPMDecoder::new_with_options(cursor, DecoderOptions::default());
+
+    let result = decoder.decode().map_err(|e| {
+        RawError::Format(FormatError::ImageDecode {
+            format: "PPM",
+            message: format!("{e:?}"),
+        })
+    })?;
+
+    let (w, h) = decoder
+        .dimensions()
+        .map(|(w, h)| (w as u32, h as u32))
+        .ok_or_else(|| {
+            RawError::Format(FormatError::ImageDecode {
+                format: "PPM",
+                message: "could not read image dimensions after decode".to_string(),
+            })
+        })?;
+
+    let colorspace = decoder.colorspace().unwrap_or(ColorSpace::RGB);
+    let n = colorspace.num_components();
+
+    // Convert raw samples to Vec<u16> (PFM yields f32 normalised to 0..1).
+    let samples_u16: Vec<u16> = match result {
+        DecodingResult::U8(px) => px.iter().map(|&v| u8_to_u16(v)).collect(),
+        DecodingResult::U16(px) => px,
+        DecodingResult::F32(px) => px
+            .iter()
+            .map(|&v| (v.clamp(0.0, 1.0) * 65535.0) as u16)
+            .collect(),
+        _ => {
+            return Err(RawError::Format(FormatError::ImageDecode {
+                format: "PPM",
+                message: "unexpected pixel depth in decoded result".to_string(),
+            }));
+        }
+    };
+
+    // Convert any colorspace to packed RGB u16.
+    let data_u16: Vec<u16> = match colorspace {
+        ColorSpace::RGB => samples_u16,
+        ColorSpace::RGBA => samples_u16
+            .chunks_exact(n)
+            .flat_map(|px| [px[0], px[1], px[2]])
+            .collect(),
+        ColorSpace::Luma => samples_u16.iter().flat_map(|&v| [v, v, v]).collect(),
+        ColorSpace::LumaA => samples_u16
+            .chunks_exact(n)
+            .flat_map(|px| [px[0], px[0], px[0]])
+            .collect(),
+        _ => {
+            return Err(RawError::Format(FormatError::ImageDecode {
+                format: "PPM",
+                message: format!("unsupported PPM colorspace: {colorspace:?}"),
+            }));
+        }
+    };
+
+    Ok(RgbImage::new(w, h, data_u16))
+}
+
 // ── Decoder implementation selection ──────────────────────────────────────────
 
 /// Per-implementation configuration for the `zune-jpeg` JPEG decoder.
@@ -822,6 +906,7 @@ empty_decode_config!(GifDecodeConfig, "gif");
 empty_decode_config!(TiffDecodeConfig, "tiff");
 empty_decode_config!(ImageAvifDecodeConfig, "image (avif-native)");
 empty_decode_config!(LibheifDecodeConfig, "libheif");
+empty_decode_config!(ZunePpmDecodeConfig, "zune-ppm");
 
 /// Selects which decoder implementation handles a standard image, and carries
 /// that implementation's configuration.
@@ -864,6 +949,9 @@ pub enum DecodeOptions {
     /// SVG via `resvg`.
     #[cfg(feature = "svg-decode")]
     SvgResvg(ResvgDecodeConfig),
+    /// PPM / Netpbm via `zune-ppm`.
+    #[cfg(feature = "ppm-decode")]
+    PpmZune(ZunePpmDecodeConfig),
 }
 
 impl DecodeOptions {
@@ -888,6 +976,8 @@ impl DecodeOptions {
             DecodeOptions::HeicLibheif(_) => StandardFormat::Heic,
             #[cfg(feature = "svg-decode")]
             DecodeOptions::SvgResvg(_) => StandardFormat::Svg,
+            #[cfg(feature = "ppm-decode")]
+            DecodeOptions::PpmZune(_) => StandardFormat::Ppm,
             // Unreachable: with no decode feature enabled `DecodeOptions` has
             // no variants and no value of it can be constructed.
             #[allow(unreachable_patterns)]
@@ -925,6 +1015,8 @@ impl DecodeOptions {
             }
             #[cfg(feature = "svg-decode")]
             StandardFormat::Svg => Some(DecodeOptions::SvgResvg(ResvgDecodeConfig::default())),
+            #[cfg(feature = "ppm-decode")]
+            StandardFormat::Ppm => Some(DecodeOptions::PpmZune(ZunePpmDecodeConfig::default())),
             #[allow(unreachable_patterns)]
             _ => None,
         }
@@ -964,6 +1056,8 @@ pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<R
         StandardFormat::Avif => decode_avif(data),
         StandardFormat::Heic => decode_heic(data),
         StandardFormat::Svg => decode_svg(data, &ResvgDecodeConfig::default()),
+        #[cfg(feature = "ppm-decode")]
+        StandardFormat::Ppm => decode_ppm(data, &ZunePpmDecodeConfig::default()),
         StandardFormat::Apv => decode_apv(data),
         #[allow(unreachable_patterns)]
         _ => Err(RawError::Unsupported(format!(
@@ -1003,6 +1097,8 @@ pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawRe
         DecodeOptions::HeicLibheif(_cfg) => decode_heic(data),
         #[cfg(feature = "svg-decode")]
         DecodeOptions::SvgResvg(cfg) => decode_svg(data, cfg),
+        #[cfg(feature = "ppm-decode")]
+        DecodeOptions::PpmZune(cfg) => decode_ppm(data, cfg),
         // Unreachable: with no decode feature enabled `DecodeOptions` has no
         // variants and no value of it can be constructed.
         #[allow(unreachable_patterns)]
@@ -1196,6 +1292,7 @@ mod tests {
             StandardFormat::Heic,
             StandardFormat::Svg,
             StandardFormat::Apv,
+            StandardFormat::Ppm,
         ];
     }
 
@@ -1328,6 +1425,48 @@ mod tests {
         let img = decode_standard_image(&encoded, fmt.unwrap()).unwrap();
         assert_eq!(img.width(), W as u32);
         assert_eq!(img.height(), H as u32);
+    }
+
+    // ── PPM detect + decode ───────────────────────────────────────────────
+
+    #[test]
+    fn detect_ppm_p6() {
+        let magic = *b"P6\n2 2\n255\n";
+        assert_eq!(detect_standard_format(&magic), Some(StandardFormat::Ppm));
+    }
+
+    #[test]
+    fn detect_ppm_rejects_ascii_pbm() {
+        // P1-P4 are not handled by the zune-ppm backend, so must not be detected.
+        let magic = *b"P1\n2 2\n0 0\n";
+        assert_eq!(detect_standard_format(&magic), None);
+    }
+
+    #[cfg(feature = "ppm-decode")]
+    #[test]
+    fn ppm_p6_decode_dimensions_and_samples() {
+        // Hand-crafted 2×2 binary P6 (RGB, maxval 255) — no encoder needed.
+        // Sample values deliberately avoid ASCII-whitespace bytes (9-13, 32) so
+        // the first pixel byte is not mistaken for header padding.
+        let pixels: [u8; 12] = [
+            100, 120, 130, // (0,0)
+            140, 150, 160, // (1,0)
+            170, 180, 190, // (0,1)
+            200, 210, 220, // (1,1)
+        ];
+        let mut file = b"P6\n2 2\n255\n".to_vec();
+        file.extend_from_slice(&pixels);
+
+        let fmt = detect_standard_format(&file);
+        assert_eq!(fmt, Some(StandardFormat::Ppm));
+
+        let decoded = decode_standard_image(&file, StandardFormat::Ppm).expect("PPM decode failed");
+        assert_eq!(decoded.width(), 2);
+        assert_eq!(decoded.height(), 2);
+        assert_eq!(decoded.data.len(), 2 * 2 * 3);
+        // 8-bit samples must have been scaled to 16-bit.
+        assert_eq!(decoded.data[0], u8_to_u16(pixels[0]));
+        assert_eq!(decoded.data[11], u8_to_u16(pixels[11]));
     }
 
     // ── GIF decode ────────────────────────────────────────────────────────

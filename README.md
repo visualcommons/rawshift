@@ -55,6 +55,7 @@ Here is the list of image formats that are being worked on in order of priority:
 | AVIF         | [image/avif-native](https://github.com/image-rs/image) (Functional)                      | [ravif](https://github.com/kornelski/cavif-rs/tree/main/ravif) (Functional)                      |                                           |
 | HEIC         | [libheif](https://github.com/strukturag/libheif) (Functional)                            | Not planned                                                                                      | Requires `heic` feature; `heic-vendored` builds libheif from source. |
 | SVG          | [resvg/tiny-skia](https://github.com/linebender/resvg) (Functional)                      | Not planned                                                                                      |                                           |
+| PPM          | [zune-ppm](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-ppm) (Functional) | Not planned                                                                                    | Netpbm family: P5, P6, P7, PFM.           |
 
 Note on encoding support: For formats that we do not support encoding, you may still take the decoded pixel data and metadata, and encode it with your own encoding logic.
 
@@ -110,7 +111,7 @@ below it; only tier-4 features (and RAW tier-3 features) pull in an external
 crate.
 
 1. **Bundle features** — coarse, ready-made groupings.
-   - `default` — `jpeg`, `png`, `webp`, `jxl-decode`, `gif-decode`, `tiff-decode`.
+   - `default` — `jpeg`, `png`, `webp`, `jxl-decode`, `gif-decode`, `tiff-decode`, `ppm-decode`.
    - `full` — every format, `serde`, and all RAW formats.
    - `experimental` — all RAW formats (`raw-stabilizing` + `raw-incomplete`).
    - `raw-stabilizing` — RAW formats with test fixtures and working decode (ARW, DNG).
@@ -118,13 +119,14 @@ crate.
 2. **Format features** — one per image format; enables decode **and** encode for
    that format (or decode only, where encode is unsupported).
    - `jpeg`, `png`, `webp`, `jxl`, `avif`, `dng`
-   - `gif`, `tiff`, `heic`, `svg` — decode-only
+   - `gif`, `tiff`, `heic`, `svg`, `ppm` — decode-only
    - `arw`, `cr2`, `cr3`, `crw`, `nef`, `raf` — RAW, decode-only
 3. **Direction features** — one per format per direction.
    - Compressed formats: `jpeg-decode`, `jpeg-encode`, `png-decode`, `png-encode`,
      `webp-decode`, `webp-encode`, `jxl-decode`, `jxl-encode`, `gif-decode`,
-     `tiff-decode`, `avif-decode`, `avif-encode`, `heic-decode`, `svg-decode` —
-     each is an **alias for that format+direction's default implementation**.
+     `tiff-decode`, `avif-decode`, `avif-encode`, `heic-decode`, `svg-decode`,
+     `ppm-decode` — each is an **alias for that format+direction's default
+     implementation**.
      This is where the per-format default is defined.
    - RAW formats: `arw-decode`, `cr2-decode`, `cr3-decode`, `crw-decode`,
      `dng-decode`, `dng-encode`, `nef-decode`, `raf-decode` — RAW formats have a
@@ -141,6 +143,7 @@ crate.
    - `gif-decode-gif`, `tiff-decode-tiff`
    - `avif-decode-image`, `avif-encode-ravif`
    - `heic-decode-libheif`, `svg-decode-resvg`
+   - `ppm-decode-zune`
 5. **Infrastructure / linking features** — cross-cutting, not tied to one format.
    - `tiff-parser` — internal TIFF structure parser plus the public `TiffParser` API.
    - `serde` — `Serialize`/`Deserialize` for metadata and option types.

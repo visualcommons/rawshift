@@ -33,8 +33,8 @@ pub use heic::{HeicAuxImage, HeicAuxKind, HeicFile};
 pub use standard::{
     DecodeOptions, GifDecodeConfig, ImageAvifDecodeConfig, JxlOxideDecodeConfig,
     LibheifDecodeConfig, LibwebpDecodeConfig, ResvgDecodeConfig, StandardFormat, TiffDecodeConfig,
-    ZuneJpegDecodeConfig, ZunePngDecodeConfig, decode_standard_image, decode_standard_image_with,
-    detect_standard_format, read_standard_image_metadata,
+    ZuneJpegDecodeConfig, ZunePngDecodeConfig, ZunePpmDecodeConfig, decode_standard_image,
+    decode_standard_image_with, detect_standard_format, read_standard_image_metadata,
 };
 
 #[cfg(feature = "tiff-parser")]

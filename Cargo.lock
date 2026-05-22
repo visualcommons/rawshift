@@ -1761,6 +1761,7 @@ dependencies = [
  "zune-jpeg 0.5.12",
  "zune-jpegxl",
  "zune-png",
+ "zune-ppm",
 ]
 
 [[package]]
@@ -2652,4 +2653,13 @@ checksum = "af6dc406edc296451b9597ee98643df8606396066d8f0864682c266eda16f310"
 dependencies = [
  "zune-core 0.5.1",
  "zune-inflate",
+]
+
+[[package]]
+name = "zune-ppm"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fa3b8ca5bfe13b58735c3c8e56442390946e8e0e0ff50e12b9215afd278d422"
+dependencies = [
+ "zune-core 0.5.1",
 ]
