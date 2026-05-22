@@ -81,10 +81,11 @@ fn test_dng_strategy_check() {
                 // Ignore potential read errors for this check, just skip
                 let w = parser.read_value(w_entry).ok().and_then(|v| v.as_u32());
                 let h = parser.read_value(h_entry).ok().and_then(|v| v.as_u32());
-                if let (Some(width), Some(height)) = (w, h) {
-                    if width == 8064 && height == 6048 {
-                        return true;
-                    }
+                if let (Some(width), Some(height)) = (w, h)
+                    && width == 8064
+                    && height == 6048
+                {
+                    return true;
                 }
             }
             for sub in &ifd.sub_ifds {
@@ -120,45 +121,37 @@ fn test_dng_strategy_check() {
         if let (Some(off_e), Some(cnt_e)) = (
             ifd.get(TiffTag::StripOffsets),
             ifd.get(TiffTag::StripByteCounts),
-        ) {
-            if let (Ok(offsets), Ok(counts)) = (parser.read_value(off_e), parser.read_value(cnt_e))
-            {
-                if let (Some(off_vec), Some(cnt_vec)) = (offsets.as_u64_vec(), counts.as_u64_vec())
-                {
-                    for (o, c) in off_vec.iter().zip(cnt_vec.iter()) {
-                        let end = o + c;
-                        assert!(
-                            end <= file_size + 1024,
-                            "Strip Data Out of Bounds: {} > {}",
-                            end,
-                            file_size
-                        );
-                        *checked = true;
-                    }
-                }
+        ) && let (Ok(offsets), Ok(counts)) = (parser.read_value(off_e), parser.read_value(cnt_e))
+            && let (Some(off_vec), Some(cnt_vec)) = (offsets.as_u64_vec(), counts.as_u64_vec())
+        {
+            for (o, c) in off_vec.iter().zip(cnt_vec.iter()) {
+                let end = o + c;
+                assert!(
+                    end <= file_size + 1024,
+                    "Strip Data Out of Bounds: {} > {}",
+                    end,
+                    file_size
+                );
+                *checked = true;
             }
         }
         // Check TileOffsets
         if let (Some(off_e), Some(cnt_e)) = (
             ifd.get(TiffTag::TileOffsets),
             ifd.get(TiffTag::TileByteCounts),
-        ) {
-            if let (Ok(offsets), Ok(counts)) = (parser.read_value(off_e), parser.read_value(cnt_e))
-            {
-                if let (Some(off_vec), Some(cnt_vec)) = (offsets.as_u64_vec(), counts.as_u64_vec())
-                {
-                    for (o, c) in off_vec.iter().zip(cnt_vec.iter()) {
-                        let end = o + c;
-                        // Allow small margin for error or if file size is slightly off compared to EOF vs content
-                        assert!(
-                            end <= file_size + 1024,
-                            "Tile Data Out of Bounds: {} > {}",
-                            end,
-                            file_size
-                        );
-                        *checked = true;
-                    }
-                }
+        ) && let (Ok(offsets), Ok(counts)) = (parser.read_value(off_e), parser.read_value(cnt_e))
+            && let (Some(off_vec), Some(cnt_vec)) = (offsets.as_u64_vec(), counts.as_u64_vec())
+        {
+            for (o, c) in off_vec.iter().zip(cnt_vec.iter()) {
+                let end = o + c;
+                // Allow small margin for error or if file size is slightly off compared to EOF vs content
+                assert!(
+                    end <= file_size + 1024,
+                    "Tile Data Out of Bounds: {} > {}",
+                    end,
+                    file_size
+                );
+                *checked = true;
             }
         }
 

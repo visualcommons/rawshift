@@ -219,23 +219,23 @@ fn test_raw_dimensions_jic7790() {
     for sub_ifd in &ifd0.sub_ifds {
         if let Some(width_entry) = sub_ifd.get(TiffTag::ImageWidth) {
             let width_value = parser.read_value(width_entry).unwrap();
-            if let Some(width) = width_value.as_u32() {
-                if width == gt.primary_raw_frame.width {
-                    found = true;
+            if let Some(width) = width_value.as_u32()
+                && width == gt.primary_raw_frame.width
+            {
+                found = true;
 
-                    // Also verify height
-                    if let Some(height_entry) = sub_ifd.get(TiffTag::ImageLength) {
-                        let height_value = parser.read_value(height_entry).unwrap();
-                        if let Some(height) = height_value.as_u32() {
-                            assert_eq!(
-                                height, gt.primary_raw_frame.height,
-                                "Height mismatch: expected {}, got {}",
-                                gt.primary_raw_frame.height, height
-                            );
-                        }
+                // Also verify height
+                if let Some(height_entry) = sub_ifd.get(TiffTag::ImageLength) {
+                    let height_value = parser.read_value(height_entry).unwrap();
+                    if let Some(height) = height_value.as_u32() {
+                        assert_eq!(
+                            height, gt.primary_raw_frame.height,
+                            "Height mismatch: expected {}, got {}",
+                            gt.primary_raw_frame.height, height
+                        );
                     }
-                    break;
                 }
+                break;
             }
         }
     }
@@ -265,11 +265,11 @@ fn test_bit_depth_jic7790() {
     for sub_ifd in &ifd0.sub_ifds {
         if let Some(entry) = sub_ifd.get(TiffTag::BitsPerSample) {
             let value = parser.read_value(entry).unwrap();
-            if let Some(bits) = value.as_u32() {
-                if bits == gt.primary_raw_frame.bit_depth as u32 {
-                    // Found matching bit depth
-                    return;
-                }
+            if let Some(bits) = value.as_u32()
+                && bits == gt.primary_raw_frame.bit_depth as u32
+            {
+                // Found matching bit depth
+                return;
             }
         }
     }
@@ -342,30 +342,30 @@ fn test_make_model_extraction() {
     // Check Make tag
     if let Some(make_entry) = ifd0.get(TiffTag::Make) {
         let make_value = parser.read_value(make_entry).unwrap();
-        if let Some(make) = make_value.as_str() {
-            if let Some(ref camera_info) = gt.camera_info {
-                assert!(
-                    make.contains(&camera_info.make),
-                    "Make mismatch: expected to contain '{}', got '{}'",
-                    camera_info.make,
-                    make
-                );
-            }
+        if let Some(make) = make_value.as_str()
+            && let Some(ref camera_info) = gt.camera_info
+        {
+            assert!(
+                make.contains(&camera_info.make),
+                "Make mismatch: expected to contain '{}', got '{}'",
+                camera_info.make,
+                make
+            );
         }
     }
 
     // Check Model tag
     if let Some(model_entry) = ifd0.get(TiffTag::Model) {
         let model_value = parser.read_value(model_entry).unwrap();
-        if let Some(model) = model_value.as_str() {
-            if let Some(ref camera_info) = gt.camera_info {
-                assert!(
-                    model.contains(&camera_info.model) || camera_info.model.contains(model),
-                    "Model mismatch: expected to contain '{}', got '{}'",
-                    camera_info.model,
-                    model
-                );
-            }
+        if let Some(model) = model_value.as_str()
+            && let Some(ref camera_info) = gt.camera_info
+        {
+            assert!(
+                model.contains(&camera_info.model) || camera_info.model.contains(model),
+                "Model mismatch: expected to contain '{}', got '{}'",
+                camera_info.model,
+                model
+            );
         }
     }
 }

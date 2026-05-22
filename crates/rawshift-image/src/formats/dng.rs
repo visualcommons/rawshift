@@ -694,13 +694,13 @@ impl<R: Read + Seek> DngFile<R> {
     fn extract_matrix(&mut self, ifd: &Ifd, tag: TiffTag) -> RawResult<Option<[f64; 9]>> {
         if let Some(entry) = ifd.get(tag) {
             let value = self.parser.read_value(entry)?;
-            if let Some(f64_vec) = value.as_f64_vec() {
-                if f64_vec.len() >= 9 {
-                    return Ok(Some([
-                        f64_vec[0], f64_vec[1], f64_vec[2], f64_vec[3], f64_vec[4], f64_vec[5],
-                        f64_vec[6], f64_vec[7], f64_vec[8],
-                    ]));
-                }
+            if let Some(f64_vec) = value.as_f64_vec()
+                && f64_vec.len() >= 9
+            {
+                return Ok(Some([
+                    f64_vec[0], f64_vec[1], f64_vec[2], f64_vec[3], f64_vec[4], f64_vec[5],
+                    f64_vec[6], f64_vec[7], f64_vec[8],
+                ]));
             }
         }
         Ok(None)
@@ -710,10 +710,10 @@ impl<R: Read + Seek> DngFile<R> {
     fn extract_triplet(&mut self, ifd: &Ifd, tag: TiffTag) -> RawResult<Option<[f64; 3]>> {
         if let Some(entry) = ifd.get(tag) {
             let value = self.parser.read_value(entry)?;
-            if let Some(f64_vec) = value.as_f64_vec() {
-                if f64_vec.len() >= 3 {
-                    return Ok(Some([f64_vec[0], f64_vec[1], f64_vec[2]]));
-                }
+            if let Some(f64_vec) = value.as_f64_vec()
+                && f64_vec.len() >= 3
+            {
+                return Ok(Some([f64_vec[0], f64_vec[1], f64_vec[2]]));
             }
         }
         Ok(None)
@@ -744,11 +744,11 @@ impl<R: Read + Seek> DngFile<R> {
                 for c in 0..dst_channels.min(src_channels) {
                     if src_idx + c < src.len() && dst_idx + c < dst.len() {
                         let mut val = src[src_idx + c];
-                        if let Some(table) = linearization_table {
-                            if !table.is_empty() {
-                                let index = (val as usize).min(table.len() - 1);
-                                val = table[index];
-                            }
+                        if let Some(table) = linearization_table
+                            && !table.is_empty()
+                        {
+                            let index = (val as usize).min(table.len() - 1);
+                            val = table[index];
                         }
                         dst[dst_idx + c] = val;
                     }
@@ -959,29 +959,29 @@ impl<R: Read + Seek> DngFile<R> {
     pub fn thumbnail(&mut self) -> RawResult<Option<Vec<u8>>> {
         // Try each IFD looking for a thumbnail (NewSubfileType=1 with JPEG data)
         for ifd in &self.ifds.clone() {
-            if let Some(entry) = ifd.get(TiffTag::NewSubfileType) {
-                if entry.value_offset == 1 {
-                    // This is a thumbnail IFD
-                    if let Some(offset_entry) = ifd.get(TiffTag::JPEGInterchangeFormat) {
-                        if let Some(length_entry) = ifd.get(TiffTag::JPEGInterchangeFormatLength) {
-                            let offset_entry = offset_entry.clone();
-                            let length_entry = length_entry.clone();
-                            let offset = match self.parser.read_value(&offset_entry)? {
-                                crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
-                                crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
-                                _ => continue,
-                            };
-                            let length = match self.parser.read_value(&length_entry)? {
-                                crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
-                                crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
-                                _ => continue,
-                            };
-                            if length > 0 {
-                                self.parser.seek_to(offset)?;
-                                let data = self.parser.read_bytes(length)?;
-                                return Ok(Some(data));
-                            }
-                        }
+            if let Some(entry) = ifd.get(TiffTag::NewSubfileType)
+                && entry.value_offset == 1
+            {
+                // This is a thumbnail IFD
+                if let Some(offset_entry) = ifd.get(TiffTag::JPEGInterchangeFormat)
+                    && let Some(length_entry) = ifd.get(TiffTag::JPEGInterchangeFormatLength)
+                {
+                    let offset_entry = offset_entry.clone();
+                    let length_entry = length_entry.clone();
+                    let offset = match self.parser.read_value(&offset_entry)? {
+                        crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
+                        crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
+                        _ => continue,
+                    };
+                    let length = match self.parser.read_value(&length_entry)? {
+                        crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
+                        crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
+                        _ => continue,
+                    };
+                    if length > 0 {
+                        self.parser.seek_to(offset)?;
+                        let data = self.parser.read_bytes(length)?;
+                        return Ok(Some(data));
                     }
                 }
             }

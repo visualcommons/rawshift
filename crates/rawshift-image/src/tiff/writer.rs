@@ -269,7 +269,7 @@ impl<W: Write + Seek> TiffWriter<W> {
                 offsets.push(Some(overflow_offset));
                 overflow_offset += entry.value_size() as u64;
                 // Pad to word boundary
-                if overflow_offset % 2 != 0 {
+                if !overflow_offset.is_multiple_of(2) {
                     overflow_offset += 1;
                 }
             }

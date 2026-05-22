@@ -371,29 +371,28 @@ impl<R: Read + Seek> Cr3File<R> {
                 let mut buf = vec![0u8; size];
                 self.reader.read_exact(&mut buf)?;
 
-                if let Ok(mut parser) = TiffParser::new(Cursor::new(&buf)) {
-                    if let Ok(ifd0) = parser.parse_ifd0() {
-                        // Make
-                        if let Some(entry) = ifd0.get(TiffTag::Make) {
-                            if let Ok(val) = parser.read_value(entry) {
-                                make = val.as_str().unwrap_or("").trim().to_string();
-                            }
-                        }
-                        // Model
-                        if let Some(entry) = ifd0.get(TiffTag::Model) {
-                            if let Ok(val) = parser.read_value(entry) {
-                                model = val.as_str().unwrap_or("").trim().to_string();
-                            }
-                        }
-                        // CFA pattern (if present)
-                        if let Some(entry) = ifd0.get(TiffTag::CFAPattern) {
-                            if let Ok(TiffValue::Bytes(bytes)) = parser.read_value(entry) {
-                                if bytes.len() >= 4 {
-                                    let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
-                                    cfa_pattern = CfaPattern::from_array(arr);
-                                }
-                            }
-                        }
+                if let Ok(mut parser) = TiffParser::new(Cursor::new(&buf))
+                    && let Ok(ifd0) = parser.parse_ifd0()
+                {
+                    // Make
+                    if let Some(entry) = ifd0.get(TiffTag::Make)
+                        && let Ok(val) = parser.read_value(entry)
+                    {
+                        make = val.as_str().unwrap_or("").trim().to_string();
+                    }
+                    // Model
+                    if let Some(entry) = ifd0.get(TiffTag::Model)
+                        && let Ok(val) = parser.read_value(entry)
+                    {
+                        model = val.as_str().unwrap_or("").trim().to_string();
+                    }
+                    // CFA pattern (if present)
+                    if let Some(entry) = ifd0.get(TiffTag::CFAPattern)
+                        && let Ok(TiffValue::Bytes(bytes)) = parser.read_value(entry)
+                        && bytes.len() >= 4
+                    {
+                        let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
+                        cfa_pattern = CfaPattern::from_array(arr);
                     }
                 }
             }
@@ -421,12 +420,12 @@ impl<R: Read + Seek> Cr3File<R> {
                 continue;
             }
 
-            if let Ok((offset, size, sensor_size)) = self.parse_single_trak(b) {
-                if size > best_size {
-                    best_size = size;
-                    best_offset = offset;
-                    best_sensor_size = sensor_size;
-                }
+            if let Ok((offset, size, sensor_size)) = self.parse_single_trak(b)
+                && size > best_size
+            {
+                best_size = size;
+                best_offset = offset;
+                best_sensor_size = sensor_size;
             }
         }
 

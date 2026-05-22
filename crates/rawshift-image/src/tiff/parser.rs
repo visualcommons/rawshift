@@ -360,37 +360,27 @@ impl<R: Read + Seek> TiffParser<R> {
         }
 
         // Parse EXIF IFD if present
-        if let Some(exif_entry) = ifd.entries.get(&TiffTag::ExifIFDPointer).cloned() {
-            if let Some(exif_offset) = self.read_value_as_u64(&exif_entry)? {
-                if exif_offset != 0 {
-                    match self.parse_ifd_at(exif_offset) {
-                        Ok(exif_ifd) => ifd.exif_ifd = Some(Box::new(exif_ifd)),
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to parse EXIF IFD at offset {}: {}",
-                                exif_offset,
-                                e
-                            );
-                        }
-                    }
+        if let Some(exif_entry) = ifd.entries.get(&TiffTag::ExifIFDPointer).cloned()
+            && let Some(exif_offset) = self.read_value_as_u64(&exif_entry)?
+            && exif_offset != 0
+        {
+            match self.parse_ifd_at(exif_offset) {
+                Ok(exif_ifd) => ifd.exif_ifd = Some(Box::new(exif_ifd)),
+                Err(e) => {
+                    tracing::warn!("Failed to parse EXIF IFD at offset {}: {}", exif_offset, e);
                 }
             }
         }
 
         // Parse GPS IFD if present
-        if let Some(gps_entry) = ifd.entries.get(&TiffTag::GPSInfoIFDPointer).cloned() {
-            if let Some(gps_offset) = self.read_value_as_u64(&gps_entry)? {
-                if gps_offset != 0 {
-                    match self.parse_ifd_at(gps_offset) {
-                        Ok(gps_ifd) => ifd.gps_ifd = Some(Box::new(gps_ifd)),
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to parse GPS IFD at offset {}: {}",
-                                gps_offset,
-                                e
-                            );
-                        }
-                    }
+        if let Some(gps_entry) = ifd.entries.get(&TiffTag::GPSInfoIFDPointer).cloned()
+            && let Some(gps_offset) = self.read_value_as_u64(&gps_entry)?
+            && gps_offset != 0
+        {
+            match self.parse_ifd_at(gps_offset) {
+                Ok(gps_ifd) => ifd.gps_ifd = Some(Box::new(gps_ifd)),
+                Err(e) => {
+                    tracing::warn!("Failed to parse GPS IFD at offset {}: {}", gps_offset, e);
                 }
             }
         }

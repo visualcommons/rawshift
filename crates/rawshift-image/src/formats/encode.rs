@@ -289,12 +289,12 @@ pub fn encode_rgb_image(
                 }
             }
 
-            if opts.metadata.embed_xmp {
-                if let Some(xmp_data) = &metadata.xmp {
-                    use crate::metadata::xmp::append_xmp_to_avif_file;
-                    if let Err(e) = append_xmp_to_avif_file(path, xmp_data) {
-                        tracing::warn!("Failed to embed XMP in AVIF: {}", e);
-                    }
+            if opts.metadata.embed_xmp
+                && let Some(xmp_data) = &metadata.xmp
+            {
+                use crate::metadata::xmp::append_xmp_to_avif_file;
+                if let Err(e) = append_xmp_to_avif_file(path, xmp_data) {
+                    tracing::warn!("Failed to embed XMP in AVIF: {}", e);
                 }
             }
         }
@@ -345,20 +345,20 @@ pub fn encode_rgb_image(
                 }
             }
 
-            if opts.metadata.embed_xmp {
-                if let Some(xmp_data) = &metadata.xmp {
-                    use crate::metadata::xmp::append_xmp_to_jxl;
-                    match std::fs::read(path) {
-                        Ok(jxl_bytes) => match append_xmp_to_jxl(xmp_data, jxl_bytes) {
-                            Ok(data) => {
-                                if let Err(e) = std::fs::write(path, data) {
-                                    tracing::warn!("Failed to write JXL with XMP: {}", e);
-                                }
+            if opts.metadata.embed_xmp
+                && let Some(xmp_data) = &metadata.xmp
+            {
+                use crate::metadata::xmp::append_xmp_to_jxl;
+                match std::fs::read(path) {
+                    Ok(jxl_bytes) => match append_xmp_to_jxl(xmp_data, jxl_bytes) {
+                        Ok(data) => {
+                            if let Err(e) = std::fs::write(path, data) {
+                                tracing::warn!("Failed to write JXL with XMP: {}", e);
                             }
-                            Err(e) => tracing::warn!("Failed to embed XMP in JXL: {}", e),
-                        },
-                        Err(e) => tracing::warn!("Failed to read JXL for XMP embedding: {}", e),
-                    }
+                        }
+                        Err(e) => tracing::warn!("Failed to embed XMP in JXL: {}", e),
+                    },
+                    Err(e) => tracing::warn!("Failed to read JXL for XMP embedding: {}", e),
                 }
             }
         }

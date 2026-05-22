@@ -297,15 +297,17 @@ impl<R: Read + Seek> RawFile<R> {
 
             let cfa_wb = processing_options.white_balance.or_else(|| {
                 let meta = self.metadata();
-                if let Some(neutral) = meta.dng_color.as_shot_neutral {
-                    if neutral[0] > 0.0 && neutral[1] > 0.0 && neutral[2] > 0.0 {
-                        tracing::trace!("Using AsShotNeutral from metadata: {:?}", neutral);
-                        return Some((
-                            1.0 / neutral[0] as f32,
-                            1.0 / neutral[1] as f32,
-                            1.0 / neutral[2] as f32,
-                        ));
-                    }
+                if let Some(neutral) = meta.dng_color.as_shot_neutral
+                    && neutral[0] > 0.0
+                    && neutral[1] > 0.0
+                    && neutral[2] > 0.0
+                {
+                    tracing::trace!("Using AsShotNeutral from metadata: {:?}", neutral);
+                    return Some((
+                        1.0 / neutral[0] as f32,
+                        1.0 / neutral[1] as f32,
+                        1.0 / neutral[2] as f32,
+                    ));
                 }
                 tracing::warn!(
                     "No white balance metadata found. Image may appear green (unbalanced)."
@@ -374,15 +376,17 @@ impl<R: Read + Seek> RawFile<R> {
         } else {
             processing_options.white_balance.or_else(|| {
                 let meta = self.metadata();
-                if let Some(neutral) = meta.dng_color.as_shot_neutral {
-                    if neutral[0] > 0.0 && neutral[1] > 0.0 && neutral[2] > 0.0 {
-                        tracing::trace!("Using AsShotNeutral from metadata: {:?}", neutral);
-                        return Some((
-                            1.0 / neutral[0] as f32,
-                            1.0 / neutral[1] as f32,
-                            1.0 / neutral[2] as f32,
-                        ));
-                    }
+                if let Some(neutral) = meta.dng_color.as_shot_neutral
+                    && neutral[0] > 0.0
+                    && neutral[1] > 0.0
+                    && neutral[2] > 0.0
+                {
+                    tracing::trace!("Using AsShotNeutral from metadata: {:?}", neutral);
+                    return Some((
+                        1.0 / neutral[0] as f32,
+                        1.0 / neutral[1] as f32,
+                        1.0 / neutral[2] as f32,
+                    ));
                 }
 
                 if !self.is_linear_raw_dng() {
@@ -590,20 +594,19 @@ impl<R: Read + Seek> RawFile<R> {
             }
 
             // Check Make tag to determine specific format
-            if let Some(make_entry) = ifd0.get(TiffTag::Make) {
-                if let Ok(value) = parser.read_value(make_entry) {
-                    if let Some(make) = value.as_str() {
-                        let make_lower = make.to_lowercase();
-                        #[cfg(feature = "arw-decode")]
-                        if make_lower.contains("sony") {
-                            return Ok(RawFormat::Arw);
-                        }
-                        // Add more manufacturers here as we add support
-                        #[cfg(feature = "nef-decode")]
-                        if make_lower.contains("nikon") {
-                            return Ok(RawFormat::Nef);
-                        }
-                    }
+            if let Some(make_entry) = ifd0.get(TiffTag::Make)
+                && let Ok(value) = parser.read_value(make_entry)
+                && let Some(make) = value.as_str()
+            {
+                let make_lower = make.to_lowercase();
+                #[cfg(feature = "arw-decode")]
+                if make_lower.contains("sony") {
+                    return Ok(RawFormat::Arw);
+                }
+                // Add more manufacturers here as we add support
+                #[cfg(feature = "nef-decode")]
+                if make_lower.contains("nikon") {
+                    return Ok(RawFormat::Nef);
                 }
             }
         }

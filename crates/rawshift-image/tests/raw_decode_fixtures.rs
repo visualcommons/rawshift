@@ -269,10 +269,10 @@ fn find_recursive(dir: &std::path::Path, ext: &str) -> Option<std::path::PathBuf
             if let Some(found) = find_recursive(&path, ext) {
                 return Some(found);
             }
-        } else if let Some(file_ext) = path.extension() {
-            if file_ext.eq_ignore_ascii_case(ext) {
-                return Some(path);
-            }
+        } else if let Some(file_ext) = path.extension()
+            && file_ext.eq_ignore_ascii_case(ext)
+        {
+            return Some(path);
         }
     }
     None

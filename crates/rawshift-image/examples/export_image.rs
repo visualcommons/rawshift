@@ -140,14 +140,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .gamma(gamma);
 
     // TODO: Remove white balance arg and just use what is extracted from metadata
-    if let Some(wb) = white_balance {
-        if wb.len() == 3 {
-            println!(
-                "Using custom White Balance: {:.2}, {:.2}, {:.2}",
-                wb[0], wb[1], wb[2]
-            );
-            options = options.white_balance(wb[0], wb[1], wb[2]);
-        }
+    if let Some(wb) = white_balance
+        && wb.len() == 3
+    {
+        println!(
+            "Using custom White Balance: {:.2}, {:.2}, {:.2}",
+            wb[0], wb[1], wb[2]
+        );
+        options = options.white_balance(wb[0], wb[1], wb[2]);
     }
 
     if !no_matrix {
@@ -174,14 +174,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         options = options.denoise(sigma);
     }
 
-    if let Some(ca) = ca_correction {
-        if ca.len() == 2 {
-            println!(
-                "Enabling CA correction: red_scale={}, blue_scale={}",
-                ca[0], ca[1]
-            );
-            options = options.ca_correction(ca[0], ca[1]);
-        }
+    if let Some(ca) = ca_correction
+        && ca.len() == 2
+    {
+        println!(
+            "Enabling CA correction: red_scale={}, blue_scale={}",
+            ca[0], ca[1]
+        );
+        options = options.ca_correction(ca[0], ca[1]);
     }
 
     println!("Exporting to {:?}", output);

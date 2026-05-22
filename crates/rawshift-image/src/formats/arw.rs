@@ -446,15 +446,15 @@ impl<R: Read + Seek> ArwFile<R> {
 
                                 // Try Absolute Offset
                                 let mut found_abs = false;
-                                if self.parser.seek_to(value_offset as u64).is_ok() {
-                                    if let Ok(v) = self.parser.read_bytes(8) {
-                                        v1 = u16::from_le_bytes([v[0], v[1]]);
-                                        v2 = u16::from_le_bytes([v[2], v[3]]);
-                                        v3 = u16::from_le_bytes([v[4], v[5]]);
-                                        v4 = u16::from_le_bytes([v[6], v[7]]);
-                                        if v1 > 0 || v2 > 0 {
-                                            found_abs = true;
-                                        }
+                                if self.parser.seek_to(value_offset as u64).is_ok()
+                                    && let Ok(v) = self.parser.read_bytes(8)
+                                {
+                                    v1 = u16::from_le_bytes([v[0], v[1]]);
+                                    v2 = u16::from_le_bytes([v[2], v[3]]);
+                                    v3 = u16::from_le_bytes([v[4], v[5]]);
+                                    v4 = u16::from_le_bytes([v[6], v[7]]);
+                                    if v1 > 0 || v2 > 0 {
+                                        found_abs = true;
                                     }
                                 }
 

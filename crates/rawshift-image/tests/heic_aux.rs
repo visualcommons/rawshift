@@ -25,10 +25,8 @@ fn sample_heic() -> Option<Vec<u8>> {
                 .and_then(|s| s.to_str())
                 .map(|s| s.eq_ignore_ascii_case("heic") || s.eq_ignore_ascii_case("heif"))
                 .unwrap_or(false);
-            if is_heic {
-                if let Ok(data) = std::fs::read(&path) {
-                    return Some(data);
-                }
+            if is_heic && let Ok(data) = std::fs::read(&path) {
+                return Some(data);
             }
         }
     }
