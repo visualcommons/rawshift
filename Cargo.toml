@@ -10,7 +10,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.90.0"
 license = "MPL-2.0"
 repository = "https://github.com/justin13888/rawshift"
 homepage = "https://github.com/justin13888/rawshift"

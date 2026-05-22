@@ -191,7 +191,7 @@ decoder work (see [Video](#video)):
 
 ## MSRV
 
-The minimum supported Rust version (MSRV) is **1.85** (edition 2024 requirement). This may be bumped as new language features stabilize.
+The minimum supported Rust version (MSRV) is **1.90.0**. This may be bumped as new language features stabilize.
 
 ## Development
 

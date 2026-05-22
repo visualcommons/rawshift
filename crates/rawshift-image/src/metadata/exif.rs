@@ -338,61 +338,60 @@ impl ExifParser {
         }
 
         // ── EXIF exposure settings ────────────────────────────────────────────
-        if let Some(ExifTag::ISO(v)) = exif.get_tag_by_hex(0x8827, None).next() {
-            if let Some(&iso) = v.first() {
-                md.exif.iso = Some(iso as u32);
-            }
+        if let Some(ExifTag::ISO(v)) = exif.get_tag_by_hex(0x8827, None).next()
+            && let Some(&iso) = v.first()
+        {
+            md.exif.iso = Some(iso as u32);
         }
-        if let Some(ExifTag::ExposureTime(v)) = exif.get_tag_by_hex(0x829a, None).next() {
-            if let Some(r) = v.first() {
-                md.exif.exposure_time = Some(URational::new(r.nominator, r.denominator));
-            }
+        if let Some(ExifTag::ExposureTime(v)) = exif.get_tag_by_hex(0x829a, None).next()
+            && let Some(r) = v.first()
+        {
+            md.exif.exposure_time = Some(URational::new(r.nominator, r.denominator));
         }
-        if let Some(ExifTag::FNumber(v)) = exif.get_tag_by_hex(0x829d, None).next() {
-            if let Some(r) = v.first() {
-                md.exif.f_number = Some(URational::new(r.nominator, r.denominator));
-            }
+        if let Some(ExifTag::FNumber(v)) = exif.get_tag_by_hex(0x829d, None).next()
+            && let Some(r) = v.first()
+        {
+            md.exif.f_number = Some(URational::new(r.nominator, r.denominator));
         }
-        if let Some(ExifTag::FocalLength(v)) = exif.get_tag_by_hex(0x920a, None).next() {
-            if let Some(r) = v.first() {
-                md.exif.focal_length = Some(URational::new(r.nominator, r.denominator));
-            }
+        if let Some(ExifTag::FocalLength(v)) = exif.get_tag_by_hex(0x920a, None).next()
+            && let Some(r) = v.first()
+        {
+            md.exif.focal_length = Some(URational::new(r.nominator, r.denominator));
         }
         if let Some(ExifTag::FocalLengthIn35mmFormat(v)) = exif.get_tag_by_hex(0xa405, None).next()
+            && let Some(&fl) = v.first()
         {
-            if let Some(&fl) = v.first() {
-                md.exif.focal_length_35mm = Some(fl);
-            }
+            md.exif.focal_length_35mm = Some(fl);
         }
-        if let Some(ExifTag::ExposureProgram(v)) = exif.get_tag_by_hex(0x8822, None).next() {
-            if let Some(&ep) = v.first() {
-                md.exif.exposure_program = Some(ep);
-            }
+        if let Some(ExifTag::ExposureProgram(v)) = exif.get_tag_by_hex(0x8822, None).next()
+            && let Some(&ep) = v.first()
+        {
+            md.exif.exposure_program = Some(ep);
         }
-        if let Some(ExifTag::MeteringMode(v)) = exif.get_tag_by_hex(0x9207, None).next() {
-            if let Some(&mm) = v.first() {
-                md.exif.metering_mode = Some(mm);
-            }
+        if let Some(ExifTag::MeteringMode(v)) = exif.get_tag_by_hex(0x9207, None).next()
+            && let Some(&mm) = v.first()
+        {
+            md.exif.metering_mode = Some(mm);
         }
-        if let Some(ExifTag::Flash(v)) = exif.get_tag_by_hex(0x9209, None).next() {
-            if let Some(&fl) = v.first() {
-                md.exif.flash = Some(fl);
-            }
+        if let Some(ExifTag::Flash(v)) = exif.get_tag_by_hex(0x9209, None).next()
+            && let Some(&fl) = v.first()
+        {
+            md.exif.flash = Some(fl);
         }
-        if let Some(ExifTag::ExposureCompensation(v)) = exif.get_tag_by_hex(0x9204, None).next() {
-            if let Some(r) = v.first() {
-                md.exif.exposure_compensation = Some(SRational::new(r.nominator, r.denominator));
-            }
+        if let Some(ExifTag::ExposureCompensation(v)) = exif.get_tag_by_hex(0x9204, None).next()
+            && let Some(r) = v.first()
+        {
+            md.exif.exposure_compensation = Some(SRational::new(r.nominator, r.denominator));
         }
-        if let Some(ExifTag::MaxApertureValue(v)) = exif.get_tag_by_hex(0x9205, None).next() {
-            if let Some(r) = v.first() {
-                md.exif.max_aperture = Some(URational::new(r.nominator, r.denominator));
-            }
+        if let Some(ExifTag::MaxApertureValue(v)) = exif.get_tag_by_hex(0x9205, None).next()
+            && let Some(r) = v.first()
+        {
+            md.exif.max_aperture = Some(URational::new(r.nominator, r.denominator));
         }
-        if let Some(ExifTag::BrightnessValue(v)) = exif.get_tag_by_hex(0x9203, None).next() {
-            if let Some(r) = v.first() {
-                md.exif.brightness_value = Some(SRational::new(r.nominator, r.denominator));
-            }
+        if let Some(ExifTag::BrightnessValue(v)) = exif.get_tag_by_hex(0x9203, None).next()
+            && let Some(r) = v.first()
+        {
+            md.exif.brightness_value = Some(SRational::new(r.nominator, r.denominator));
         }
 
         // ── Date/time ─────────────────────────────────────────────────────────
@@ -430,14 +429,13 @@ impl ExifParser {
         // ── GPS ───────────────────────────────────────────────────────────────
         if let Some(ExifTag::GPSLatitude(v)) =
             exif.get_tag_by_hex(0x0002, Some(ExifTagGroup::GPS)).next()
+            && v.len() >= 3
         {
-            if v.len() >= 3 {
-                md.gps.latitude = Some([
-                    URational::new(v[0].nominator, v[0].denominator),
-                    URational::new(v[1].nominator, v[1].denominator),
-                    URational::new(v[2].nominator, v[2].denominator),
-                ]);
-            }
+            md.gps.latitude = Some([
+                URational::new(v[0].nominator, v[0].denominator),
+                URational::new(v[1].nominator, v[1].denominator),
+                URational::new(v[2].nominator, v[2].denominator),
+            ]);
         }
         if let Some(ExifTag::GPSLatitudeRef(s)) =
             exif.get_tag_by_hex(0x0001, Some(ExifTagGroup::GPS)).next()
@@ -446,14 +444,13 @@ impl ExifParser {
         }
         if let Some(ExifTag::GPSLongitude(v)) =
             exif.get_tag_by_hex(0x0004, Some(ExifTagGroup::GPS)).next()
+            && v.len() >= 3
         {
-            if v.len() >= 3 {
-                md.gps.longitude = Some([
-                    URational::new(v[0].nominator, v[0].denominator),
-                    URational::new(v[1].nominator, v[1].denominator),
-                    URational::new(v[2].nominator, v[2].denominator),
-                ]);
-            }
+            md.gps.longitude = Some([
+                URational::new(v[0].nominator, v[0].denominator),
+                URational::new(v[1].nominator, v[1].denominator),
+                URational::new(v[2].nominator, v[2].denominator),
+            ]);
         }
         if let Some(ExifTag::GPSLongitudeRef(s)) =
             exif.get_tag_by_hex(0x0003, Some(ExifTagGroup::GPS)).next()
@@ -462,28 +459,25 @@ impl ExifParser {
         }
         if let Some(ExifTag::GPSAltitude(v)) =
             exif.get_tag_by_hex(0x0006, Some(ExifTagGroup::GPS)).next()
+            && let Some(r) = v.first()
         {
-            if let Some(r) = v.first() {
-                md.gps.altitude = Some(URational::new(r.nominator, r.denominator));
-            }
+            md.gps.altitude = Some(URational::new(r.nominator, r.denominator));
         }
         if let Some(ExifTag::GPSAltitudeRef(v)) =
             exif.get_tag_by_hex(0x0005, Some(ExifTagGroup::GPS)).next()
+            && let Some(&ar) = v.first()
         {
-            if let Some(&ar) = v.first() {
-                md.gps.altitude_ref = Some(ar);
-            }
+            md.gps.altitude_ref = Some(ar);
         }
         if let Some(ExifTag::GPSTimeStamp(v)) =
             exif.get_tag_by_hex(0x0007, Some(ExifTagGroup::GPS)).next()
+            && v.len() >= 3
         {
-            if v.len() >= 3 {
-                md.gps.timestamp = Some([
-                    URational::new(v[0].nominator, v[0].denominator),
-                    URational::new(v[1].nominator, v[1].denominator),
-                    URational::new(v[2].nominator, v[2].denominator),
-                ]);
-            }
+            md.gps.timestamp = Some([
+                URational::new(v[0].nominator, v[0].denominator),
+                URational::new(v[1].nominator, v[1].denominator),
+                URational::new(v[2].nominator, v[2].denominator),
+            ]);
         }
         if let Some(ExifTag::GPSDateStamp(s)) =
             exif.get_tag_by_hex(0x001d, Some(ExifTagGroup::GPS)).next()
@@ -495,24 +489,22 @@ impl ExifParser {
         }
         if let Some(ExifTag::GPSSpeed(v)) =
             exif.get_tag_by_hex(0x000d, Some(ExifTagGroup::GPS)).next()
+            && let Some(r) = v.first()
         {
-            if let Some(r) = v.first() {
-                md.gps.speed = Some(URational::new(r.nominator, r.denominator));
-            }
+            md.gps.speed = Some(URational::new(r.nominator, r.denominator));
         }
         if let Some(ExifTag::GPSImgDirection(v)) =
             exif.get_tag_by_hex(0x0011, Some(ExifTagGroup::GPS)).next()
+            && let Some(r) = v.first()
         {
-            if let Some(r) = v.first() {
-                md.gps.img_direction = Some(URational::new(r.nominator, r.denominator));
-            }
+            md.gps.img_direction = Some(URational::new(r.nominator, r.denominator));
         }
 
         // ── Image info ────────────────────────────────────────────────────────
-        if let Some(ExifTag::Orientation(v)) = exif.get_tag_by_hex(0x0112, None).next() {
-            if let Some(&o) = v.first() {
-                md.image.orientation = Some(o);
-            }
+        if let Some(ExifTag::Orientation(v)) = exif.get_tag_by_hex(0x0112, None).next()
+            && let Some(&o) = v.first()
+        {
+            md.image.orientation = Some(o);
         }
 
         // ── Generic tag table ─────────────────────────────────────────────────

@@ -208,7 +208,7 @@ pub type RgbaF32 = Rgba<f32>;
 
 /// Convert a slice of interleaved u16 RGB data to a Vec of Rgb16 pixels.
 pub fn rgb16_from_interleaved(data: &[u16]) -> Vec<Rgb16> {
-    debug_assert!(data.len() % 3 == 0);
+    debug_assert!(data.len().is_multiple_of(3));
     data.chunks_exact(3)
         .map(|c| Rgb16::new(c[0], c[1], c[2]))
         .collect()

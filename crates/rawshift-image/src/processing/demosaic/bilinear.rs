@@ -71,10 +71,22 @@ where
 {
     // Determine the color of the current pixel location
     let (is_red, is_blue) = match pattern {
-        CfaPattern::Rggb => ((x % 2 == 0) && (y % 2 == 0), (x % 2 == 1) && (y % 2 == 1)),
-        CfaPattern::Grbg => ((x % 2 == 1) && (y % 2 == 0), (x % 2 == 0) && (y % 2 == 1)),
-        CfaPattern::Gbrg => ((x % 2 == 0) && (y % 2 == 1), (x % 2 == 1) && (y % 2 == 0)),
-        CfaPattern::Bggr => ((x % 2 == 1) && (y % 2 == 1), (x % 2 == 0) && (y % 2 == 0)),
+        CfaPattern::Rggb => (
+            x.is_multiple_of(2) && y.is_multiple_of(2),
+            (x % 2 == 1) && (y % 2 == 1),
+        ),
+        CfaPattern::Grbg => (
+            (x % 2 == 1) && y.is_multiple_of(2),
+            x.is_multiple_of(2) && (y % 2 == 1),
+        ),
+        CfaPattern::Gbrg => (
+            x.is_multiple_of(2) && (y % 2 == 1),
+            (x % 2 == 1) && y.is_multiple_of(2),
+        ),
+        CfaPattern::Bggr => (
+            (x % 2 == 1) && (y % 2 == 1),
+            x.is_multiple_of(2) && y.is_multiple_of(2),
+        ),
     };
 
     // Green is true if it's neither red nor blue
@@ -94,7 +106,7 @@ where
             // If we are at (0,1) [Green], Left/Right is B, Up/Down is R
             // If we are at (1,0) [Green], Left/Right is R, Up/Down is B
             CfaPattern::Rggb | CfaPattern::Bggr => {
-                if y % 2 == 0 {
+                if y.is_multiple_of(2) {
                     // Even row
                     // R G R G (RGGB case) -> (x%2==1) -> Horizontal is R, Vertical is B
                     // B G B G (BGGR case) -> (x%2==1) -> Horizontal is B, Vertical is R
@@ -135,7 +147,7 @@ where
                 // GRBG:
                 // G R G R
                 // B G B G
-                if y % 2 == 0 {
+                if y.is_multiple_of(2) {
                     // Even row G R G R. At G. Horizontal R, Vert B.
                     if matches!(pattern, CfaPattern::Grbg) {
                         (
