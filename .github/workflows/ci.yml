@@ -16,8 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Must match rust-toolchain.toml exactly ("1.90.0" not "1.90"): rustup
+      # treats the two as different toolchain entries, so components installed
+      # under "1.90" are invisible when cargo activates "1.90.0" from the file.
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.90.0"
           components: rustfmt
       - run: cargo fmt --all -- --check
 
@@ -26,11 +30,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Must match rust-toolchain.toml exactly — see the fmt job comment above.
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.90.0"
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets --features=serde -- -D warnings
+      - run: cargo clippy --workspace --all-targets -- -D warnings
 
   test:
     name: Test
@@ -40,30 +46,78 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
       - name: Fetch test fixtures
         run: bash scripts/fetch_test_fixtures.sh
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Generate standard format fixtures
-        run: cargo run --example generate_test_fixtures
-      - run: cargo test --features=serde
+        run: cargo run -p rawshift-image --example generate_test_fixtures
+      - run: cargo test --workspace
 
   test-all-features:
     name: Test (all features)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
+      # `rawshift-image/full` enables `avif` (links system dav1d) and `heic`.
+      # Ubuntu 24.04's libheif-dev is 1.17.x, but libheif-sys requires >= 1.21,
+      # so we add `heic-vendored` to build libheif 1.21.2 from source instead.
+      # `nasm` is required to build `rav1e` (pulled in by the `image` crate's
+      # AVIF encoder) with its `asm` feature enabled.
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libdav1d-dev nasm
       - name: Fetch test fixtures
         run: bash scripts/fetch_test_fixtures.sh
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Generate standard format fixtures
-        run: cargo run --example generate_test_fixtures
-      - run: cargo test --features=full
+        run: cargo run -p rawshift-image --example generate_test_fixtures
+      - run: cargo test --workspace --features rawshift-image/full,rawshift-image/heic-vendored
+
+  image-only:
+    name: Build (image only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90.0"
+      - uses: Swatinem/rust-cache@v2
+      # The facade with only the `image` feature, and the image crate standalone.
+      - run: cargo build -p rawshift --no-default-features --features image
+      - run: cargo build -p rawshift-image
+
+  video-only:
+    name: Build (video only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90.0"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p rawshift --no-default-features --features video
+      # Assert the video-only build pulls in zero image crates — this is the
+      # contract the image/video workspace split exists to guarantee.
+      - name: Assert no image crates in the video-only dependency tree
+        run: |
+          tree=$(cargo tree -p rawshift --no-default-features --features video --prefix none --no-dedupe)
+          echo "$tree"
+          if echo "$tree" | grep -qiE 'rawshift-image|zune-|libheif|libwebp|img-parts|little_exif|resvg|ravif|jxl-oxide|^image '; then
+            echo "::error::video-only build pulled in image crates"
+            exit 1
+          fi
+          echo "OK: video-only build is free of image crates"
 
   coverage-report:
     name: Coverage Report
@@ -71,14 +125,16 @@ jobs:
     needs: [test-all-features]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
       - name: Fetch test fixtures
         run: bash scripts/fetch_test_fixtures.sh
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Generate standard format fixtures
-        run: cargo run --example generate_test_fixtures
+        run: cargo run -p rawshift-image --example generate_test_fixtures
       - name: Print coverage report
         run: python3 scripts/test_coverage_report.py
       - name: Export coverage JSON
@@ -89,15 +145,15 @@ jobs:
           path: coverage.json
 
   msrv:
-    name: MSRV (1.85)
+    name: MSRV (1.90)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.85"
+          toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --features=serde
+      - run: cargo check --workspace
 
   # Optional nightly job for extra checks
   nightly:
@@ -112,6 +168,6 @@ jobs:
           components: miri
       - uses: Swatinem/rust-cache@v2
       - name: Run Miri on unit tests
-        run: cargo +nightly miri test --lib -- --skip tiff --skip dng --skip arw --skip export
+        run: cargo +nightly miri test -p rawshift-core -p rawshift-image --lib -- --skip tiff --skip dng --skip arw --skip export
         env:
           MIRIFLAGS: -Zmiri-disable-isolation

@@ -30,16 +30,18 @@ fi
 # ---------------------------------------------------------------------------
 # Parse manifest with python3
 # ---------------------------------------------------------------------------
-REPO="$(python3 -c "import json; print(json.load(open('${MANIFEST}'))['repo'])")"
+# The manifest is piped in on stdin rather than passed as a path: on Git Bash
+# (Windows CI) `${MANIFEST}` is an MSYS path that native Python cannot open.
+REPO="$(python3 -c "import json, sys; print(json.load(sys.stdin)['repo'])" < "${MANIFEST}")"
 
 # Get device info as tab-separated lines: slug\tversion\tmake\tmodel
 get_devices() {
     python3 -c "
-import json
-d = json.load(open('${MANIFEST}'))
+import json, sys
+d = json.load(sys.stdin)
 for slug, info in sorted(d['devices'].items()):
     print(f\"{slug}\t{info['version']}\t{info['make']}\t{info['model']}\")
-"
+" < "${MANIFEST}"
 }
 
 # ---------------------------------------------------------------------------

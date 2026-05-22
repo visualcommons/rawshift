@@ -1,0 +1,21 @@
+[package]
+name = "rawshift-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Shared core types for rawshift (geometry, pixel samples, metadata model)"
+documentation = "https://docs.rs/rawshift-core"
+keywords = ["raw", "image", "metadata", "pixel"]
+categories = ["multimedia::images"]
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[features]
+serde = ["dep:serde"]

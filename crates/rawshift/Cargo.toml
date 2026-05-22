@@ -1,0 +1,38 @@
+[package]
+name = "rawshift"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "RAW image processing library focused on compatibility, correctness, and interoperability"
+documentation = "https://docs.rs/rawshift"
+keywords = ["raw", "image", "dng", "arw", "photo"]
+categories = ["multimedia::images", "encoding", "parser-implementations"]
+readme = "../../README.md"
+
+[package.metadata.docs.rs]
+# `heic-vendored` is intentionally excluded: it builds libheif from source and
+# is an alternative linking mode to `heic`, not an additive feature.
+features = ["full"]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rawshift-image = { workspace = true, optional = true }
+rawshift-video = { workspace = true, optional = true }
+
+# The `rawshift` facade exposes only coarse, high-level features. Cargo cannot
+# auto-forward a child crate's features, so per-format flags (jpeg, png, arw, …)
+# are intentionally NOT re-listed here — depend on `rawshift-image` directly for
+# fine-grained control. See the README "Feature Flags" section.
+[features]
+default = ["image"]
+# Enable still-image support with `rawshift-image`'s own default formats.
+image = ["dep:rawshift-image"]
+# Enable video support with `rawshift-video`'s own defaults (not yet implemented).
+video = ["dep:rawshift-video"]
+# Serde derives for metadata/option types (no-op unless `image` is also on).
+serde = ["rawshift-image?/serde"]
+# Everything: every image format, all video formats, and serde.
+full = ["image", "rawshift-image/full", "video", "rawshift-video/full", "serde"]
