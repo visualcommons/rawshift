@@ -74,7 +74,35 @@ Video support is **planned and not yet implemented** — no video code ships tod
 
 Initial work will focus on container parsing and metadata extraction, reusing the in-repo ISOBMFF parser already used for Canon CR3 (both MP4 and QuickTime are ISOBMFF-based). Codec-level decoding is a later milestone.
 
+## Crates
+
+rawshift is a Cargo workspace:
+
+| Crate            | Purpose                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `rawshift`       | Facade. Re-exports the libraries below behind coarse `image` / `video` features. Most consumers depend on this.  |
+| `rawshift-image` | Still-image decoding, RAW processing, and encoding. Carries the full per-format feature system described below.  |
+| `rawshift-video` | Video support — planned, not yet implemented (see [Video](#video)).                                              |
+| `rawshift-core`  | Shared types — geometry, pixel samples, the metadata model — used by both libraries.                             |
+
 ## Feature Flags
+
+### Facade — `rawshift`
+
+The `rawshift` facade deliberately exposes only four coarse features:
+
+- `image` *(default)* — still-image support (`rawshift-image` with its own default formats).
+- `video` — video support (`rawshift-video`).
+- `serde` — `Serialize`/`Deserialize` for metadata and option types.
+- `full` — every image format, all video formats, and `serde`.
+
+The facade does **not** re-export per-format flags. Cargo cannot forward a child
+crate's features, so re-listing them would be duplicated, rot-prone state — and
+a build that wants only video should never have to reason about image flags. For
+fine-grained control (individual formats, alternative codec backends, the
+`tiff-parser` API, `heic-vendored` linking) depend on `rawshift-image` directly.
+
+### Image library — `rawshift-image`
 
 Cargo features are organised in five tiers, from high-level bundles down to
 individual library bindings. Each tier is defined purely in terms of the tier
@@ -116,14 +144,34 @@ crate.
 5. **Infrastructure / linking features** — cross-cutting, not tied to one format.
    - `tiff-parser` — internal TIFF structure parser plus the public `TiffParser` API.
    - `serde` — `Serialize`/`Deserialize` for metadata and option types.
+   - `zune-runtime` — `zune-core` codec primitives; pulled by zune-backed impls.
+   - `exif` — typed EXIF read/write (`little_exif`); pulled by impls that touch EXIF.
+   - `container-embed` — container segment muxing (`img-parts`); pulled by encode
+     impls that embed EXIF/ICC/XMP.
    - `heic-vendored` — build libheif from source and link it statically, instead
      of linking the system libheif (`heic`). Requires a C/C++ toolchain + cmake.
+
+   The `zune-runtime` / `exif` / `container-embed` features are pulled in
+   automatically by the format implementations that need them — they exist so
+   that a minimal `rawshift-image` build links no decoder/metadata crate it does
+   not use.
 
 Resolution example: enabling `default` pulls in `png` → `png-decode` →
 `png-decode-zune` → the `zune-png` crate. To use a non-default implementation,
 enable its tier-4 feature explicitly and select it per call through
 `DecodeOptions` / `EncodeOptions`; the default implementation stays available
 alongside it.
+
+### Video library — `rawshift-video`
+
+Video features mirror the image crate's tier structure but currently gate no
+code or dependencies — they exist so the surface is laid out ahead of the
+decoder work (see [Video](#video)):
+
+- **Bundles** — `video` (all formats), `full`.
+- **Formats** — `xavc-hs`, `xavc-s`, `hevc`, `h264`, `prores`.
+- **Directions** — `xavc-hs-decode`, `xavc-s-decode`, `hevc-decode`,
+  `h264-decode`, `prores-decode` (decode-only for now).
 
 ## Official supported device list
 
@@ -173,8 +221,16 @@ The pre-push hook runs the full test suite.
 ### Testing
 
 ```sh
-cargo test --features=serde
+# whole workspace, default features
+cargo test --workspace
+
+# everything, all image formats
+just test-all
 ```
+
+Fixture-based integration tests need test data — `just setup-test-data` fetches
+real fixtures and generates synthetic ones. See the `justfile` for the full set
+of recipes (`just build-image`, `just build-video`, `just test-features`, …).
 
 ## Sovereignty
 
