@@ -30,11 +30,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Encode straight to a `Vec<u8>` with each default encoder, then probe the
     // result's header — no file path is ever needed.
-    for opts in [
+    // `mut` is used only when the libjxl backend is compiled in.
+    #[allow(unused_mut)]
+    let mut options = vec![
         EncodeOptions::png(),
         EncodeOptions::jpeg(),
         EncodeOptions::webp_lossy(),
-    ] {
+    ];
+    // The opt-in libjxl backend encodes 16-bit by default (unlike the others,
+    // which are 8-bit). Only present when built with `jxl-encode-libjxl`.
+    #[cfg(feature = "jxl-encode-libjxl")]
+    options.push(EncodeOptions::jxl_libjxl());
+
+    for opts in options {
         let bytes = encode_rgb_image_to_vec(&image, &metadata, &opts)?;
         let probe = probe_standard_image(&bytes)?;
         println!(

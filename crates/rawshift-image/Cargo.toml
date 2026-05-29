@@ -13,8 +13,9 @@ categories = ["multimedia::images", "encoding", "parser-implementations"]
 readme = "README.md"
 
 [package.metadata.docs.rs]
-# `heic-vendored` is intentionally excluded: it builds libheif from source and
-# is an alternative linking mode to `heic`, not an additive feature.
+# `heic-vendored` and the `jxl-encode-libjxl*` features are intentionally
+# excluded: each builds a C/C++ library from source (or links a system one) and
+# is an alternative linking mode, not an additive feature.
 features = ["full"]
 rustdoc-args = ["--cfg", "docsrs"]
 
@@ -41,6 +42,15 @@ zune-png       = { version = "0.5",    optional = true }
 zune-ppm       = { version = "0.5",    optional = true }
 gif            = { version = "0.13",   optional = true }
 tiff           = { version = "0.11",   optional = true }
+
+[build-dependencies]
+# Compiled only when a `jxl-encode-libjxl*` feature is enabled (see [features]).
+# All permissive (no GPL): bindgen (BSD-3) generates the libjxl C-API bindings;
+# pkg-config resolves a system libjxl; jpegxl-src (BSD-3) builds libjxl from
+# source via cmake for the vendored feature.
+bindgen    = { version = "0.72",   optional = true }
+pkg-config = { version = "0.3",    optional = true }
+jpegxl-src = { version = "0.11.4", optional = true }
 
 [dev-dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -136,6 +146,11 @@ webp-decode-libwebp  = ["webp-decode", "dep:libwebp-sys", "exif"]
 webp-encode-libwebp  = ["webp-encode", "dep:libwebp-sys", "exif", "container-embed"]
 jxl-decode-jxl-oxide = ["jxl-decode", "dep:jxl-oxide"]
 jxl-encode-zune      = ["jxl-encode", "jxl-decode", "dep:zune-jpegxl", "zune-runtime", "exif", "container-embed"]
+# Alternative JXL encoder via libjxl (the reference encoder): 16-bit, true
+# lossless, full toggle control. Enabling it keeps `jxl-encode-zune` compiled in
+# too (tier-3 aliases the default impl); the active backend is chosen via
+# `EncodeOptions`. Links system libjxl by default — see `jxl-encode-libjxl-vendored`.
+jxl-encode-libjxl    = ["jxl-encode", "exif", "container-embed", "dep:bindgen", "dep:pkg-config"]
 gif-decode-gif       = ["gif-decode", "dep:gif"]
 tiff-decode-tiff     = ["tiff-decode", "dep:tiff", "exif"]
 avif-decode-image    = ["avif-decode", "dep:image", "exif"]
@@ -161,6 +176,11 @@ container-embed = ["dep:img-parts"]
 # pkg-config); `heic-vendored` builds libheif from source via cmake and links
 # it statically (needs a C/C++ toolchain + cmake). Enable exactly one.
 heic-vendored = ["heic-decode", "libheif-rs/embedded-libheif"]
+# libjxl linking mode. `jxl-encode-libjxl` links the system libjxl (resolved by
+# pkg-config); `jxl-encode-libjxl-vendored` builds libjxl from source via cmake
+# and links it statically (needs a C/C++ toolchain + cmake). Distro libjxl is
+# usually too old for the 0.11.x ABI, so the vendored mode is the reliable path.
+jxl-encode-libjxl-vendored = ["jxl-encode-libjxl", "dep:jpegxl-src"]
 
 [[bench]]
 name = "decode"

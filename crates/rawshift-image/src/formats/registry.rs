@@ -56,6 +56,12 @@ pub fn available_encoders() -> Vec<CodecInfo> {
         "0.5",
         CodecDirection::Encode,
     ));
+    #[cfg(feature = "jxl-encode-libjxl")]
+    encoders.push(CodecInfo::new(
+        CodecId::new("jxl/libjxl"),
+        "0.11",
+        CodecDirection::Encode,
+    ));
     #[cfg(feature = "dng-encode")]
     encoders.push(CodecInfo::new(
         CodecId::new("dng/rawshift"),

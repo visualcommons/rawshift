@@ -195,6 +195,10 @@ pub enum EncodeError {
     /// WebP encoding error.
     #[error("WebP error: {0}")]
     WebP(String),
+
+    /// JPEG XL (libjxl) encoding error.
+    #[error("JXL error: {0}")]
+    Jxl(String),
 }
 
 #[cfg(feature = "tiff-parser")]

@@ -555,6 +555,108 @@ mod jxl_tests {
 }
 
 // ============================================================================
+// JXL Export Tests — libjxl backend (opt-in `jxl-encode-libjxl`)
+// ============================================================================
+
+#[cfg(feature = "jxl-encode-libjxl")]
+mod libjxl_tests {
+    use super::*;
+    use rawshift_image::formats::export::LibjxlEncodeConfig;
+    use rawshift_image::formats::{StandardFormat, available_encoders, decode_standard_image};
+
+    /// 16-bit synthetic image with distinct per-sample values (so a lossless
+    /// round-trip is a meaningful check). 48 samples, all within `u16`.
+    fn distinct_16bit() -> RgbImage {
+        let data: Vec<u16> = (0..4 * 4 * 3)
+            .map(|i| ((i as u32 * 4099) % 65536) as u16)
+            .collect();
+        RgbImage::new(4, 4, data)
+    }
+
+    #[test]
+    fn libjxl_registers_as_encoder() {
+        assert!(
+            available_encoders().iter().any(|c| c.id.id == "jxl/libjxl"),
+            "jxl/libjxl should be listed when the feature is enabled"
+        );
+    }
+
+    #[test]
+    fn libjxl_encodes_and_decodes_roundtrip() {
+        let img = synthetic_image();
+        let opts = EncodeOptions::JxlLibjxl(LibjxlEncodeConfig {
+            common: common(false, false, false),
+            ..LibjxlEncodeConfig::default()
+        });
+        let bytes = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts)
+            .expect("encode JXL via libjxl");
+        assert!(!bytes.is_empty());
+        assert_eq!(
+            rawshift_image::formats::detect_standard_format(&bytes),
+            Some(StandardFormat::Jxl),
+            "libjxl output should be detected as JXL"
+        );
+        let decoded = decode_standard_image(&bytes, StandardFormat::Jxl).expect("decode JXL");
+        assert_eq!(decoded.width(), 4);
+        assert_eq!(decoded.height(), 4);
+    }
+
+    #[test]
+    fn libjxl_lossless_16bit_is_exact() {
+        let img = distinct_16bit();
+        let want = img.data.clone();
+        let opts = EncodeOptions::JxlLibjxl(LibjxlEncodeConfig {
+            common: common(false, false, false),
+            distance: 0.0,
+            lossless: true,
+            ..LibjxlEncodeConfig::default()
+        });
+        let bytes = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts)
+            .expect("encode lossless JXL");
+        let decoded = decode_standard_image(&bytes, StandardFormat::Jxl).expect("decode JXL");
+        assert_eq!(
+            decoded.data, want,
+            "lossless 16-bit libjxl round-trip must be exact"
+        );
+    }
+
+    #[test]
+    fn libjxl_embeds_icc_when_requested() {
+        let img = synthetic_image();
+        let opts = EncodeOptions::JxlLibjxl(LibjxlEncodeConfig {
+            common: common(false, true, false),
+            ..LibjxlEncodeConfig::default()
+        });
+        let data =
+            encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts).expect("encode JXL");
+        assert!(
+            jxl_has_icc(&data),
+            "libjxl JXL should contain an ICC profile box"
+        );
+    }
+
+    #[test]
+    fn libjxl_toggles_encode() {
+        // Exercise a spread of typed toggles. (The raw `extra_*_options` escape
+        // hatch is covered by the unit test in `codecs::jxl_libjxl`, which has the
+        // real `JxlEncoderFrameSettingId` constants in scope.)
+        let img = synthetic_image();
+        let opts = EncodeOptions::JxlLibjxl(LibjxlEncodeConfig {
+            common: common(false, false, false),
+            distance: 3.0,
+            effort: 4,
+            modular: rawshift_image::formats::export::LibjxlModular::Modular,
+            progressive: true,
+            decoding_speed: 2,
+            ..LibjxlEncodeConfig::default()
+        });
+        let bytes = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts)
+            .expect("encode JXL with toggles");
+        assert!(!bytes.is_empty());
+    }
+}
+
+// ============================================================================
 // EncodeOptions API Tests
 // ============================================================================
 
@@ -572,6 +674,8 @@ mod encode_options_tests {
         let _ = EncodeOptions::avif();
         #[cfg(feature = "jxl-encode")]
         let _ = EncodeOptions::jxl();
+        #[cfg(feature = "jxl-encode-libjxl")]
+        let _ = EncodeOptions::jxl_libjxl();
         #[cfg(feature = "dng-encode")]
         let _ = EncodeOptions::dng();
     }
