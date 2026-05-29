@@ -1,0 +1,65 @@
+name: Release-plz
+
+# Least privilege by default; each job opts into exactly what it needs.
+permissions: {}
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  # Publishes any crates whose version isn't yet on crates.io, then pushes the
+  # `vX.Y.Z` tag and cuts the GitHub release. Runs after a Release PR is merged.
+  release-plz-release:
+    name: Release-plz release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # push the git tag + create the GitHub release
+      pull-requests: read   # read merged PRs for release notes
+      id-token: write       # OIDC exchange for crates.io trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Match rust-toolchain.toml exactly ("1.90.0"): rustup resolves the repo's
+      # cargo to this toolchain regardless of what we install, so install it here.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90.0"
+      - name: Run release-plz
+        uses: release-plz/action@v0.5.129
+        with:
+          command: release
+        # No CARGO_REGISTRY_TOKEN: release-plz performs the crates.io OIDC token
+        # exchange itself (trusted publishing) using the id-token permission above.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Opens/updates the "Release PR" that bumps the version and the changelog
+  # based on conventional commits since the last release.
+  release-plz-pr:
+    name: Release-plz PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    # Don't cancel an in-flight PR update; let each run finish to avoid a
+    # half-written Release PR.
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90.0"
+      - name: Run release-plz
+        uses: release-plz/action@v0.5.129
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

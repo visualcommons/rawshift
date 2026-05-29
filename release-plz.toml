@@ -1,0 +1,38 @@
+# release-plz configuration — https://release-plz.dev/docs/config
+#
+# This workspace ships as one product: all crates share a single version
+# (`version.workspace = true` in the root Cargo.toml) and are released in
+# lockstep. We surface that as a single root CHANGELOG.md, a single `vX.Y.Z`
+# git tag, and a single GitHub release — all owned by the `rawshift` facade.
+#
+# The "one crate owns the changelog, the rest fold in via `changelog_include`"
+# pattern mirrors how release-plz configures its own multi-crate repository.
+
+[workspace]
+# One GitHub release for the whole project, created by the `rawshift` facade
+# below. Disabled here so the library crates don't each cut their own release.
+git_release_enable = false
+
+[[package]]
+name = "rawshift"
+# The facade owns the single project-wide changelog and release artifacts.
+changelog_path = "./CHANGELOG.md"
+changelog_include = ["rawshift-core", "rawshift-image", "rawshift-video"]
+git_release_enable = true
+git_tag_name = "v{{ version }}"      # e.g. v0.1.0 (not rawshift-v0.1.0)
+git_release_name = "v{{ version }}"
+
+[[package]]
+name = "rawshift-core"
+changelog_update = false             # entries roll up into the root CHANGELOG.md
+git_tag_enable = false               # only the facade creates the project tag
+
+[[package]]
+name = "rawshift-image"
+changelog_update = false
+git_tag_enable = false
+
+[[package]]
+name = "rawshift-video"
+changelog_update = false
+git_tag_enable = false
