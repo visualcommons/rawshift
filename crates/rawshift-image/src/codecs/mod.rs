@@ -4,6 +4,8 @@ pub(crate) mod arw;
 pub(crate) mod bit_pump;
 #[cfg(feature = "heic-decode")]
 pub(crate) mod heic;
+#[cfg(feature = "jpeg-encode-jpegli")]
+pub(crate) mod jpegli;
 #[cfg(feature = "dng-decode")]
 pub(crate) mod jxl;
 #[cfg(feature = "jxl-encode-libjxl")]

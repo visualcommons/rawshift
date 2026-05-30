@@ -38,6 +38,12 @@ pub fn available_encoders() -> Vec<CodecInfo> {
         "0.7",
         CodecDirection::Encode,
     ));
+    #[cfg(feature = "jpeg-encode-jpegli")]
+    encoders.push(CodecInfo::new(
+        CodecId::new("jpeg/jpegli"),
+        "0.11",
+        CodecDirection::Encode,
+    ));
     #[cfg(feature = "webp-encode")]
     encoders.push(CodecInfo::new(
         CodecId::new("webp/libwebp"),
