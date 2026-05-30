@@ -7,12 +7,13 @@
 //! generic, implementation-agnostic option set.
 //!
 //! `EncodeOptions` is `#[non_exhaustive]` so the planned C/C++ encoder backends
-//! (libjpeg-turbo, MozJPEG, libaom, SVT-AV1) can be added without a breaking
+//! (libjpeg-turbo, MozJPEG, SVT-AV1) can be added without a breaking
 //! change. Their configuration structs are already defined below — see
 //! [`MozjpegEncodeConfig`] and friends — so the API surface is stable ahead of
-//! the implementations. The libjxl ([`LibjxlEncodeConfig`]) and jpegli
-//! ([`JpegliEncodeConfig`]) backends are wired up behind the `jxl-encode-libjxl`
-//! and `jpeg-encode-jpegli` features respectively.
+//! the implementations. The libjxl ([`LibjxlEncodeConfig`]), jpegli
+//! ([`JpegliEncodeConfig`]), and libaom ([`LibaomEncodeConfig`]) backends are
+//! wired up behind the `jxl-encode-libjxl`, `jpeg-encode-jpegli`, and
+//! `avif-encode-libaom` features respectively.
 
 #[cfg(feature = "dng-encode")]
 use crate::formats::dng_export::DngExportConfig;
@@ -217,6 +218,49 @@ impl Default for RavifEncodeConfig {
             common: CommonEncodeOptions::default(),
             quality: 80,
             speed: 6,
+        }
+    }
+}
+
+/// Configuration for the **libaom** AVIF encoder (the AV1 reference encoder).
+///
+/// Produces full-range BT.709 YUV 4:4:4 AVIF. Requires the `avif-encode-libaom`
+/// feature.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct LibaomEncodeConfig {
+    /// Encoder-agnostic options. libaom honours `BitDepth::Eight`, `Ten`, and
+    /// `Twelve`; a `Sixteen` request returns
+    /// [`EncodeError::UnsupportedBitDepth`](crate::error::EncodeError::UnsupportedBitDepth)
+    /// (AV1 tops out at 12-bit). Defaults to 10-bit.
+    pub common: CommonEncodeOptions,
+    /// Constant-quantiser level, `0..=63`. Lower is better quality and larger
+    /// files (monotonic). Used under [`AvifRateControl::ConstantQuality`].
+    pub cq_level: u8,
+    /// Minimum quantizer, `0..=63`.
+    pub min_quantizer: u8,
+    /// Maximum quantizer, `0..=63`.
+    pub max_quantizer: u8,
+    /// Speed/quality trade-off, `0` (slowest, best) to `8` (fastest).
+    pub cpu_used: u8,
+    /// Rate-control strategy.
+    pub rate_control: AvifRateControl,
+}
+
+impl Default for LibaomEncodeConfig {
+    fn default() -> Self {
+        Self {
+            // libaom is the HDR-capable backend; default to 10-bit rather than the
+            // global 16-bit default it cannot honour.
+            common: CommonEncodeOptions {
+                bit_depth: BitDepth::Ten,
+                ..CommonEncodeOptions::default()
+            },
+            cq_level: 30,
+            min_quantizer: 0,
+            max_quantizer: 63,
+            cpu_used: 6,
+            rate_control: AvifRateControl::ConstantQuality,
         }
     }
 }
@@ -463,38 +507,6 @@ impl Default for MozjpegEncodeConfig {
     }
 }
 
-/// Configuration for the planned **libaom** AVIF encoder.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LibaomEncodeConfig {
-    /// Encoder-agnostic options. libaom can produce 8/10/12-bit AVIF.
-    pub common: CommonEncodeOptions,
-    /// Constant-quantiser level, `0..=63`. Lower is better quality and larger
-    /// files (monotonic). Used under [`AvifRateControl::ConstantQuality`].
-    pub cq_level: u8,
-    /// Minimum quantizer, `0..=63`.
-    pub min_quantizer: u8,
-    /// Maximum quantizer, `0..=63`.
-    pub max_quantizer: u8,
-    /// Speed/quality trade-off, `0` (slowest, best) to `8` (fastest).
-    pub cpu_used: u8,
-    /// Rate-control strategy.
-    pub rate_control: AvifRateControl,
-}
-
-impl Default for LibaomEncodeConfig {
-    fn default() -> Self {
-        Self {
-            common: CommonEncodeOptions::default(),
-            cq_level: 30,
-            min_quantizer: 0,
-            max_quantizer: 63,
-            cpu_used: 6,
-            rate_control: AvifRateControl::ConstantQuality,
-        }
-    }
-}
-
 /// Configuration for the planned **SVT-AV1** AVIF encoder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -544,6 +556,10 @@ pub enum EncodeOptions {
     /// AVIF via `ravif` / rav1e (requires `avif-encode`).
     #[cfg(feature = "avif-encode")]
     AvifRavif(RavifEncodeConfig),
+    /// AVIF via `libaom`, the AV1 reference encoder: 8/10/12-bit, 4:4:4
+    /// (requires `avif-encode-libaom`).
+    #[cfg(feature = "avif-encode-libaom")]
+    AvifLibaom(LibaomEncodeConfig),
     /// JPEG XL via `zune-jpegxl` (requires `jxl-encode`).
     #[cfg(feature = "jxl-encode")]
     JxlZune(ZuneJxlEncodeConfig),
@@ -599,6 +615,13 @@ impl EncodeOptions {
         Self::AvifRavif(RavifEncodeConfig::default())
     }
 
+    /// AVIF via the libaom reference encoder, with default configuration
+    /// (10-bit, 4:4:4).
+    #[cfg(feature = "avif-encode-libaom")]
+    pub fn avif_libaom() -> Self {
+        Self::AvifLibaom(LibaomEncodeConfig::default())
+    }
+
     /// JPEG XL with default configuration.
     #[cfg(feature = "jxl-encode")]
     pub fn jxl() -> Self {
@@ -630,6 +653,8 @@ impl EncodeOptions {
             EncodeOptions::WebpLibwebp(_) => OutputFormat::WebP,
             #[cfg(feature = "avif-encode")]
             EncodeOptions::AvifRavif(_) => OutputFormat::Avif,
+            #[cfg(feature = "avif-encode-libaom")]
+            EncodeOptions::AvifLibaom(_) => OutputFormat::Avif,
             #[cfg(feature = "jxl-encode")]
             EncodeOptions::JxlZune(_) => OutputFormat::Jxl,
             #[cfg(feature = "jxl-encode-libjxl")]
@@ -656,6 +681,8 @@ impl EncodeOptions {
             EncodeOptions::WebpLibwebp(_) => CodecId::new("webp/libwebp"),
             #[cfg(feature = "avif-encode")]
             EncodeOptions::AvifRavif(_) => CodecId::new("avif/ravif"),
+            #[cfg(feature = "avif-encode-libaom")]
+            EncodeOptions::AvifLibaom(_) => CodecId::new("avif/libaom"),
             #[cfg(feature = "jxl-encode")]
             EncodeOptions::JxlZune(_) => CodecId::new("jxl/zune"),
             #[cfg(feature = "jxl-encode-libjxl")]
@@ -683,6 +710,8 @@ impl EncodeOptions {
             EncodeOptions::WebpLibwebp(c) => c.common,
             #[cfg(feature = "avif-encode")]
             EncodeOptions::AvifRavif(c) => c.common,
+            #[cfg(feature = "avif-encode-libaom")]
+            EncodeOptions::AvifLibaom(c) => c.common,
             #[cfg(feature = "jxl-encode")]
             EncodeOptions::JxlZune(c) => c.common,
             #[cfg(feature = "jxl-encode-libjxl")]

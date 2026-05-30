@@ -45,6 +45,8 @@ pub fn encode_rgb_image_to_vec(
         EncodeOptions::WebpLibwebp(cfg) => encode_webp(image, metadata, cfg),
         #[cfg(feature = "avif-encode")]
         EncodeOptions::AvifRavif(cfg) => encode_avif(image, metadata, cfg),
+        #[cfg(feature = "avif-encode-libaom")]
+        EncodeOptions::AvifLibaom(cfg) => encode_avif_libaom(image, metadata, cfg),
         #[cfg(feature = "jxl-encode")]
         EncodeOptions::JxlZune(cfg) => encode_jxl(image, metadata, cfg),
         #[cfg(feature = "jxl-encode-libjxl")]
@@ -447,6 +449,79 @@ fn encode_avif(
     })?;
     let mut avif_bytes = result.avif_file;
 
+    let m = &cfg.common.metadata;
+    if m.embed_icc {
+        match IccProfile::srgb().append_to_avif(avif_bytes.clone()) {
+            Ok(data) => avif_bytes = data,
+            Err(e) => tracing::warn!("Failed to embed ICC in AVIF: {e}"),
+        }
+    }
+    if m.embed_exif {
+        match ExifBuilder::new(metadata).append_to_avif(avif_bytes.clone()) {
+            Ok(data) => avif_bytes = data,
+            Err(e) => tracing::warn!("Failed to embed EXIF in AVIF: {e}"),
+        }
+    }
+    if m.embed_xmp
+        && let Some(xmp_data) = &metadata.xmp
+    {
+        match append_xmp_to_avif(xmp_data, avif_bytes.clone()) {
+            Ok(data) => avif_bytes = data,
+            Err(e) => tracing::warn!("Failed to embed XMP in AVIF: {e}"),
+        }
+    }
+
+    Ok(avif_bytes)
+}
+
+// ── AVIF (libaom reference encoder) ─────────────────────────────────────────────
+
+#[cfg(feature = "avif-encode-libaom")]
+fn encode_avif_libaom(
+    image: &RgbImage,
+    metadata: &ImageMetadata,
+    cfg: &super::export::LibaomEncodeConfig,
+) -> RawResult<Vec<u8>> {
+    use super::export::AvifRateControl;
+    use crate::codecs::avif_libaom::{self, AvifLibaomParams};
+    use crate::metadata::exif::ExifBuilder;
+    use crate::metadata::icc::IccProfile;
+    use crate::metadata::xmp::append_xmp_to_avif;
+
+    // libaom is HDR-capable: 8/10/12-bit map straight to AV1 depths. AV1 cannot
+    // represent 16-bit, so that (and anything deeper) is reported rather than
+    // silently degraded.
+    let depth: u8 = match cfg.common.bit_depth {
+        BitDepth::Eight => 8,
+        BitDepth::Ten => 10,
+        BitDepth::Twelve => 12,
+        other => {
+            return Err(RawError::Encode(EncodeError::UnsupportedBitDepth {
+                format: "AVIF",
+                requested: other,
+            }));
+        }
+    };
+
+    let params = AvifLibaomParams {
+        cq_level: u32::from(cfg.cq_level),
+        min_quantizer: u32::from(cfg.min_quantizer),
+        max_quantizer: u32::from(cfg.max_quantizer),
+        cpu_used: u32::from(cfg.cpu_used),
+        constant_quality: cfg.rate_control == AvifRateControl::ConstantQuality,
+    };
+
+    let mut avif_bytes =
+        avif_libaom::encode(&image.data, image.width(), image.height(), depth, &params).map_err(
+            |e| {
+                RawError::Encode(EncodeError::Encoding {
+                    format: "AVIF",
+                    message: e,
+                })
+            },
+        )?;
+
+    // Metadata embedding mirrors the `ravif` `encode_avif` path exactly.
     let m = &cfg.common.metadata;
     if m.embed_icc {
         match IccProfile::srgb().append_to_avif(avif_bytes.clone()) {

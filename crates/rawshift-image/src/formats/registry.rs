@@ -56,6 +56,14 @@ pub fn available_encoders() -> Vec<CodecInfo> {
         "0.13",
         CodecDirection::Encode,
     ));
+    // Version tracks the libaom bundled by `libaom-sys` (vendored); a system
+    // libaom may differ. Hand-maintained — bump with the `libaom-sys` dependency.
+    #[cfg(feature = "avif-encode-libaom")]
+    encoders.push(CodecInfo::new(
+        CodecId::new("avif/libaom"),
+        "3.11",
+        CodecDirection::Encode,
+    ));
     #[cfg(feature = "jxl-encode")]
     encoders.push(CodecInfo::new(
         CodecId::new("jxl/zune"),

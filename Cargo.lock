@@ -1225,6 +1225,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "libaom-sys"
+version = "0.17.2+libaom.3.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c4fce8aaf0c2d8534529b0698ed98ec1da8d35319588d20b0d79ce6446e4194"
+dependencies = [
+ "cmake",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.182"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1819,6 +1828,7 @@ dependencies = [
 name = "rawshift-image"
 version = "0.1.1"
 dependencies = [
+ "avif-serialize",
  "bindgen",
  "binrw",
  "cc",
@@ -1832,6 +1842,7 @@ dependencies = [
  "jpeg-encoder",
  "jpegxl-src",
  "jxl-oxide",
+ "libaom-sys",
  "libheif-rs",
  "libwebp-sys",
  "little_exif",

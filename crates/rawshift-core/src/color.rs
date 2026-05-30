@@ -55,14 +55,19 @@ impl ColorSpace {
 
 /// Bits per pixel sample of an encoded image.
 ///
-/// `#[non_exhaustive]`: 10- and 12-bit variants are planned for the HDR-capable
-/// encoder backends and can be added without a breaking change.
+/// `#[non_exhaustive]`: further variants can be added without a breaking change.
+/// `Ten` and `Twelve` are honoured by the HDR-capable encoder backends (e.g.
+/// libaom AVIF); the 8-bit/16-bit backends reject them as unsupported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum BitDepth {
     /// 8 bits per sample.
     Eight,
+    /// 10 bits per sample. High-bit-depth output (e.g. AV1/AVIF).
+    Ten,
+    /// 12 bits per sample. High-bit-depth output (e.g. AV1/AVIF).
+    Twelve,
     /// 16 bits per sample.
     #[default]
     Sixteen,
@@ -73,6 +78,8 @@ impl BitDepth {
     pub fn bits(self) -> u8 {
         match self {
             BitDepth::Eight => 8,
+            BitDepth::Ten => 10,
+            BitDepth::Twelve => 12,
             BitDepth::Sixteen => 16,
         }
     }
@@ -90,8 +97,12 @@ mod tests {
     #[test]
     fn bit_depth_bits_and_max() {
         assert_eq!(BitDepth::Eight.bits(), 8);
+        assert_eq!(BitDepth::Ten.bits(), 10);
+        assert_eq!(BitDepth::Twelve.bits(), 12);
         assert_eq!(BitDepth::Sixteen.bits(), 16);
         assert_eq!(BitDepth::Eight.max_value(), 255);
+        assert_eq!(BitDepth::Ten.max_value(), 1023);
+        assert_eq!(BitDepth::Twelve.max_value(), 4095);
         assert_eq!(BitDepth::Sixteen.max_value(), u16::MAX);
         assert_eq!(BitDepth::default(), BitDepth::Sixteen);
     }

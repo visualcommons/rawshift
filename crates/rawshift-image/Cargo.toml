@@ -13,10 +13,10 @@ categories = ["multimedia::images", "encoding", "parser-implementations"]
 readme = "README.md"
 
 [package.metadata.docs.rs]
-# `heic-vendored`, the `jxl-encode-libjxl*` and the `jpeg-encode-jpegli*`
-# features are intentionally excluded: each builds a C/C++ library from source
-# (or links a system one) and is an alternative linking mode, not an additive
-# feature.
+# `heic-vendored`, the `jxl-encode-libjxl*`, `jpeg-encode-jpegli*`, and
+# `avif-encode-libaom*` features are intentionally excluded: each builds a C/C++
+# library from source (or links a system one) and is an alternative linking mode,
+# not an additive feature.
 features = ["full"]
 rustdoc-args = ["--cfg", "docsrs"]
 
@@ -32,6 +32,14 @@ little_exif    = { version = "0.6",    optional = true }
 rayon          = { workspace = true }
 image          = { version = "0.25", default-features = false, features = ["avif-native"], optional = true }
 ravif          = { version = "0.13",   optional = true }
+# AVIF (ISO-BMFF) container muxer for the libaom backend — wraps libaom's raw
+# AV1 bitstream. BSD-3-Clause (already in the tree via `ravif`), no GPL.
+avif-serialize = { version = "0.8",    optional = true }
+# libaom (BSD-2-Clause): cmake-builds the bundled libaom source and links it
+# statically for the `avif-encode-libaom-vendored` feature. Encoder only. We
+# generate our own bindgen bindings (see build.rs); this crate's `links = "aom"`
+# exposes the built headers to our build script via `DEP_AOM_INCLUDE`.
+libaom-sys     = { version = "0.17", default-features = false, features = ["av1_encoder"], optional = true }
 resvg          = { version = "0.44",   optional = true }
 serde          = { workspace = true, optional = true }
 thiserror      = { workspace = true }
@@ -166,6 +174,12 @@ gif-decode-gif       = ["gif-decode", "dep:gif"]
 tiff-decode-tiff     = ["tiff-decode", "dep:tiff", "exif"]
 avif-decode-image    = ["avif-decode", "dep:image", "exif"]
 avif-encode-ravif    = ["avif-encode", "dep:ravif", "exif", "container-embed"]
+# Alternative AVIF encoder via libaom (the AV1 reference encoder): 8/10/12-bit,
+# 4:4:4, better intra coding than rav1e. Enabling it keeps `avif-encode-ravif`
+# compiled in too (tier-3 aliases the default impl); the active backend is chosen
+# via `EncodeOptions`. Links system libaom by default — see `avif-encode-libaom-vendored`.
+# We bind libaom with our own bindgen and mux the AV1 bitstream with `avif-serialize`.
+avif-encode-libaom   = ["avif-encode", "exif", "container-embed", "dep:avif-serialize", "dep:bindgen", "dep:pkg-config"]
 heic-decode-libheif  = ["heic-decode", "dep:libheif-rs", "exif"]
 svg-decode-resvg     = ["svg-decode", "dep:resvg"]
 ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
@@ -198,6 +212,11 @@ jxl-encode-libjxl-vendored = ["jxl-encode-libjxl", "dep:jpegxl-src"]
 # it (+ Highway) statically (needs a C/C++ toolchain + cmake). The vendored mode
 # is the normal, tested path.
 jpeg-encode-jpegli-vendored = ["jpeg-encode-jpegli", "dep:cmake"]
+# libaom linking mode. `avif-encode-libaom` links the system libaom (resolved by
+# pkg-config); `avif-encode-libaom-vendored` builds libaom from source via cmake
+# (through `libaom-sys`) and links it statically (needs a C/C++ toolchain, cmake,
+# nasm, and `libclang` for bindgen).
+avif-encode-libaom-vendored = ["avif-encode-libaom", "dep:libaom-sys"]
 
 [[bench]]
 name = "decode"

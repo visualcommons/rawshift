@@ -46,10 +46,10 @@ pub use crate::error::{
 
 // formats — encode option system
 pub use crate::formats::export::{
-    BitDepth, CommonEncodeOptions, EncodeOptions, JpegEncEncodeConfig, JpegSubsampling,
-    JpegliEncodeConfig, LibjxlColorTransform, LibjxlEncodeConfig, LibjxlModular,
-    LibwebpEncodeConfig, MetadataEmbedOptions, OutputFormat, RavifEncodeConfig, WebPMode,
-    ZuneJxlEncodeConfig, ZunePngEncodeConfig,
+    AvifRateControl, BitDepth, CommonEncodeOptions, EncodeOptions, JpegEncEncodeConfig,
+    JpegSubsampling, JpegliEncodeConfig, LibaomEncodeConfig, LibjxlColorTransform,
+    LibjxlEncodeConfig, LibjxlModular, LibwebpEncodeConfig, MetadataEmbedOptions, OutputFormat,
+    RavifEncodeConfig, WebPMode, ZuneJxlEncodeConfig, ZunePngEncodeConfig,
 };
 // formats — decoders, format detection, encode/decode entry points
 pub use crate::formats::{

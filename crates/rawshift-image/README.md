@@ -27,7 +27,7 @@ the `tiff-parser` API, or `heic-vendored` linking.
 | GIF          | [gif](https://github.com/image-rs/image-gif) (Stable)                                    | Not planned                                                                                      |                                           |
 | TIFF         | [tiff](https://github.com/image-rs/image-tiff) (Stable)                                  | Not planned                                                                                      |                                           |
 | JXL          | [jxl-oxide](https://github.com/tirr-c/jxl-oxide) (Stable)                                | [zune-jpegxl](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpegxl) (Functional, default) · [libjxl](https://github.com/libjxl/libjxl) (16-bit + lossless, opt-in) | libjxl via `jxl-encode-libjxl` (system) / `jxl-encode-libjxl-vendored` (from source). |
-| AVIF         | [image/avif-native](https://github.com/image-rs/image) (Functional)                      | [ravif](https://github.com/kornelski/cavif-rs/tree/main/ravif) (Functional)                      |                                           |
+| AVIF         | [image/avif-native](https://github.com/image-rs/image) (Functional)                      | [ravif](https://github.com/kornelski/cavif-rs/tree/main/ravif) (Functional, default) · [libaom](https://aomedia.googlesource.com/aom/) (8/10/12-bit, 4:4:4, opt-in) | libaom via `avif-encode-libaom` (system) / `avif-encode-libaom-vendored` (from source). |
 | HEIC         | [libheif](https://github.com/strukturag/libheif) (Functional)                            | Not planned                                                                                      | Requires `heic` feature; `heic-vendored` builds libheif from source. |
 | SVG          | [resvg/tiny-skia](https://github.com/linebender/resvg) (Functional)                      | Not planned                                                                                      |                                           |
 | PPM          | [zune-ppm](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-ppm) (Functional) | Not planned                                                                                    | Netpbm family: P5, P6, P7, PFM.           |
@@ -79,7 +79,7 @@ crate.
    - `webp-decode-libwebp`, `webp-encode-libwebp`
    - `jxl-decode-jxl-oxide`, `jxl-encode-zune`, `jxl-encode-libjxl`
    - `gif-decode-gif`, `tiff-decode-tiff`
-   - `avif-decode-image`, `avif-encode-ravif`
+   - `avif-decode-image`, `avif-encode-ravif`, `avif-encode-libaom`
    - `heic-decode-libheif`, `svg-decode-resvg`
    - `ppm-decode-zune`
 5. **Infrastructure / linking features** — cross-cutting, not tied to one format.
@@ -99,6 +99,12 @@ crate.
      libjpegli (`jpeg-encode-jpegli`). Requires a C/C++ toolchain, cmake, and
      `libclang`; init the submodule with
      `git submodule update --init --recursive crates/rawshift-image/third_party/jpegli`.
+   - `avif-encode-libaom` — alternative AVIF encoder via libaom (8/10/12-bit,
+     4:4:4); links the system libaom (`aom`, resolved by pkg-config, ≥ 3.2). The
+     AV1 bitstream is bound with our own bindgen and muxed with `avif-serialize`.
+   - `avif-encode-libaom-vendored` — build libaom from source via cmake (through
+     `libaom-sys`) and link it statically, instead of linking the system libaom.
+     Requires a C/C++ toolchain, cmake, nasm, and `libclang` (for bindgen).
 
    The `zune-runtime` / `exif` / `container-embed` features are pulled in
    automatically by the format implementations that need them — they exist so

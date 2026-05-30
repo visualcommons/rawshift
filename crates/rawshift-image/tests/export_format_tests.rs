@@ -505,6 +505,92 @@ mod avif_tests {
 }
 
 // ============================================================================
+// AVIF (libaom) Export Tests
+// ============================================================================
+
+#[cfg(feature = "avif-encode-libaom")]
+mod avif_libaom_tests {
+    use super::*;
+    use rawshift_image::formats::export::LibaomEncodeConfig;
+
+    fn libaom(bit_depth: BitDepth, exif: bool, icc: bool) -> EncodeOptions {
+        EncodeOptions::AvifLibaom(LibaomEncodeConfig {
+            common: CommonEncodeOptions {
+                bit_depth,
+                ..common(exif, icc, true)
+            },
+            ..LibaomEncodeConfig::default()
+        })
+    }
+
+    /// The bytes are a valid ISO-BMFF AVIF file (`ftyp` box, AVIF brand).
+    fn is_avif(data: &[u8]) -> bool {
+        data.len() > 12
+            && &data[4..8] == b"ftyp"
+            && matches!(&data[8..12], b"avif" | b"avis" | b"mif1")
+    }
+
+    #[test]
+    fn encodes_8_10_12_bit() {
+        let img = synthetic_image();
+        for depth in [BitDepth::Eight, BitDepth::Ten, BitDepth::Twelve] {
+            let data = encode_rgb_image_to_vec(
+                &img,
+                &ImageMetadata::default(),
+                &libaom(depth, false, false),
+            )
+            .unwrap_or_else(|e| panic!("libaom encode at {depth:?} failed: {e}"));
+            assert!(is_avif(&data), "{depth:?} output must be a valid AVIF");
+        }
+    }
+
+    #[test]
+    fn rejects_16bit() {
+        let img = synthetic_image();
+        let result = encode_rgb_image_to_vec(
+            &img,
+            &ImageMetadata::default(),
+            &libaom(BitDepth::Sixteen, false, false),
+        );
+        assert!(
+            result.is_err(),
+            "16-bit must be rejected (AV1 maxes at 12-bit)"
+        );
+    }
+
+    #[test]
+    fn embeds_icc() {
+        let img = synthetic_image();
+        let data = encode_rgb_image_to_vec(
+            &img,
+            &ImageMetadata::default(),
+            &libaom(BitDepth::Ten, false, true),
+        )
+        .expect("libaom encode");
+        assert!(
+            avif_has_icc(&data),
+            "libaom AVIF should embed an ICC profile"
+        );
+    }
+
+    /// Strongest proof the AV1 bitstream + container are valid: decode it back.
+    #[cfg(feature = "avif-decode")]
+    #[test]
+    fn round_trips_through_decoder() {
+        use rawshift_image::formats::decode_standard_image;
+        let img = synthetic_image();
+        let data = encode_rgb_image_to_vec(
+            &img,
+            &ImageMetadata::default(),
+            &libaom(BitDepth::Eight, false, false),
+        )
+        .expect("libaom encode");
+        let decoded = decode_standard_image(&data).expect("decode libaom AVIF");
+        assert_eq!((decoded.width(), decoded.height()), (4, 4));
+    }
+}
+
+// ============================================================================
 // JXL Export Tests
 // ============================================================================
 
