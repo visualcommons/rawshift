@@ -39,6 +39,8 @@ pub fn encode_rgb_image_to_vec(
         EncodeOptions::PngZune(cfg) => encode_png(image, metadata, cfg),
         #[cfg(feature = "jpeg-encode")]
         EncodeOptions::JpegJpegEnc(cfg) => encode_jpeg(image, metadata, cfg),
+        #[cfg(feature = "jpeg-encode-jpegli")]
+        EncodeOptions::JpegJpegli(cfg) => encode_jpeg_jpegli(image, metadata, cfg),
         #[cfg(feature = "webp-encode")]
         EncodeOptions::WebpLibwebp(cfg) => encode_webp(image, metadata, cfg),
         #[cfg(feature = "avif-encode")]
@@ -233,6 +235,89 @@ fn encode_jpeg(
         ColorType::Rgb,
     )?;
 
+    let m = &cfg.common.metadata;
+    if m.embed_exif {
+        let exif_builder = ExifBuilder::new(metadata);
+        match exif_builder.append_to_jpeg(jpeg_buf.clone()) {
+            Ok(data) => jpeg_buf = data,
+            Err(e) => tracing::warn!("Failed to embed EXIF in JPEG: {e}"),
+        }
+    }
+    if m.embed_icc {
+        match IccProfile::srgb().append_to_jpeg(jpeg_buf.clone()) {
+            Ok(data) => jpeg_buf = data,
+            Err(e) => tracing::warn!("Failed to embed ICC in JPEG: {e}"),
+        }
+    }
+    if m.embed_xmp
+        && let Some(xmp_data) = &metadata.xmp
+    {
+        use crate::metadata::xmp::append_xmp_to_jpeg;
+        match append_xmp_to_jpeg(xmp_data, jpeg_buf.clone()) {
+            Ok(data) => jpeg_buf = data,
+            Err(e) => tracing::warn!("Failed to embed XMP in JPEG: {e}"),
+        }
+    }
+
+    Ok(jpeg_buf)
+}
+
+// ── JPEG (jpegli) ───────────────────────────────────────────────────────────────
+
+#[cfg(feature = "jpeg-encode-jpegli")]
+fn encode_jpeg_jpegli(
+    image: &RgbImage,
+    metadata: &ImageMetadata,
+    cfg: &super::export::JpegliEncodeConfig,
+) -> RawResult<Vec<u8>> {
+    use super::export::JpegSubsampling;
+    use crate::codecs::jpegli::{self, JpegliEncodeParams, Subsampling};
+    use crate::metadata::exif::ExifBuilder;
+    use crate::metadata::icc::IccProfile;
+
+    // jpegli output is always an 8-bit JPEG, but it can quantise from 16-bit
+    // input to reduce banding. `Eight` is packed; `Sixteen` is passed through
+    // native-endian (matching the wrapper's `bits_per_sample == 16` contract);
+    // deeper requests are unsupported.
+    let (samples, bits_per_sample) = match cfg.common.bit_depth {
+        BitDepth::Eight => (pack_rgb8(image), 8u32),
+        BitDepth::Sixteen => {
+            let mut bytes = Vec::with_capacity(image.data.len() * 2);
+            for &sample in &image.data {
+                bytes.extend_from_slice(&sample.to_ne_bytes());
+            }
+            (bytes, 16u32)
+        }
+        other => {
+            return Err(RawError::Encode(EncodeError::UnsupportedBitDepth {
+                format: "JPEG",
+                requested: other,
+            }));
+        }
+    };
+
+    let params = JpegliEncodeParams {
+        quality: cfg.quality,
+        distance: cfg.distance,
+        progressive: cfg.progressive,
+        xyb: cfg.xyb,
+        subsampling: match cfg.subsampling {
+            JpegSubsampling::Yuv420 => Subsampling::Yuv420,
+            JpegSubsampling::Yuv422 => Subsampling::Yuv422,
+            JpegSubsampling::Yuv444 => Subsampling::Yuv444,
+        },
+    };
+
+    let mut jpeg_buf = jpegli::encode(
+        &samples,
+        image.width(),
+        image.height(),
+        bits_per_sample,
+        &params,
+    )
+    .map_err(|e| RawError::Encode(EncodeError::Jpegli(e)))?;
+
+    // Metadata embedding mirrors the `encode_jpeg` path exactly.
     let m = &cfg.common.metadata;
     if m.embed_exif {
         let exif_builder = ExifBuilder::new(metadata);

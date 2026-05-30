@@ -7,11 +7,12 @@
 //! generic, implementation-agnostic option set.
 //!
 //! `EncodeOptions` is `#[non_exhaustive]` so the planned C/C++ encoder backends
-//! (libjpeg-turbo, MozJPEG, jpegli, libaom, SVT-AV1) can be added without a
-//! breaking change. Their configuration structs are already defined below — see
+//! (libjpeg-turbo, MozJPEG, libaom, SVT-AV1) can be added without a breaking
+//! change. Their configuration structs are already defined below — see
 //! [`MozjpegEncodeConfig`] and friends — so the API surface is stable ahead of
-//! the implementations. The libjxl backend ([`LibjxlEncodeConfig`]) is wired up
-//! behind the `jxl-encode-libjxl` feature.
+//! the implementations. The libjxl ([`LibjxlEncodeConfig`]) and jpegli
+//! ([`JpegliEncodeConfig`]) backends are wired up behind the `jxl-encode-libjxl`
+//! and `jpeg-encode-jpegli` features respectively.
 
 #[cfg(feature = "dng-encode")]
 use crate::formats::dng_export::DngExportConfig;
@@ -364,6 +365,45 @@ impl Default for LibjxlEncodeConfig {
     }
 }
 
+/// Configuration for the **jpegli** JPEG encoder (libjxl's perceptual encoder).
+///
+/// Unlike the pure-Rust default ([`JpegEncEncodeConfig`]), jpegli offers
+/// Butteraugli-distance rate control, XYB high-fidelity mode, and quantises from
+/// the source's full precision when fed 16-bit input. Output is always an 8-bit
+/// JPEG. Requires the `jpeg-encode-jpegli` feature.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct JpegliEncodeConfig {
+    /// Encoder-agnostic options. JPEG output is always 8-bit; with
+    /// `BitDepth::Sixteen`, 16-bit samples are fed to jpegli at full precision.
+    pub common: CommonEncodeOptions,
+    /// Butteraugli distance: `0.0` is visually lossless; higher values produce
+    /// smaller files (monotonic). Used when `quality` is `None`.
+    pub distance: f32,
+    /// Optional `1..=100` quality; when `Some`, overrides `distance`.
+    pub quality: Option<u8>,
+    /// Emit a progressive JPEG.
+    pub progressive: bool,
+    /// Encode in the XYB color space (jpegli high-fidelity mode). When set,
+    /// jpegli chooses its own chroma sampling and `subsampling` is ignored.
+    pub xyb: bool,
+    /// Chroma subsampling mode (non-XYB mode only).
+    pub subsampling: JpegSubsampling,
+}
+
+impl Default for JpegliEncodeConfig {
+    fn default() -> Self {
+        Self {
+            common: CommonEncodeOptions::default(),
+            distance: 1.0,
+            quality: None,
+            progressive: true,
+            xyb: false,
+            subsampling: JpegSubsampling::Yuv420,
+        }
+    }
+}
+
 // ── Planned backend configs (API surface only — implementations pending) ──────
 //
 // These structs are defined now so the encode API is feature-complete and
@@ -418,38 +458,6 @@ impl Default for MozjpegEncodeConfig {
             quality: 85,
             progressive: true,
             trellis: true,
-            subsampling: JpegSubsampling::Yuv420,
-        }
-    }
-}
-
-/// Configuration for the planned **jpegli** JPEG encoder.
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct JpegliEncodeConfig {
-    /// Encoder-agnostic options. JPEG output is always 8-bit.
-    pub common: CommonEncodeOptions,
-    /// Butteraugli distance: `0.0` is visually lossless; higher values produce
-    /// smaller files (monotonic). Used when `quality` is `None`.
-    pub distance: f32,
-    /// Optional `1..=100` quality; when `Some`, overrides `distance`.
-    pub quality: Option<u8>,
-    /// Emit a progressive JPEG.
-    pub progressive: bool,
-    /// Encode in the XYB color space (jpegli high-fidelity mode).
-    pub xyb: bool,
-    /// Chroma subsampling mode.
-    pub subsampling: JpegSubsampling,
-}
-
-impl Default for JpegliEncodeConfig {
-    fn default() -> Self {
-        Self {
-            common: CommonEncodeOptions::default(),
-            distance: 1.0,
-            quality: None,
-            progressive: true,
-            xyb: false,
             subsampling: JpegSubsampling::Yuv420,
         }
     }
@@ -527,6 +535,9 @@ pub enum EncodeOptions {
     /// JPEG via the pure-Rust `jpeg-encoder` (requires `jpeg-encode`).
     #[cfg(feature = "jpeg-encode")]
     JpegJpegEnc(JpegEncEncodeConfig),
+    /// JPEG via `jpegli`, libjxl's perceptual encoder (requires `jpeg-encode-jpegli`).
+    #[cfg(feature = "jpeg-encode-jpegli")]
+    JpegJpegli(JpegliEncodeConfig),
     /// WebP via `libwebp` (requires `webp-encode`).
     #[cfg(feature = "webp-encode")]
     WebpLibwebp(LibwebpEncodeConfig),
@@ -562,6 +573,12 @@ impl EncodeOptions {
     #[cfg(feature = "jpeg-encode")]
     pub fn jpeg() -> Self {
         Self::JpegJpegEnc(JpegEncEncodeConfig::default())
+    }
+
+    /// JPEG via the jpegli encoder, with default configuration.
+    #[cfg(feature = "jpeg-encode-jpegli")]
+    pub fn jpeg_jpegli() -> Self {
+        Self::JpegJpegli(JpegliEncodeConfig::default())
     }
 
     /// Lossy WebP with default configuration.
@@ -607,6 +624,8 @@ impl EncodeOptions {
             EncodeOptions::PngZune(_) => OutputFormat::Png,
             #[cfg(feature = "jpeg-encode")]
             EncodeOptions::JpegJpegEnc(_) => OutputFormat::Jpeg,
+            #[cfg(feature = "jpeg-encode-jpegli")]
+            EncodeOptions::JpegJpegli(_) => OutputFormat::Jpeg,
             #[cfg(feature = "webp-encode")]
             EncodeOptions::WebpLibwebp(_) => OutputFormat::WebP,
             #[cfg(feature = "avif-encode")]
@@ -631,6 +650,8 @@ impl EncodeOptions {
             EncodeOptions::PngZune(_) => CodecId::new("png/zune"),
             #[cfg(feature = "jpeg-encode")]
             EncodeOptions::JpegJpegEnc(_) => CodecId::new("jpeg/jpeg-encoder"),
+            #[cfg(feature = "jpeg-encode-jpegli")]
+            EncodeOptions::JpegJpegli(_) => CodecId::new("jpeg/jpegli"),
             #[cfg(feature = "webp-encode")]
             EncodeOptions::WebpLibwebp(_) => CodecId::new("webp/libwebp"),
             #[cfg(feature = "avif-encode")]
@@ -656,6 +677,8 @@ impl EncodeOptions {
             EncodeOptions::PngZune(c) => c.common,
             #[cfg(feature = "jpeg-encode")]
             EncodeOptions::JpegJpegEnc(c) => c.common,
+            #[cfg(feature = "jpeg-encode-jpegli")]
+            EncodeOptions::JpegJpegli(c) => c.common,
             #[cfg(feature = "webp-encode")]
             EncodeOptions::WebpLibwebp(c) => c.common,
             #[cfg(feature = "avif-encode")]

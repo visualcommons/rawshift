@@ -13,9 +13,10 @@ categories = ["multimedia::images", "encoding", "parser-implementations"]
 readme = "README.md"
 
 [package.metadata.docs.rs]
-# `heic-vendored` and the `jxl-encode-libjxl*` features are intentionally
-# excluded: each builds a C/C++ library from source (or links a system one) and
-# is an alternative linking mode, not an additive feature.
+# `heic-vendored`, the `jxl-encode-libjxl*` and the `jpeg-encode-jpegli*`
+# features are intentionally excluded: each builds a C/C++ library from source
+# (or links a system one) and is an alternative linking mode, not an additive
+# feature.
 features = ["full"]
 rustdoc-args = ["--cfg", "docsrs"]
 
@@ -44,13 +45,17 @@ gif            = { version = "0.13",   optional = true }
 tiff           = { version = "0.11",   optional = true }
 
 [build-dependencies]
-# Compiled only when a `jxl-encode-libjxl*` feature is enabled (see [features]).
-# All permissive (no GPL): bindgen (BSD-3) generates the libjxl C-API bindings;
-# pkg-config resolves a system libjxl; jpegxl-src (BSD-3) builds libjxl from
-# source via cmake for the vendored feature.
+# Compiled only when a `jxl-encode-libjxl*` or `jpeg-encode-jpegli*` feature is
+# enabled (see [features]). All permissive (no GPL): bindgen (BSD-3) generates
+# the C-API bindings; pkg-config resolves a system libjxl/libjpegli; jpegxl-src
+# (BSD-3) builds libjxl from source via cmake for the vendored libjxl feature;
+# cc (MIT/Apache) compiles the jpegli setjmp shim; cmake (MIT/Apache) builds the
+# vendored google/jpegli submodule.
 bindgen    = { version = "0.72",   optional = true }
 pkg-config = { version = "0.3",    optional = true }
 jpegxl-src = { version = "0.11.4", optional = true }
+cc         = { version = "1",      optional = true }
+cmake      = { version = "0.1",    optional = true }
 
 [dev-dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -140,6 +145,12 @@ raf-decode  = []
 # primitives, so each zune-backed impl feature also pulls `zune-runtime`.
 jpeg-decode-zune     = ["jpeg-decode", "dep:zune-jpeg", "zune-runtime", "exif"]
 jpeg-encode-jpeg-enc = ["jpeg-encode", "dep:jpeg-encoder", "exif", "container-embed"]
+# Alternative JPEG encoder via jpegli (libjxl's perceptual JPEG encoder):
+# distance-based rate control, XYB mode, and 16-bit input fed at full precision.
+# Enabling it keeps `jpeg-encode-jpeg-enc` compiled in too (tier-3 aliases the
+# default impl); the active backend is chosen via `EncodeOptions`. Links a system
+# libjpegli by default — see `jpeg-encode-jpegli-vendored`.
+jpeg-encode-jpegli   = ["jpeg-encode", "exif", "container-embed", "dep:bindgen", "dep:cc", "dep:pkg-config"]
 png-decode-zune      = ["png-decode", "dep:zune-png", "zune-runtime", "exif"]
 png-encode-zune      = ["png-encode", "dep:zune-png", "zune-runtime", "exif", "container-embed"]
 webp-decode-libwebp  = ["webp-decode", "dep:libwebp-sys", "exif"]
@@ -181,6 +192,12 @@ heic-vendored = ["heic-decode", "libheif-rs/embedded-libheif"]
 # and links it statically (needs a C/C++ toolchain + cmake). Distro libjxl is
 # usually too old for the 0.11.x ABI, so the vendored mode is the reliable path.
 jxl-encode-libjxl-vendored = ["jxl-encode-libjxl", "dep:jpegxl-src"]
+# jpegli linking mode. `jpeg-encode-jpegli` links a system libjpegli (resolved by
+# pkg-config — rarely packaged on distros yet); `jpeg-encode-jpegli-vendored`
+# builds the vendored `google/jpegli` submodule from source via cmake and links
+# it (+ Highway) statically (needs a C/C++ toolchain + cmake). The vendored mode
+# is the normal, tested path.
+jpeg-encode-jpegli-vendored = ["jpeg-encode-jpegli", "dep:cmake"]
 
 [[bench]]
 name = "decode"

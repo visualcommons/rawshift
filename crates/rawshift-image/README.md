@@ -21,7 +21,7 @@ the `tiff-parser` API, or `heic-vendored` linking.
 | Adobe DNG    | Custom TIFF + jxl-oxide (Stabilizing)                                                    | Custom TIFF writer (Stabilizing)                                                                 | Includes Apple ProRAW (DNG 1.7 + JXL).    |
 | Nikon NEF    | Custom TIFF parser (Incomplete)                                                          | N/A                                                                                              | No test fixtures.                         |
 | Fujifilm RAF | Custom RAF parser (Incomplete)                                                           | N/A                                                                                              | No test fixtures.                         |
-| JPEG         | [zune-jpeg](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg) (Stable) | [jpeg-encoder](https://github.com/vstroebel/jpeg-encoder) (Stable)                               |                                           |
+| JPEG         | [zune-jpeg](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg) (Stable) | [jpeg-encoder](https://github.com/vstroebel/jpeg-encoder) (Stable, default) · [jpegli](https://github.com/google/jpegli) (distance/XYB + 16-bit input, opt-in) | jpegli via `jpeg-encode-jpegli` (system) / `jpeg-encode-jpegli-vendored` (from source). |
 | PNG          | [zune-png](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-png) (Stable)   | [zune-png](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-png) (Stable)           |                                           |
 | WebP         | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                              | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                                      | C FFI bindings to libwebp.                |
 | GIF          | [gif](https://github.com/image-rs/image-gif) (Stable)                                    | Not planned                                                                                      |                                           |
@@ -74,7 +74,7 @@ crate.
    only tier that pulls an external crate. Multiple implementations of the same
    format+direction may be enabled simultaneously; the active backend is chosen
    at the API level via `DecodeOptions` / `EncodeOptions`.
-   - `jpeg-decode-zune`, `jpeg-encode-jpeg-enc`
+   - `jpeg-decode-zune`, `jpeg-encode-jpeg-enc`, `jpeg-encode-jpegli`
    - `png-decode-zune`, `png-encode-zune`
    - `webp-decode-libwebp`, `webp-encode-libwebp`
    - `jxl-decode-jxl-oxide`, `jxl-encode-zune`, `jxl-encode-libjxl`
@@ -94,6 +94,11 @@ crate.
    - `jxl-encode-libjxl-vendored` — build libjxl from source via cmake and link
      it statically, instead of linking the system libjxl (`jxl-encode-libjxl`).
      Requires a C/C++ toolchain, cmake, and `libclang` (for bindgen).
+   - `jpeg-encode-jpegli-vendored` — build the vendored `google/jpegli` submodule
+     from source via cmake and link it statically, instead of linking a system
+     libjpegli (`jpeg-encode-jpegli`). Requires a C/C++ toolchain, cmake, and
+     `libclang`; init the submodule with
+     `git submodule update --init --recursive crates/rawshift-image/third_party/jpegli`.
 
    The `zune-runtime` / `exif` / `container-embed` features are pulled in
    automatically by the format implementations that need them — they exist so
