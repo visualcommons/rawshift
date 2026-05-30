@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.90.0"
 license = "MPL-2.0"
@@ -23,9 +23,9 @@ rayon     = "1.11.0"
 serde     = { version = "1.0", features = ["derive"] }
 # Internal crates — referenced by path within the workspace, version pinned for
 # eventual publishing (publish order: core → image/video → rawshift).
-rawshift-core  = { path = "crates/rawshift-core", version = "0.1.1" }
-rawshift-image = { path = "crates/rawshift-image", version = "0.1.1" }
-rawshift-video = { path = "crates/rawshift-video", version = "0.1.1" }
+rawshift-core  = { path = "crates/rawshift-core", version = "0.1.2" }
+rawshift-image = { path = "crates/rawshift-image", version = "0.1.2" }
+rawshift-video = { path = "crates/rawshift-video", version = "0.1.2" }
 
 # Profiles must live at the workspace root — Cargo ignores profiles declared in
 # member manifests.

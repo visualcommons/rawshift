@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/justin13888/rawshift/compare/v0.1.0...v0.1.2) - 2026-05-30
+
+### Added
+
+- *(image)* add jpegli as an optional JPEG encoder backend
+
+### Other
+
+- move format and feature docs to per-crate READMEs
+
 ## [0.1.1](https://github.com/justin13888/rawshift/compare/v0.1.0...v0.1.1) - 2026-05-29
 
 ### Added
