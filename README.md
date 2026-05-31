@@ -1,5 +1,7 @@
 # rawshift
 
+> Project status: Alpha as of May 31, 2026. APIs are actively being stabilized.
+
 Raw image processing library focused on compatibility, correctness, and interoperability.
 
 ## Why rawshift?
@@ -9,6 +11,16 @@ Image processing is messy and no single library could do it all (e.g., accurate 
 - Compatibility: A single library processes all forms of image formats including all popular compressed and RAW image formats used by both consumers and creative professionals.
 - Correctness: While decoding implementations should remain flexible (e.g. to slightly non-conformant image), it should strictly conform to open standards and retain maximum metadata across formats.
 - Interoperability: This library compiles and is optimized for several standard desktop and mobile platforms. This is possible because the majority of the library is written in pure Rust and non-Rust dependencies are encapsulated with best practices.
+
+## Scope
+
+rawshift is both a wrapper for image and video encoding/decoding needs, as well as implementations for various (often proprietary) RAW formats validated against specific camera bodies.
+
+A number of formats (e.g. HEIF, AV1) still depend on C/C++ libraries that are much more mature and battle-tested. The goal is to eventually support portable Rust equivalents that have the same features and performance characteristics of the benchmark implementations.
+
+While performance remains a core pillar in development, the primary priority remains to be feature-parity and output quality.
+
+<!-- TODO: Add in-repo benchmark comparing our current outputs to other libraries -->
 
 ## Getting Started
 
