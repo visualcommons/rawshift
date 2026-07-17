@@ -120,7 +120,7 @@ them here would duplicate state that drifts. See each crate's README:
 
 ## MSRV
 
-The minimum supported Rust version (MSRV) is **1.90.0**. This may be bumped as new language features stabilize.
+The minimum supported Rust version (MSRV) tracks the minimum required by our upstream dependencies (currently **1.92.0**, set by [gamut](https://github.com/justin13888/gamut)) and will remain as low as the upstream dependencies require — it is never raised independently.
 
 ## Development
 
