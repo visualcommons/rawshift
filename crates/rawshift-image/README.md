@@ -8,7 +8,7 @@ consumers should depend on the [`rawshift`](https://crates.io/crates/rawshift)
 facade (which re-exports this crate behind a coarse `image` feature) rather than
 depending on `rawshift-image` directly. Depend on this crate directly only when
 you need fine-grained control — individual formats, alternative codec backends,
-the `tiff-parser` API, or `heic-vendored` linking.
+or an explicit hardware-decode backend pin (`hw-*`).
 
 ## Format Support
 
@@ -28,7 +28,7 @@ the `tiff-parser` API, or `heic-vendored` linking.
 | TIFF         | [tiff](https://github.com/image-rs/image-tiff) (Stable)                                  | Not planned                                                                                      |                                           |
 | JXL          | [gamut-jxl](https://github.com/justin13888/gamut) (Stable)                               | [gamut-jxl](https://github.com/justin13888/gamut) (Stable)                                       | Decode is pure Rust (jxl-rs); encode wraps the reference libjxl, cmake-built and statically linked by gamut-jxl-sys. |
 | AVIF         | [image/avif-native](https://github.com/image-rs/image) (Functional)                      | [gamut-avif](https://github.com/justin13888/gamut) (Functional)                                  | Encode via gamut (pure Rust; 8-bit RGB, lossless/lossy AV1 intra, 4:4:4). 10/12-bit encode temporarily unavailable, pending [gamut#251](https://github.com/justin13888/gamut/issues/251). |
-| HEIC         | [libheif](https://github.com/strukturag/libheif) (Functional)                            | Not planned                                                                                      | Requires `heic` feature; `heic-vendored` builds libheif from source. |
+| HEIC         | [gamut-heic](https://github.com/justin13888/gamut) container/pipeline + [rawshift-hwdec](../rawshift-hwdec) hardware HEVC (Functional) | Not planned                                                                                      | Requires `heic` feature. Container, metadata, and auxiliary enumeration always work; pixel decode needs a hardware HEVC backend (`hw`/`hw-*`) and reports `HwDecoderUnavailable` without one. |
 | SVG          | [resvg/tiny-skia](https://github.com/linebender/resvg) (Functional)                      | Not planned                                                                                      |                                           |
 | PPM          | [zune-ppm](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-ppm) (Functional) | Not planned                                                                                    | Netpbm family: P5, P6, P7, PFM.           |
 
@@ -51,7 +51,7 @@ external crate.
 
 1. **Bundle features** — coarse, ready-made groupings.
    - `default` — `jpeg`, `png`, `webp`, `jxl-decode`, `gif-decode`, `tiff-decode`, `ppm-decode`.
-   - `full` — every format, `serde`, and all RAW formats.
+   - `full` — every format, `serde`, all RAW formats, and `hw`.
    - `experimental` — all RAW formats (`raw-stabilizing` + `raw-incomplete`).
    - `raw-stabilizing` — RAW formats with test fixtures and working decode (ARW, DNG).
    - `raw-incomplete` — RAW formats still missing fixtures or pixel decode (CR2, CR3, CRW, NEF, RAF).
@@ -67,9 +67,10 @@ external crate.
      `ppm-decode` — each is an **alias for that format+direction's default
      implementation**.
      This is where the per-format default is defined. Exception: `png-encode`,
-     `jxl-decode`, `jxl-encode`, and `avif-encode` each have a single
-     gamut-backed implementation (`gamut-png` / `gamut-jxl` / `gamut-avif`) and
-     pull it directly, with no tier-4 layer below them. (`jxl-encode` wraps the
+     `jxl-decode`, `jxl-encode`, `avif-encode`, and `heic-decode` each have a
+     single gamut-backed implementation (`gamut-png` / `gamut-jxl` /
+     `gamut-avif` / `gamut-heic`) and pull it directly, with no tier-4 layer
+     below them. (`jxl-encode` wraps the
      reference libjxl, which `gamut-jxl-sys` cmake-builds and links statically
      — it needs cmake and a C++ toolchain. `avif-encode` is pure Rust: 8-bit
      RGB, lossless or lossy AV1 intra; 10/12-bit AVIF encode is temporarily
@@ -88,7 +89,7 @@ external crate.
    - `webp-decode-libwebp`, `webp-encode-libwebp`
    - `gif-decode-gif`, `tiff-decode-tiff`
    - `avif-decode-image`
-   - `heic-decode-libheif`, `svg-decode-resvg`
+   - `svg-decode-resvg`
    - `ppm-decode-zune`
 5. **Infrastructure / linking features** — cross-cutting, not tied to one format.
    - `tiff-parser` — internal TIFF structure parser plus the public `TiffParser` API.
@@ -98,8 +99,15 @@ external crate.
      `gamut-metadata`, `gamut-xmp`); pulled by impls that touch EXIF.
    - `container-embed` — container segment muxing (`img-parts`) plus XMP packet
      validation (`gamut-xmp`); pulled by encode impls that embed EXIF/ICC/XMP.
-   - `heic-vendored` — build libheif from source and link it statically, instead
-     of linking the system libheif (`heic`). Requires a C/C++ toolchain + cmake.
+   - `hw` — hardware still-frame decode via `rawshift-hwdec`, selecting the
+     **native** backend for the compile target (VideoToolbox on Apple, VAAPI on
+     linux-gnu, MediaCodec on Android — the permanent matrix in
+     `docs/SUPPORT.md`). Valid everywhere; targets with no hardware decode API
+     get a build warning and the no-backend stub.
+   - `hw-videotoolbox` / `hw-vaapi` / `hw-mediacodec` — pin one explicit
+     backend; **`compile_error!` on any other target** (verified feature
+     flags). Without any `hw` flag, `heic` is a valid container/metadata-only
+     build whose pixel decode returns `RawError::HwDecoderUnavailable`.
    - `jpeg-encode-jpegli-vendored` — build the vendored `google/jpegli` submodule
      from source via cmake and link it statically, instead of linking a system
      libjpegli (`jpeg-encode-jpegli`). Requires a C/C++ toolchain, cmake, and

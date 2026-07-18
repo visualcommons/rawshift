@@ -13,11 +13,11 @@ categories = ["multimedia::images", "encoding", "parser-implementations"]
 readme = "README.md"
 
 [package.metadata.docs.rs]
-# `heic-vendored` and the `jpeg-encode-jpegli*` features are intentionally
-# excluded: each builds a C/C++ library from source (or links a system one)
-# and is an alternative linking mode, not an additive feature. (`jxl-encode`
-# builds libjxl too — via gamut-jxl-sys — but docs.rs builds it fine because
-# the build is hermetic under OUT_DIR; it is part of `full`.)
+# The `jpeg-encode-jpegli*` features are intentionally excluded: each builds a
+# C/C++ library from source (or links a system one) and is an alternative
+# linking mode, not an additive feature. (`jxl-encode` builds libjxl too — via
+# gamut-jxl-sys — but docs.rs builds it fine because the build is hermetic
+# under OUT_DIR; it is part of `full`.)
 features = ["full"]
 rustdoc-args = ["--cfg", "docsrs"]
 
@@ -51,12 +51,27 @@ gamut-png      = { workspace = true, optional = true }
 # the `image` crate until #33.
 gamut-avif     = { workspace = true, optional = true }
 gamut-xmp      = { workspace = true, optional = true }
+# gamut-heic backs HEIC decode: container parsing, item/metadata/auxiliary
+# enumeration, grid/iden/iovl derivation, colour conversion, and the
+# clap/irot/imir transforms. The HEVC codestream itself is decoded through the
+# pluggable HevcDecoder seam, which rawshift plugs with a rawshift-hwdec
+# hardware decoder (the `hw` feature). Container and metadata paths work with
+# no hardware backend at all.
+gamut-heic     = { workspace = true, optional = true }
+# gamut-isobmff surfaces in gamut-heic's public API (`HeifItem::colour()`
+# returns its `ColourInformation`), so the HEIC ICC-extraction path needs the
+# crate directly. Same pinned gamut revision as everything else.
+gamut-isobmff  = { workspace = true, optional = true }
+# rawshift-hwdec provides hardware HEVC/AV1 still-frame decode. Optional and
+# pulled only by the `hw`/`hw-*` features: a `heic`-only build is a valid
+# container/metadata-only configuration whose pixel decode reports
+# `RawError::HwDecoderUnavailable`.
+rawshift-hwdec = { workspace = true, optional = true }
 # gamut-jxl backs JPEG XL decode (a pure-Rust jxl-rs wrapper — no C toolchain)
 # and encode (the reference libjxl, vendored, cmake-built, and statically
 # linked by gamut-jxl-sys; needs cmake + a C++ toolchain). Which half is
 # compiled is selected by the `jxl-decode` / `jxl-encode` features.
 gamut-jxl      = { workspace = true, optional = true }
-libheif-rs     = { version = "2.7",    optional = true }
 libwebp-sys    = { version = "0.14",   optional = true }
 img-parts      = { version = "0.4",    optional = true }
 jpeg-encoder   = { version = "0.7",    optional = true }
@@ -94,6 +109,12 @@ gamut-ifd = { workspace = true, features = ["bigtiff"] }
 # export_format_tests reads back the ICC profile gamut-jxl embeds in the JXL
 # codestream (`JxlDecoder::embedded_icc_profile`) — a box-scan cannot see it.
 gamut-jxl = { workspace = true, features = ["decode"] }
+# heic tests construct synthetic HEIF containers (gamut-isobmff `write`) so the
+# backend-less enumeration/metadata/decode-pipeline paths always run, with or
+# without an on-disk fixture; gamut-color's ycbcr module supplies the expected
+# values for the YCbCr→RGB conversion assertions.
+gamut-isobmff = { workspace = true }
+gamut-color = { workspace = true }
 serde = { workspace = true }
 serde_json = "1.0"
 tokio = { version = "1.50", features = ["full"] }
@@ -117,7 +138,7 @@ default = ["jpeg", "png", "webp", "jxl-decode", "gif-decode", "tiff-decode", "pp
 
 # ── Tier 1: bundle features ───────────────────────────────────────────────────
 full = ["jpeg", "png", "webp", "jxl", "gif", "tiff", "avif", "heic", "svg", "ppm",
-        "serde", "experimental"]
+        "serde", "experimental", "hw"]
 experimental    = ["raw-stabilizing", "raw-incomplete"]
 raw-stabilizing = ["arw", "dng"]      # RAW formats with fixtures + working decode
 raw-incomplete  = ["cr2", "cr3", "crw", "nef", "raf"]  # missing fixtures/decode
@@ -175,7 +196,12 @@ avif-decode = ["avif-decode-image"]
 # `exif` supplies the ExifBuilder and `container-embed` the XMP validation
 # used when splicing EXIF/ICC/XMP items into the encoded container.
 avif-encode = ["dep:gamut-avif", "exif", "container-embed"]
-heic-decode = ["heic-decode-libheif"]
+# HEIC decode is backed directly by gamut-heic (no tier-4 layer): container
+# parsing, metadata, and auxiliary-image enumeration always work; pixel decode
+# additionally needs a hardware HEVC decoder (`hw`/`hw-*`, see below) and
+# reports `RawError::HwDecoderUnavailable` without one. `exif` supplies the
+# parser for the container's Exif item.
+heic-decode = ["dep:gamut-heic", "dep:gamut-isobmff", "exif"]
 svg-decode  = ["svg-decode-resvg"]
 ppm-decode  = ["ppm-decode-zune"]
 arw-decode  = ["ifd-parser"]
@@ -214,7 +240,6 @@ webp-encode-libwebp  = ["webp-encode", "dep:libwebp-sys", "exif", "container-emb
 gif-decode-gif       = ["gif-decode", "dep:gif"]
 tiff-decode-tiff     = ["tiff-decode", "dep:tiff", "exif"]
 avif-decode-image    = ["avif-decode", "dep:image", "exif"]
-heic-decode-libheif  = ["heic-decode", "dep:libheif-rs", "exif"]
 svg-decode-resvg     = ["svg-decode", "dep:resvg"]
 ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
 
@@ -235,10 +260,19 @@ exif          = ["dep:gamut-exif", "dep:gamut-metadata", "dep:gamut-xmp"]
 # plus `gamut-xmp` for validating XMP packets before they are embedded.
 # Pulled by encode impl features that embed EXIF/ICC/XMP metadata.
 container-embed = ["dep:img-parts", "dep:gamut-xmp"]
-# HEIC/HEIF linking mode. `heic` links the system libheif (resolved by
-# pkg-config); `heic-vendored` builds libheif from source via cmake and links
-# it statically (needs a C/C++ toolchain + cmake). Enable exactly one.
-heic-vendored = ["heic-decode", "libheif-rs/embedded-libheif"]
+# Hardware still-frame decode (HEVC for HEIC; AV1 for AVIF once gamut-avif
+# exposes the container handoff). These are **verified** feature flags — see
+# docs/SUPPORT.md for the permanent target/API matrix:
+#   `hw`   — portable; selects the native backend for the compile target
+#            (build-script warning + no-backend stub on targets with no
+#            hardware decode API).
+#   `hw-*` — pin one explicit backend; `compile_error!` on any other target.
+# Without any of them, `heic` is a valid container/metadata-only build whose
+# pixel decode returns `RawError::HwDecoderUnavailable`.
+hw              = ["dep:rawshift-hwdec", "rawshift-hwdec/hw"]
+hw-videotoolbox = ["hw", "rawshift-hwdec/videotoolbox"]
+hw-vaapi        = ["hw", "rawshift-hwdec/vaapi"]
+hw-mediacodec   = ["hw", "rawshift-hwdec/mediacodec"]
 # jpegli linking mode. `jpeg-encode-jpegli` links a system libjpegli (resolved by
 # pkg-config — rarely packaged on distros yet); `jpeg-encode-jpegli-vendored`
 # builds the vendored `google/jpegli` submodule from source via cmake and links

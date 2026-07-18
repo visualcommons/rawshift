@@ -24,7 +24,9 @@
 //! - GIF, JPEG, PNG, WebP, JPEG XL, TIFF
 //! - SVG (requires `svg` feature)
 //! - AVIF decode + encode (requires `avif` feature)
-//! - HEIC decode (requires `heic` feature; via libheif)
+//! - HEIC decode (requires `heic` feature; gamut-heic container/pipeline —
+//!   metadata and auxiliary enumeration always work; pixel decode needs a
+//!   hardware HEVC decoder via `hw`, else `RawError::HwDecoderUnavailable`)
 //! - APV (detection only; no Rust decoder exists yet)
 //!
 //! ## Quick Start
@@ -72,7 +74,9 @@
 //!    `format-direction-impl` (e.g. `jpeg-decode-zune`). Multiple may be enabled
 //!    at once; the active backend is chosen via [`formats::DecodeOptions`] and
 //!    [`formats::export::EncodeOptions`].
-//! 5. **Infrastructure** — `ifd-parser`, `serde`, `heic-vendored`.
+//! 5. **Infrastructure** — `ifd-parser`, `serde`, and the verified hardware
+//!    decode flags `hw` / `hw-videotoolbox` / `hw-vaapi` / `hw-mediacodec`
+//!    (see `docs/SUPPORT.md`).
 //!
 //! See the "Feature Flags" section of the README for the full hierarchy.
 

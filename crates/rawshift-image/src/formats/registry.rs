@@ -128,10 +128,16 @@ pub fn available_decoders() -> Vec<CodecInfo> {
         "0.25",
         CodecDirection::Decode,
     ));
+    // Version tracks the gamut-heic crate at the pinned gamut commit (git
+    // dependency). Hand-maintained — bump together with the gamut pin. The
+    // entry reports the container/pipeline decoder, which is always compiled
+    // with `heic-decode`; whether the HEVC codestream can actually be decoded
+    // on this machine is runtime-conditional — probe it with
+    // `formats::heic_hw_decode_available()`.
     #[cfg(feature = "heic-decode")]
     decoders.push(CodecInfo::new(
-        CodecId::new("heic/libheif"),
-        "2.7",
+        CodecId::new("heic/gamut"),
+        "0.2",
         CodecDirection::Decode,
     ));
     #[cfg(feature = "svg-decode")]

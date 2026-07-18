@@ -12,9 +12,8 @@
 #
 #   rawshift-core -> rawshift-hwdec -> rawshift-image -> rawshift
 #
-# `rawshift-hwdec` does not exist yet; it is created by the hardware-decode
-# issue and gets its `[[package]]` entry then. `rawshift-video` is parked and
-# unpublished for v1 (`publish = false`) and so is absent from this order.
+# `rawshift-video` is parked and unpublished for v1 (`publish = false`) and so
+# is absent from this order.
 
 [workspace]
 # One GitHub release for the whole project, created by the `rawshift` facade
@@ -25,7 +24,7 @@ git_release_enable = false
 name = "rawshift"
 # The facade owns the single project-wide changelog and release artifacts.
 changelog_path = "./CHANGELOG.md"
-changelog_include = ["rawshift-core", "rawshift-image"]
+changelog_include = ["rawshift-core", "rawshift-hwdec", "rawshift-image"]
 git_release_enable = true
 git_tag_name = "v{{ version }}"      # e.g. v0.1.0 (not rawshift-v0.1.0)
 git_release_name = "v{{ version }}"
@@ -34,6 +33,11 @@ git_release_name = "v{{ version }}"
 name = "rawshift-core"
 changelog_update = false             # entries roll up into the root CHANGELOG.md
 git_tag_enable = false               # only the facade creates the project tag
+
+[[package]]
+name = "rawshift-hwdec"
+changelog_update = false
+git_tag_enable = false
 
 [[package]]
 name = "rawshift-image"

@@ -20,12 +20,13 @@
 //!
 //! ## Feature flags
 //!
-//! This facade exposes only `image`, `serde`, and `full`. It does
+//! This facade exposes only `image`, `serde`, the hardware-decode flags
+//! (`hw`, `hw-videotoolbox`, `hw-vaapi`, `hw-mediacodec`), and `full`. It does
 //! **not** surface per-format flags — Cargo cannot auto-forward a child crate's
 //! features, so re-listing them here would be duplicated, rot-prone state. For
-//! fine-grained control (individual formats, alternative codec backends, the
-//! `tiff-parser` API, `heic-vendored` linking) depend on [`rawshift-image`]
-//! directly; its own five-tier feature system is documented on that crate.
+//! fine-grained control (individual formats, alternative codec backends)
+//! depend on [`rawshift-image`] directly; its own five-tier feature system is
+//! documented on that crate.
 //!
 //! ```no_run,ignore
 //! // Default `image` feature is enough for standard-format decoding.

@@ -56,6 +56,23 @@ pub enum RawError {
         #[source]
         source: gamut_core::Error,
     },
+
+    /// Pixel decode was requested for a hardware-decoded codec (HEVC/HEIC,
+    /// AV1/AVIF) but no hardware decoder is available — none compiled in
+    /// (build without `hw`/`hw-*`), the target has no hardware decode API
+    /// (see `docs/SUPPORT.md`), or the runtime probe failed.
+    ///
+    /// Container parsing, metadata, and auxiliary-image enumeration always
+    /// work regardless; only pixel decode fails with this error. Probe
+    /// availability up front with `formats::heic_hw_decode_available()`
+    /// (requires the `heic` feature).
+    #[error("no hardware decoder available for {codec}: {reason}")]
+    HwDecoderUnavailable {
+        /// The codec that needed a hardware decoder (e.g. `"HEVC"`).
+        codec: &'static str,
+        /// Why no decoder is available.
+        reason: String,
+    },
 }
 
 impl RawError {

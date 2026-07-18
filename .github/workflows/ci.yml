@@ -68,12 +68,13 @@ jobs:
           toolchain: "1.92.0"
       - uses: Swatinem/rust-cache@v2
       # `rawshift-image/full` enables `avif` (decode links system dav1d via the
-      # `image` crate; encode is pure-Rust gamut-avif) and `heic`.
-      # Ubuntu 24.04's libheif-dev is 1.17.x, but libheif-sys requires >= 1.21,
-      # so we add `heic-vendored` to build libheif 1.21.2 from source instead.
-      # `jxl-encode` builds libjxl hermetically through gamut-jxl-sys (cmake +
-      # clang for its bindings). `jpeg-encode-jpegli-vendored` builds the
-      # vendored google/jpegli submodule the same way (cmake + clang).
+      # `image` crate; encode is pure-Rust gamut-avif), `heic` (pure-Rust
+      # gamut-heic container/pipeline — no system library; pixel decode goes
+      # through rawshift-hwdec, which `full`'s `hw` flag compiles as the
+      # no-backend stub until the platform backends land), `jxl-encode`
+      # (builds libjxl hermetically through gamut-jxl-sys — cmake + clang for
+      # its bindings), and `jpeg-encode-jpegli-vendored` builds the vendored
+      # google/jpegli submodule the same way (cmake + clang).
       - name: Check out jpegli build submodules
         # Init the vendored google/jpegli submodule and only its build-time
         # dependencies — the 111 MB `testdata` and `googletest` submodules are for
@@ -93,7 +94,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - name: Generate standard format fixtures
         run: cargo run -p rawshift-image --example generate_test_fixtures
-      - run: cargo test --workspace --features rawshift-image/full,rawshift-image/heic-vendored,rawshift-image/jpeg-encode-jpegli-vendored
+      - run: cargo test --workspace --features rawshift-image/full,rawshift-image/jpeg-encode-jpegli-vendored
 
   image-only:
     name: Build (image only)

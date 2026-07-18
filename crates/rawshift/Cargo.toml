@@ -13,8 +13,6 @@ categories = ["multimedia::images", "encoding", "parser-implementations"]
 readme = "../../README.md"
 
 [package.metadata.docs.rs]
-# `heic-vendored` is intentionally excluded: it builds libheif from source and
-# is an alternative linking mode to `heic`, not an additive feature.
 features = ["full"]
 rustdoc-args = ["--cfg", "docsrs"]
 
@@ -35,6 +33,15 @@ default = ["image"]
 image = ["dep:rawshift-image"]
 # Serde derives for metadata/option types (no-op unless `image` is also on).
 serde = ["rawshift-image?/serde"]
-# Everything: every image format and serde. v1 is image-only — there is no
-# `video` feature until `rawshift-video` has an implementation.
+# Hardware still-frame decode (HEVC for HEIC, AV1 for AVIF) via rawshift-hwdec.
+# `hw` selects the native backend for the compile target; the `hw-*` flags pin
+# one explicit backend and fail the compile on any other target. All are
+# no-ops unless `image` is also on. See docs/SUPPORT.md for the permanent
+# target/API matrix.
+hw              = ["rawshift-image?/hw"]
+hw-videotoolbox = ["rawshift-image?/hw-videotoolbox"]
+hw-vaapi        = ["rawshift-image?/hw-vaapi"]
+hw-mediacodec   = ["rawshift-image?/hw-mediacodec"]
+# Everything: every image format, serde, and hardware decode. v1 is image-only
+# — there is no `video` feature until `rawshift-video` has an implementation.
 full = ["image", "rawshift-image/full", "serde"]

@@ -81,19 +81,23 @@ rawshift is a Cargo workspace:
 
 ### Facade — `rawshift`
 
-The `rawshift` facade deliberately exposes only three coarse features:
+The `rawshift` facade deliberately exposes only coarse features:
 
 - `image` *(default)* — still-image support (`rawshift-image` with its own default formats).
 - `serde` — `Serialize`/`Deserialize` for metadata and option types.
-- `full` — every image format and `serde`.
+- `hw`, `hw-videotoolbox`, `hw-vaapi`, `hw-mediacodec` — hardware still-frame
+  decode (HEVC for HEIC, AV1 for AVIF) via `rawshift-hwdec`; `hw` picks the
+  native backend for the compile target, the `hw-*` flags pin one explicitly
+  and fail the compile elsewhere (see [docs/SUPPORT.md](./docs/SUPPORT.md)).
+- `full` — every image format, `serde`, and `hw`.
 
 There is no `video` feature: video is parked for v1 (see [Video](#video)).
 
 The facade does **not** re-export per-format flags. Cargo cannot forward a child
 crate's features, so re-listing them would be duplicated, rot-prone state — and
 a build that wants only video should never have to reason about image flags. For
-fine-grained control (individual formats, alternative codec backends, the
-`tiff-parser` API, `heic-vendored` linking) depend on `rawshift-image` directly.
+fine-grained control (individual formats, alternative codec backends) depend
+on `rawshift-image` directly.
 
 ### Per-crate feature systems
 

@@ -52,8 +52,8 @@ pub use crate::formats::export::{
 };
 // formats — decoders, format detection, encode/decode entry points
 pub use crate::formats::{
-    DecodeOptions, GifDecodeConfig, ImageAvifDecodeConfig, ImageProbe, JxlDecodeConfig,
-    LibheifDecodeConfig, LibwebpDecodeConfig, ResvgDecodeConfig, StandardFormat, TiffDecodeConfig,
+    DecodeOptions, GifDecodeConfig, HeicDecodeConfig, ImageAvifDecodeConfig, ImageProbe,
+    JxlDecodeConfig, LibwebpDecodeConfig, ResvgDecodeConfig, StandardFormat, TiffDecodeConfig,
     ZuneJpegDecodeConfig, ZunePngDecodeConfig, available_decoders, available_encoders,
     decode_standard_image, decode_standard_image_with, detect_standard_format, encode_rgb_image,
     encode_rgb_image_to_vec, encode_rgb_image_to_writer, probe_standard_image,
@@ -64,7 +64,7 @@ pub use crate::formats::{
 pub use crate::formats::{RawFile, RawFormat};
 
 #[cfg(feature = "heic-decode")]
-pub use crate::formats::{HeicAuxImage, HeicAuxKind, HeicFile};
+pub use crate::formats::{HeicAuxImage, HeicAuxKind, HeicFile, heic_hw_decode_available};
 
 #[cfg(feature = "dng-encode")]
 pub use crate::formats::{DngEncodeConfig, export_dng};

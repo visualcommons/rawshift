@@ -650,16 +650,13 @@ fn decode_avif(_data: &[u8]) -> RawResult<RgbImage> {
 
 // ── HEIC ─────────────────────────────────────────────────────────────────────
 
-/// Decode a HEIC/HEIF file (ISOBMFF + HEVC) via libheif.
+/// Decode a HEIC/HEIF file: gamut-heic parses the container and drives the
+/// decode pipeline; the HEVC codestream is decoded by a rawshift-hwdec
+/// hardware decoder. Without one (no `hw` feature, or no usable backend on
+/// this machine) this returns [`RawError::HwDecoderUnavailable`].
 #[cfg(feature = "heic-decode")]
 fn decode_heic(data: &[u8]) -> RawResult<RgbImage> {
-    let decoded = crate::codecs::heic::decode_primary(data).map_err(|message| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "HEIC",
-            message,
-        })
-    })?;
-    RgbImage::new(decoded.width, decoded.height, decoded.rgb)
+    crate::formats::heic::HeicFile::open(data.to_vec())?.decode_primary()
 }
 
 #[cfg(not(feature = "heic-decode"))]
@@ -873,7 +870,7 @@ empty_decode_config!(JxlDecodeConfig, "gamut-jxl");
 empty_decode_config!(GifDecodeConfig, "gif");
 empty_decode_config!(TiffDecodeConfig, "tiff");
 empty_decode_config!(ImageAvifDecodeConfig, "image (avif-native)");
-empty_decode_config!(LibheifDecodeConfig, "libheif");
+empty_decode_config!(HeicDecodeConfig, "gamut-heic + rawshift-hwdec");
 empty_decode_config!(ZunePpmDecodeConfig, "zune-ppm");
 
 /// Selects which decoder implementation handles a standard image, and carries
@@ -912,9 +909,10 @@ pub enum DecodeOptions {
     /// AVIF via `image` (`avif-native`).
     #[cfg(feature = "avif-decode")]
     AvifImage(ImageAvifDecodeConfig),
-    /// HEIC/HEIF via `libheif`.
+    /// HEIC/HEIF via `gamut-heic` (container/pipeline) + `rawshift-hwdec`
+    /// (hardware HEVC codestream decode).
     #[cfg(feature = "heic-decode")]
-    HeicLibheif(LibheifDecodeConfig),
+    Heic(HeicDecodeConfig),
     /// SVG via `resvg`.
     #[cfg(feature = "svg-decode")]
     SvgResvg(ResvgDecodeConfig),
@@ -942,7 +940,7 @@ impl DecodeOptions {
             #[cfg(feature = "avif-decode")]
             DecodeOptions::AvifImage(_) => StandardFormat::Avif,
             #[cfg(feature = "heic-decode")]
-            DecodeOptions::HeicLibheif(_) => StandardFormat::Heic,
+            DecodeOptions::Heic(_) => StandardFormat::Heic,
             #[cfg(feature = "svg-decode")]
             DecodeOptions::SvgResvg(_) => StandardFormat::Svg,
             #[cfg(feature = "ppm-decode")]
@@ -972,7 +970,7 @@ impl DecodeOptions {
             #[cfg(feature = "avif-decode")]
             DecodeOptions::AvifImage(_) => CodecId::new("avif/image"),
             #[cfg(feature = "heic-decode")]
-            DecodeOptions::HeicLibheif(_) => CodecId::new("heic/libheif"),
+            DecodeOptions::Heic(_) => CodecId::new("heic/gamut"),
             #[cfg(feature = "svg-decode")]
             DecodeOptions::SvgResvg(_) => CodecId::new("svg/resvg"),
             #[cfg(feature = "ppm-decode")]
@@ -1007,9 +1005,7 @@ impl DecodeOptions {
                 Some(DecodeOptions::AvifImage(ImageAvifDecodeConfig::default()))
             }
             #[cfg(feature = "heic-decode")]
-            StandardFormat::Heic => {
-                Some(DecodeOptions::HeicLibheif(LibheifDecodeConfig::default()))
-            }
+            StandardFormat::Heic => Some(DecodeOptions::Heic(HeicDecodeConfig::default())),
             #[cfg(feature = "svg-decode")]
             StandardFormat::Svg => Some(DecodeOptions::SvgResvg(ResvgDecodeConfig::default())),
             #[cfg(feature = "ppm-decode")]
@@ -1092,7 +1088,7 @@ pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawRe
         #[cfg(feature = "avif-decode")]
         DecodeOptions::AvifImage(_cfg) => decode_avif(data),
         #[cfg(feature = "heic-decode")]
-        DecodeOptions::HeicLibheif(_cfg) => decode_heic(data),
+        DecodeOptions::Heic(_cfg) => decode_heic(data),
         #[cfg(feature = "svg-decode")]
         DecodeOptions::SvgResvg(cfg) => decode_svg(data, cfg),
         #[cfg(feature = "ppm-decode")]
@@ -1513,7 +1509,8 @@ pub fn read_standard_image_metadata(
 ) -> crate::core::metadata::ImageMetadata {
     use crate::metadata::exif::{ExifContainer, ExifParser};
 
-    // HEIC goes through libheif so that ICC and XMP are extracted alongside EXIF.
+    // HEIC goes through gamut-heic so that ICC and XMP are extracted alongside
+    // EXIF (pure container work — no hardware decoder involved).
     #[cfg(feature = "heic-decode")]
     if format == StandardFormat::Heic {
         return crate::formats::heic::read_heic_metadata(data);

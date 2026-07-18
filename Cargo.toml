@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/rawshift",
     "crates/rawshift-core",
+    "crates/rawshift-hwdec",
     "crates/rawshift-image",
     "crates/rawshift-video",
 ]
@@ -37,6 +38,10 @@ gamut-icc = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02e
 gamut-jxl = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151", default-features = false }
 gamut-png = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
 gamut-avif = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
+gamut-heic = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
+# Dev-only in rawshift-image: constructs synthetic HEIF containers for the
+# backend-less HEIC enumeration/decode-pipeline tests.
+gamut-isobmff = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
 
 # Shared infrastructure dependencies (used across multiple workspace crates).
 thiserror = "2.0"
@@ -44,8 +49,9 @@ tracing   = "0.1"
 rayon     = "1.11.0"
 serde     = { version = "1.0", features = ["derive"] }
 # Internal crates — referenced by path within the workspace, version pinned for
-# eventual publishing (publish order: core → image/video → rawshift).
+# eventual publishing (publish order: core → hwdec → image/video → rawshift).
 rawshift-core  = { path = "crates/rawshift-core", version = "0.1.1" }
+rawshift-hwdec = { path = "crates/rawshift-hwdec", version = "0.1.1" }
 rawshift-image = { path = "crates/rawshift-image", version = "0.1.1" }
 rawshift-video = { path = "crates/rawshift-video", version = "0.1.1" }
 

@@ -1,0 +1,43 @@
+[package]
+name = "rawshift-hwdec"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Hardware still-frame HEVC/AV1 decode for rawshift (VideoToolbox / VAAPI / MediaCodec)"
+documentation = "https://docs.rs/rawshift-hwdec"
+keywords = ["hevc", "av1", "hardware", "decode", "heic"]
+categories = ["multimedia::images", "hardware-support"]
+readme = "README.md"
+
+[package.metadata.docs.rs]
+# docs.rs builds on Linux; `hw` selects the native backend for the build
+# target and degrades to the documented stub where none exists.
+features = ["hw"]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+# ColorRange / ChromaSubsampling — the shared colour-signal vocabulary; the
+# decoded-frame contract reuses gamut's types instead of redefining them.
+gamut-color = { workspace = true }
+thiserror   = { workspace = true }
+
+[features]
+# Verified backend feature flags — see docs/SUPPORT.md for the permanent
+# target/API matrix. Each explicit backend flag hard-fails the compile
+# (`compile_error!` in src/lib.rs) on any target its platform API does not
+# exist on. The portable `hw` meta-flag instead selects the native backend for
+# the compile target via build.rs, and on targets with no hardware decode API
+# (windows-msvc, linux-musl, wasm) emits a build-script warning and compiles
+# the no-backend stub.
+#
+# This crate currently ships only the stub + the compile boundaries: the
+# platform backends land as separate issues (VideoToolbox / VAAPI #29 /
+# MediaCodec). Until then `decoder()` returns `None`, `backend()` returns
+# `None`, and `available_codecs()` is empty on every target.
+videotoolbox = []
+vaapi        = []
+mediacodec   = []
+hw           = []
