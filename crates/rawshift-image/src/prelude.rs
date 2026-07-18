@@ -14,10 +14,9 @@
 //!   `EncodeError`, and `RawResult`.
 //! - **`formats`** — `RawFile`, `RawFormat`, `StandardFormat`,
 //!   `decode_standard_image`, `detect_standard_format`,
-//!   `read_standard_image_metadata`, `DngExportConfig`, `EncodeOptions`,
+//!   `read_standard_image_metadata`, `DngEncodeConfig`, `EncodeOptions`,
 //!   `CommonEncodeOptions`, `OutputFormat`, and the per-backend encode configs.
 //! - **`processing`** — `ProcessingOptions` and demosaicing types.
-//! - **`tiff`** — `TiffParser`, `TiffTag`, `TiffValue`, and related TIFF types.
 //! - **`transforms`** — `apply_black_level`, `apply_white_balance`,
 //!   `apply_white_balance_raw`, `apply_color_matrix`, `apply_tone_reproduction`,
 //!   `apply_tonemap`, `compute_camera_to_srgb`, `ColorSpaceTransform`, and more.
@@ -71,17 +70,11 @@ pub use crate::formats::{RawFile, RawFormat};
 pub use crate::formats::{HeicAuxImage, HeicAuxKind, HeicFile};
 
 #[cfg(feature = "dng-encode")]
-pub use crate::formats::{DngExportConfig, export_dng};
+pub use crate::formats::{DngEncodeConfig, export_dng};
 
 // processing
 pub use crate::processing::{
     BayerAlgorithm, Demosaic, DemosaicMethod, ProcessingOptions, XTransAlgorithm,
-};
-
-// tiff
-#[cfg(feature = "tiff-parser")]
-pub use crate::tiff::{
-    ByteOrder, Ifd, IfdEntry, Rational, SRational, TiffParser, TiffTag, TiffValue, TiffWriter,
 };
 
 // transforms

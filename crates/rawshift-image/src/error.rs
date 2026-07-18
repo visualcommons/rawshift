@@ -14,8 +14,6 @@ use std::io;
 use thiserror::Error;
 
 use crate::core::BitDepth;
-#[cfg(feature = "tiff-parser")]
-use crate::tiff::TiffTag;
 
 /// Main error type for the rawshift library.
 #[derive(Debug, Error)]
@@ -92,16 +90,9 @@ pub enum ParseError {
         reason: String,
     },
 
-    /// Required tag not found.
-    #[cfg(feature = "tiff-parser")]
-    #[error("Required tag not found: {0}")]
-    TagNotFound(TiffTag),
-
     /// Required tag not found, identified by its raw 16-bit id.
     ///
-    /// Used by the gamut-ifd-based decoders, which address tags numerically;
-    /// [`ParseError::TagNotFound`] is the legacy binrw-parser equivalent and is
-    /// removed with it in the DNG migration (#21).
+    /// Used by the gamut-ifd-based decoders, which address tags numerically.
     #[error("Required tag not found: 0x{0:04X}")]
     MissingTag(u16),
 
@@ -133,7 +124,7 @@ pub enum ParseError {
     #[error("Circular reference detected in IFD chain at offset {0}")]
     CircularReference(u64),
 
-    /// Binary parse error (from binrw or other parsers).
+    /// Binary parse error (from format-specific binary parsers).
     #[error("Binary parse error: {0}")]
     BinaryParse(String),
 }
@@ -235,13 +226,6 @@ pub enum EncodeError {
     Jpegli(String),
 }
 
-#[cfg(feature = "tiff-parser")]
-impl From<binrw::Error> for RawError {
-    fn from(err: binrw::Error) -> Self {
-        RawError::Parse(ParseError::BinaryParse(err.to_string()))
-    }
-}
-
 #[cfg(feature = "jpeg-encode")]
 impl From<jpeg_encoder::EncodingError> for RawError {
     fn from(err: jpeg_encoder::EncodingError) -> Self {
@@ -265,12 +249,9 @@ mod tests {
         let s = format!("{}", err);
         assert!(s.contains("Invalid TIFF magic"));
 
-        #[cfg(feature = "tiff-parser")]
-        {
-            let err = RawError::Parse(ParseError::TagNotFound(crate::tiff::TiffTag::ImageWidth));
-            let s = format!("{}", err);
-            assert!(s.contains("ImageWidth"));
-        }
+        let err = RawError::Parse(ParseError::MissingTag(0x0100));
+        let s = format!("{}", err);
+        assert!(s.contains("0x0100"));
     }
 
     #[test]

@@ -29,12 +29,18 @@ gamut-core     = { workspace = true }
 gamut-icc      = { workspace = true }
 gamut-exif     = { workspace = true, optional = true }
 # gamut-ifd backs the TIFF IFD structure walking of the TIFF-based RAW decoders
-# (ARW/CR2/NEF, and CR3's embedded CMT TIFF blocks). `bigtiff` is enabled so
-# BigTIFF-shaped containers parse (and DNG needs it when it migrates in #21).
+# (ARW/CR2/NEF, CR3's embedded CMT TIFF blocks, and DNG's metadata/thumbnail
+# tree). `bigtiff` is enabled so BigTIFF-shaped containers parse (DNG 1.7
+# permits 64-bit offsets).
 gamut-ifd      = { workspace = true, optional = true, features = ["bigtiff"] }
+# gamut-dng backs DNG decode (DngDecoder: uncompressed/Deflate/lossless-JPEG/
+# JPEG XL raw data, RawLevels, CameraProfile) and encode (DngEncoder). JPEG XL
+# *decode* is built in (pure Rust); the `jxl-encode` feature (libjxl, cmake +
+# C++ toolchain) is deliberately not enabled — rawshift only writes
+# uncompressed LinearRaw DNGs today.
+gamut-dng      = { workspace = true, optional = true }
 gamut-metadata = { workspace = true, optional = true }
 gamut-xmp      = { workspace = true, optional = true }
-binrw          = { version = "0.15",   optional = true }
 libheif-rs     = { version = "2.7",    optional = true }
 libwebp-sys    = { version = "0.14",   optional = true }
 img-parts      = { version = "0.4",    optional = true }
@@ -80,6 +86,9 @@ cmake      = { version = "0.1",    optional = true }
 clap = { version = "4.5", features = ["derive"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 eyre = "0.6.12"
+# dng_check exercises the gamut-ifd tree directly (structural DNG assertions
+# feeding justin13888/gamut#174).
+gamut-ifd = { workspace = true, features = ["bigtiff"] }
 serde = { workspace = true }
 serde_json = "1.0"
 tokio = { version = "1.50", features = ["full"] }
@@ -94,7 +103,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 #   tier 2  format             jpeg, png, dng, …            (decode + encode)
 #   tier 3  direction          jpeg-decode, dng-encode, …   (default impl alias)
 #   tier 4  implementation     jpeg-decode-zune, …          (compressed only)
-#   tier 5  infrastructure     tiff-parser, serde, zune-runtime, exif, …
+#   tier 5  infrastructure     ifd-parser, serde, zune-runtime, exif, …
 #
 # Only tier-4 features (and RAW tier-3 features) reference `dep:*`.
 default = ["jpeg", "png", "webp", "jxl-decode", "gif-decode", "tiff-decode", "ppm-decode"]
@@ -149,12 +158,13 @@ arw-decode  = ["ifd-parser"]
 cr2-decode  = ["ifd-parser"]
 cr3-decode  = ["ifd-parser"]
 crw-decode  = []
-# dng-decode still parses its IFD structure with the legacy binrw engine
-# (`tiff-parser`); it migrates wholesale to gamut-dng in #21. `ifd-parser` is
-# additionally pulled because format sniffing (`RawFile::detect_format`) reads
-# IFD0 through gamut-ifd.
-dng-decode  = ["tiff-parser", "ifd-parser", "jxl-decode"]
-dng-encode  = ["tiff-parser"]
+# DNG decode is backed by gamut-dng (raw image, levels, camera profile; JPEG
+# XL tile decode is built into gamut-dng, so `jxl-decode` is no longer pulled).
+# `ifd-parser` is additionally pulled because format sniffing
+# (`RawFile::detect_format`) and the EXIF/GPS/thumbnail tree walk read the
+# container through gamut-ifd.
+dng-decode  = ["ifd-parser", "dep:gamut-dng"]
+dng-encode  = ["dep:gamut-dng"]
 nef-decode  = ["ifd-parser"]
 raf-decode  = []
 
@@ -200,9 +210,6 @@ svg-decode-resvg     = ["svg-decode", "dep:resvg"]
 ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
 
 # ── Tier 5: infrastructure / linking features ─────────────────────────────────
-# Legacy binrw TIFF structure parser + public `tiff` module API. Only DNG
-# decode/encode still consume it; it is removed with the DNG migration (#21).
-tiff-parser   = ["dep:binrw"]
 # gamut-ifd TIFF/IFD structure engine (used by the migrated TIFF-based RAW
 # decoders and by format detection).
 ifd-parser    = ["dep:gamut-ifd"]
@@ -277,16 +284,12 @@ name = "heic_aux"
 required-features = ["heic"]
 
 [[test]]
-name = "tiff_parser_tests"
-required-features = ["tiff-parser"]
-
-[[test]]
 name = "ifd_decoder_tests"
 required-features = ["arw"]
 
 [[test]]
 name = "dng_check"
-required-features = ["tiff-parser"]
+required-features = ["dng"]
 
 [lints.rust]
 # `any_raw` / `any_standard_decode` / `any_standard_encode` are cfg aliases
