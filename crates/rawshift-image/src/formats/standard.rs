@@ -363,41 +363,56 @@ fn decode_gif(data: &[u8]) -> RawResult<RgbImage> {
 
 // ── JPEG ─────────────────────────────────────────────────────────────────────
 
+/// `(v * k) / 255` with correct rounding — the multiplicative K application
+/// used for CMYK→RGB (borrowed from stb via zune-jpeg, kept for bit-exact
+/// parity with the previous backend).
 #[cfg(feature = "jpeg-decode")]
-fn decode_jpeg(data: &[u8], cfg: &ZuneJpegDecodeConfig) -> RawResult<RgbImage> {
-    let mut opts = DecoderOptions::default()
-        .jpeg_set_out_colorspace(ColorSpace::RGB)
-        .set_strict_mode(cfg.strict);
-    if let Some(w) = cfg.max_width {
-        opts = opts.set_max_width(w);
-    }
-    if let Some(h) = cfg.max_height {
-        opts = opts.set_max_height(h);
-    }
-    let cursor = ZCursor::new(data);
-    let mut decoder = zune_jpeg::JpegDecoder::new_with_options(cursor, opts);
+#[inline]
+fn blinn_8x8(v: u8, k: u8) -> u8 {
+    let t = i32::from(v) * i32::from(k) + 128;
+    ((t + (t >> 8)) >> 8) as u8
+}
 
-    let pixels = decoder.decode().map_err(|e| {
+#[cfg(feature = "jpeg-decode")]
+fn decode_jpeg(data: &[u8], _cfg: &JpegDecodeConfig) -> RawResult<RgbImage> {
+    use gamut_core::{Cmyk8, DecodeImage, ImageBuf, Rgb8};
+    use gamut_jpeg::JpegDecoder;
+
+    let jpeg_err = |e: gamut_core::Error| {
         RawError::Format(FormatError::ImageDecode {
             format: "JPEG",
-            message: format!("{e:?}"),
+            message: e.to_string(),
         })
-    })?;
+    };
 
-    let (w, h) = decoder
-        .dimensions()
-        .map(|(w, h)| (w as u32, h as u32))
-        .ok_or_else(|| {
-            RawError::Format(FormatError::ImageDecode {
-                format: "JPEG",
-                message: "could not read image dimensions after decode".to_string(),
+    // gamut-jpeg presents four-component (Adobe CMYK/YCCK) streams only as
+    // `Cmyk8`; everything else — grayscale (replicated), YCbCr, RGB — decodes
+    // directly as `Rgb8`. The header-only `info` read selects the path.
+    let info = gamut_jpeg::info(data).map_err(jpeg_err)?;
+    if info.components == 4 {
+        let decoded: ImageBuf<Cmyk8> = JpegDecoder::new().decode_image(data).map_err(jpeg_err)?;
+        let dims = decoded.dimensions();
+        // CMYK→RGB in the Adobe-inverted convention (matching libjpeg and the
+        // previous zune-jpeg backend): R = C·K/255, G = M·K/255, B = Y·K/255
+        // on the stored sample values.
+        let data_u16: Vec<u16> = decoded
+            .as_samples()
+            .chunks_exact(4)
+            .flat_map(|px| {
+                [
+                    u8_to_u16(blinn_8x8(px[0], px[3])),
+                    u8_to_u16(blinn_8x8(px[1], px[3])),
+                    u8_to_u16(blinn_8x8(px[2], px[3])),
+                ]
             })
-        })?;
+            .collect();
+        return RgbImage::new(dims.width, dims.height, data_u16);
+    }
 
-    // pixels is Vec<u8>, RGB interleaved — scale to u16
-    let data_u16: Vec<u16> = pixels.iter().map(|&v| u8_to_u16(v)).collect();
-
-    RgbImage::new(w, h, data_u16)
+    let decoded: ImageBuf<Rgb8> = JpegDecoder::new().decode_image(data).map_err(jpeg_err)?;
+    let dims = decoded.dimensions();
+    let data_u16: Vec<u16> = decoded.as_samples().iter().map(|&v| u8_to_u16(v)).collect();
+    RgbImage::new(dims.width, dims.height, data_u16)
 }
 
 // ── PNG ──────────────────────────────────────────────────────────────────────
@@ -802,21 +817,6 @@ fn decode_ppm(data: &[u8], _cfg: &ZunePpmDecodeConfig) -> RawResult<RgbImage> {
 
 // ── Decoder implementation selection ──────────────────────────────────────────
 
-/// Per-implementation configuration for the `zune-jpeg` JPEG decoder.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ZuneJpegDecodeConfig {
-    /// Reject images wider than this, in pixels. `None` keeps the decoder's
-    /// built-in limit.
-    pub max_width: Option<usize>,
-    /// Reject images taller than this, in pixels. `None` keeps the decoder's
-    /// built-in limit.
-    pub max_height: Option<usize>,
-    /// Reject streams that deviate from the JPEG specification instead of
-    /// attempting recovery. Default: `false`.
-    pub strict: bool,
-}
-
 /// Per-implementation configuration for the `zune-png` PNG decoder.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -865,6 +865,7 @@ macro_rules! empty_decode_config {
     };
 }
 
+empty_decode_config!(JpegDecodeConfig, "gamut-jpeg");
 empty_decode_config!(LibwebpDecodeConfig, "libwebp");
 empty_decode_config!(JxlDecodeConfig, "gamut-jxl");
 empty_decode_config!(GifDecodeConfig, "gif");
@@ -888,9 +889,10 @@ empty_decode_config!(ZunePpmDecodeConfig, "zune-ppm");
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DecodeOptions {
-    /// JPEG via `zune-jpeg`.
+    /// JPEG via `gamut-jpeg` (baseline + progressive; grayscale/YCbCr/RGB/
+    /// CMYK/YCCK).
     #[cfg(feature = "jpeg-decode")]
-    JpegZune(ZuneJpegDecodeConfig),
+    Jpeg(JpegDecodeConfig),
     /// PNG via `zune-png`.
     #[cfg(feature = "png-decode")]
     PngZune(ZunePngDecodeConfig),
@@ -926,7 +928,7 @@ impl DecodeOptions {
     pub fn format(&self) -> StandardFormat {
         match self {
             #[cfg(feature = "jpeg-decode")]
-            DecodeOptions::JpegZune(_) => StandardFormat::Jpeg,
+            DecodeOptions::Jpeg(_) => StandardFormat::Jpeg,
             #[cfg(feature = "png-decode")]
             DecodeOptions::PngZune(_) => StandardFormat::Png,
             #[cfg(feature = "webp-decode")]
@@ -956,7 +958,7 @@ impl DecodeOptions {
     pub fn codec_id(&self) -> CodecId {
         match self {
             #[cfg(feature = "jpeg-decode")]
-            DecodeOptions::JpegZune(_) => CodecId::new("jpeg/zune"),
+            DecodeOptions::Jpeg(_) => CodecId::new("jpeg/gamut"),
             #[cfg(feature = "png-decode")]
             DecodeOptions::PngZune(_) => CodecId::new("png/zune"),
             #[cfg(feature = "webp-decode")]
@@ -987,7 +989,7 @@ impl DecodeOptions {
     pub fn default_for(format: StandardFormat) -> Option<DecodeOptions> {
         match format {
             #[cfg(feature = "jpeg-decode")]
-            StandardFormat::Jpeg => Some(DecodeOptions::JpegZune(ZuneJpegDecodeConfig::default())),
+            StandardFormat::Jpeg => Some(DecodeOptions::Jpeg(JpegDecodeConfig::default())),
             #[cfg(feature = "png-decode")]
             StandardFormat::Png => Some(DecodeOptions::PngZune(ZunePngDecodeConfig::default())),
             #[cfg(feature = "webp-decode")]
@@ -1037,7 +1039,7 @@ pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<R
         #[cfg(feature = "gif-decode")]
         StandardFormat::Gif => decode_gif(data),
         #[cfg(feature = "jpeg-decode")]
-        StandardFormat::Jpeg => decode_jpeg(data, &ZuneJpegDecodeConfig::default()),
+        StandardFormat::Jpeg => decode_jpeg(data, &JpegDecodeConfig::default()),
         #[cfg(feature = "png-decode")]
         StandardFormat::Png => decode_png(data, &ZunePngDecodeConfig::default()),
         #[cfg(feature = "webp-decode")]
@@ -1074,7 +1076,7 @@ pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<R
 pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawResult<RgbImage> {
     let decoded: RawResult<RgbImage> = match options {
         #[cfg(feature = "jpeg-decode")]
-        DecodeOptions::JpegZune(cfg) => decode_jpeg(data, cfg),
+        DecodeOptions::Jpeg(cfg) => decode_jpeg(data, cfg),
         #[cfg(feature = "png-decode")]
         DecodeOptions::PngZune(cfg) => decode_png(data, cfg),
         #[cfg(feature = "webp-decode")]
@@ -1207,7 +1209,27 @@ fn probe_png(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
     Ok((Dimensions { width, height }, Some(data[24])))
 }
 
+/// JPEG: read the frame header (gamut-jpeg's header-only `info` — no entropy
+/// decoding).
+#[cfg(any(feature = "jpeg-decode", feature = "jpeg-encode"))]
+fn probe_jpeg(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
+    let info = gamut_jpeg::info(data).map_err(|e| probe_err("JPEG", e.to_string()))?;
+    Ok((
+        Dimensions {
+            width: info.width,
+            height: info.height,
+        },
+        Some(info.precision),
+    ))
+}
+
 /// JPEG: scan marker segments for a Start-Of-Frame (SOFn) marker.
+///
+/// Fallback for builds without gamut-jpeg (no `jpeg-decode`/`jpeg-encode`
+/// feature): probing works for every raster format regardless of which
+/// decoders are compiled in, so a hand-rolled SOF scan is kept for this
+/// configuration only.
+#[cfg(not(any(feature = "jpeg-decode", feature = "jpeg-encode")))]
 fn probe_jpeg(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
     let mut i = 2; // skip the SOI marker
     while i + 1 < data.len() {
@@ -1493,7 +1515,7 @@ mod probe_tests {
 /// # Supported formats
 /// | Format | Metadata source |
 /// |--------|----------------|
-/// | JPEG   | APP1 EXIF segment |
+/// | JPEG   | APP1 EXIF + APP1 XMP + APP2 ICC segments (requires `jpeg`) |
 /// | TIFF   | IFD0 EXIF tags |
 /// | WebP   | EXIF chunk |
 /// | AVIF   | HEIF/ISOBMFF Exif item |
@@ -1516,17 +1538,48 @@ pub fn read_standard_image_metadata(
         return crate::formats::heic::read_heic_metadata(data);
     }
 
+    // JPEG goes through gamut-jpeg's APP-segment reader (no pixel decoding) so
+    // that ICC and XMP are extracted alongside EXIF.
+    #[cfg(any(feature = "jpeg-decode", feature = "jpeg-encode"))]
+    if format == StandardFormat::Jpeg {
+        return read_jpeg_metadata(data);
+    }
+
     let container = match format {
-        StandardFormat::Jpeg => ExifContainer::Jpeg,
         StandardFormat::Tiff => ExifContainer::Tiff,
         StandardFormat::WebP => ExifContainer::WebP,
         StandardFormat::Avif => ExifContainer::Avif,
         StandardFormat::Png => ExifContainer::Png,
-        // Formats without an EXIF extraction path (GIF, SVG, JXL, …)
+        // Formats without an EXIF extraction path (GIF, SVG, JXL, …), and
+        // JPEG when neither `jpeg-decode` nor `jpeg-encode` compiled the
+        // gamut-jpeg metadata reader in.
         _ => return crate::core::metadata::ImageMetadata::default(),
     };
 
     ExifParser::parse_from_bytes(data, container)
+}
+
+/// Extract EXIF / ICC / XMP from a JPEG's APP segments via `gamut-jpeg`.
+///
+/// Returns default (empty) metadata when the stream is malformed or carries
+/// none of the three payloads.
+#[cfg(all(
+    feature = "exif",
+    any(feature = "jpeg-decode", feature = "jpeg-encode")
+))]
+fn read_jpeg_metadata(data: &[u8]) -> crate::core::metadata::ImageMetadata {
+    use crate::metadata::exif::ExifParser;
+
+    let Ok(meta) = gamut_jpeg::metadata(data) else {
+        return crate::core::metadata::ImageMetadata::default();
+    };
+    let mut md = match &meta.exif {
+        Some(blob) => ExifParser::parse_exif_blob(blob),
+        None => crate::core::metadata::ImageMetadata::default(),
+    };
+    md.icc_profile = meta.icc;
+    md.xmp = meta.xmp;
+    md
 }
 
 /// Extract EXIF metadata from a standard image without decoding pixel data.
@@ -1683,26 +1736,30 @@ mod tests {
 
     // ── JPEG roundtrip ────────────────────────────────────────────────────
 
+    #[cfg(all(feature = "jpeg-decode", feature = "jpeg-encode"))]
     #[test]
     fn jpeg_roundtrip_dimensions() {
+        use gamut_core::{Dimensions as GDimensions, EncodeImage, ImageRef, Rgb8};
+
         // Encode a 4x4 RGB image to JPEG, then decode it and check dimensions.
-        const W: u16 = 4;
-        const H: u16 = 4;
+        const W: u32 = 4;
+        const H: u32 = 4;
         let pixels: Vec<u8> = (0..(W as usize * H as usize * 3))
             .map(|i| (i * 17 % 256) as u8)
             .collect();
 
+        let img = ImageRef::<Rgb8>::new(&pixels, GDimensions::new(W, H).unwrap()).unwrap();
         let mut encoded = Vec::new();
-        let encoder = jpeg_encoder::Encoder::new(&mut encoded, 95);
-        encoder
-            .encode(&pixels, W, H, jpeg_encoder::ColorType::Rgb)
+        gamut_jpeg::JpegEncoder::new()
+            .with_quality(95)
+            .encode_image(img, &mut encoded)
             .expect("JPEG encode failed");
 
         let decoded =
             decode_standard_image(&encoded, StandardFormat::Jpeg).expect("JPEG decode failed");
 
-        assert_eq!(decoded.width(), W as u32);
-        assert_eq!(decoded.height(), H as u32);
+        assert_eq!(decoded.width(), W);
+        assert_eq!(decoded.height(), H);
         assert_eq!(decoded.data().len(), W as usize * H as usize * 3);
     }
 
@@ -1783,23 +1840,28 @@ mod tests {
 
     // ── detect + decode consistency ───────────────────────────────────────
 
+    #[cfg(all(feature = "jpeg-decode", feature = "jpeg-encode"))]
     #[test]
     fn detect_then_decode_jpeg() {
-        const W: u16 = 2;
-        const H: u16 = 2;
+        use gamut_core::{Dimensions as GDimensions, EncodeImage, ImageRef, Rgb8};
+
+        const W: u32 = 2;
+        const H: u32 = 2;
         let pixels = vec![
             100u8, 150u8, 200u8, 50u8, 75u8, 100u8, 200u8, 220u8, 240u8, 10u8, 20u8, 30u8,
         ];
+        let img = ImageRef::<Rgb8>::new(&pixels, GDimensions::new(W, H).unwrap()).unwrap();
         let mut encoded = Vec::new();
-        jpeg_encoder::Encoder::new(&mut encoded, 90)
-            .encode(&pixels, W, H, jpeg_encoder::ColorType::Rgb)
+        gamut_jpeg::JpegEncoder::new()
+            .with_quality(90)
+            .encode_image(img, &mut encoded)
             .unwrap();
 
         let fmt = detect_standard_format(&encoded);
         assert_eq!(fmt, Some(StandardFormat::Jpeg));
         let img = decode_standard_image(&encoded, fmt.unwrap()).unwrap();
-        assert_eq!(img.width(), W as u32);
-        assert_eq!(img.height(), H as u32);
+        assert_eq!(img.width(), W);
+        assert_eq!(img.height(), H);
     }
 
     // ── PPM detect + decode ───────────────────────────────────────────────

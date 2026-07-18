@@ -10,8 +10,7 @@
 //! (libjpeg-turbo, MozJPEG, SVT-AV1) can be added without a breaking
 //! change. Their configuration structs are already defined below — see
 //! [`MozjpegEncodeConfig`] and friends — so the API surface is stable ahead of
-//! the implementations. The jpegli ([`JpegliEncodeConfig`]) backend is wired
-//! up behind the `jpeg-encode-jpegli` feature.
+//! the implementations.
 
 #[cfg(feature = "dng-encode")]
 use crate::formats::dng_export::DngEncodeConfig;
@@ -196,22 +195,86 @@ pub struct PngEncodeConfig {
     pub auto_reduce: bool,
 }
 
-/// Configuration for the `jpeg-encoder` (pure-Rust) JPEG encoder.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Pixel-density unit for the JFIF APP0 segment written by the JPEG encoder
+/// (maps to `gamut_jpeg::DensityUnit`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct JpegEncEncodeConfig {
-    /// Encoder-agnostic options. JPEG output is always 8-bit.
-    pub common: CommonEncodeOptions,
-    /// Quality, `1..=100`. Higher is better quality and larger files (monotonic).
-    /// Default: `90`.
-    pub quality: u8,
+pub enum JpegDensityUnit {
+    /// No absolute unit; the densities express only the pixel aspect ratio.
+    #[default]
+    AspectRatio,
+    /// Dots per inch.
+    Dpi,
+    /// Dots per centimetre.
+    Dpcm,
 }
 
-impl Default for JpegEncEncodeConfig {
+/// Pixel density written to the JFIF APP0 segment by the JPEG encoder.
+///
+/// The default is a 1:1 aspect ratio with no absolute unit (JFIF `units = 0`),
+/// matching gamut-jpeg's encoder default. Densities are clamped to be non-zero
+/// at encode time, as T.871 §10.1 requires.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct JpegDensity {
+    /// The density unit.
+    pub unit: JpegDensityUnit,
+    /// Horizontal density.
+    pub x: u16,
+    /// Vertical density.
+    pub y: u16,
+}
+
+impl Default for JpegDensity {
+    fn default() -> Self {
+        Self {
+            unit: JpegDensityUnit::AspectRatio,
+            x: 1,
+            y: 1,
+        }
+    }
+}
+
+/// Configuration for the `gamut-jpeg` JPEG encoder (pure Rust — baseline or
+/// progressive 8-bit DCT).
+///
+/// Exposes exactly gamut-jpeg's encoder options: the `1..=100` quality dial
+/// (frozen IJG quality→quantization mapping), chroma subsampling, the
+/// progressive (SOF2) process, an optional restart interval, and the JFIF
+/// pixel density. EXIF / ICC / XMP metadata is written by the encoder itself
+/// as APP1/APP2 segments. Output is always an 8-bit JPEG.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct JpegEncodeConfig {
+    /// Encoder-agnostic options. JPEG output is always 8-bit.
+    pub common: CommonEncodeOptions,
+    /// Quality, clamped to `1..=100` at encode time (matching libjpeg's
+    /// `jpeg_set_quality`). Higher is better quality and larger files
+    /// (monotonic). Default: `90`.
+    pub quality: u8,
+    /// Chroma subsampling mode. Default: 4:2:0.
+    pub subsampling: JpegSubsampling,
+    /// Emit a progressive (SOF2, multi-scan) JPEG instead of baseline. The
+    /// decoded image is identical to the baseline encoding at the same
+    /// quality/subsampling; only the stream structure differs. Default: `false`.
+    pub progressive: bool,
+    /// Restart interval in MCUs: a restart marker (RSTn) is inserted every
+    /// this many MCUs, letting a decoder resynchronize after corruption.
+    /// `0` (the default) disables restarts.
+    pub restart_interval: u16,
+    /// JFIF pixel density written to the APP0 segment.
+    pub density: JpegDensity,
+}
+
+impl Default for JpegEncodeConfig {
     fn default() -> Self {
         Self {
             common: CommonEncodeOptions::default(),
             quality: 90,
+            subsampling: JpegSubsampling::Yuv420,
+            progressive: false,
+            restart_interval: 0,
+            density: JpegDensity::default(),
         }
     }
 }
@@ -352,45 +415,6 @@ impl Default for JxlEncodeConfig {
     }
 }
 
-/// Configuration for the **jpegli** JPEG encoder (libjxl's perceptual encoder).
-///
-/// Unlike the pure-Rust default ([`JpegEncEncodeConfig`]), jpegli offers
-/// Butteraugli-distance rate control, XYB high-fidelity mode, and quantises from
-/// the source's full precision when fed 16-bit input. Output is always an 8-bit
-/// JPEG. Requires the `jpeg-encode-jpegli` feature.
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct JpegliEncodeConfig {
-    /// Encoder-agnostic options. JPEG output is always 8-bit; with
-    /// `BitDepth::Sixteen`, 16-bit samples are fed to jpegli at full precision.
-    pub common: CommonEncodeOptions,
-    /// Butteraugli distance: `0.0` is visually lossless; higher values produce
-    /// smaller files (monotonic). Used when `quality` is `None`.
-    pub distance: f32,
-    /// Optional `1..=100` quality; when `Some`, overrides `distance`.
-    pub quality: Option<u8>,
-    /// Emit a progressive JPEG.
-    pub progressive: bool,
-    /// Encode in the XYB color space (jpegli high-fidelity mode). When set,
-    /// jpegli chooses its own chroma sampling and `subsampling` is ignored.
-    pub xyb: bool,
-    /// Chroma subsampling mode (non-XYB mode only).
-    pub subsampling: JpegSubsampling,
-}
-
-impl Default for JpegliEncodeConfig {
-    fn default() -> Self {
-        Self {
-            common: CommonEncodeOptions::default(),
-            distance: 1.0,
-            quality: None,
-            progressive: true,
-            xyb: false,
-            subsampling: JpegSubsampling::Yuv420,
-        }
-    }
-}
-
 // ── Planned backend configs (API surface only — implementations pending) ──────
 //
 // These structs are defined now so the encode API is feature-complete and
@@ -487,12 +511,9 @@ pub enum EncodeOptions {
     /// PNG via `gamut-png` (requires `png-encode`).
     #[cfg(feature = "png-encode")]
     PngGamut(PngEncodeConfig),
-    /// JPEG via the pure-Rust `jpeg-encoder` (requires `jpeg-encode`).
+    /// JPEG via `gamut-jpeg` (requires `jpeg-encode`).
     #[cfg(feature = "jpeg-encode")]
-    JpegJpegEnc(JpegEncEncodeConfig),
-    /// JPEG via `jpegli`, libjxl's perceptual encoder (requires `jpeg-encode-jpegli`).
-    #[cfg(feature = "jpeg-encode-jpegli")]
-    JpegJpegli(JpegliEncodeConfig),
+    Jpeg(JpegEncodeConfig),
     /// WebP via `libwebp` (requires `webp-encode`).
     #[cfg(feature = "webp-encode")]
     WebpLibwebp(LibwebpEncodeConfig),
@@ -525,13 +546,7 @@ impl EncodeOptions {
     /// JPEG with default configuration.
     #[cfg(feature = "jpeg-encode")]
     pub fn jpeg() -> Self {
-        Self::JpegJpegEnc(JpegEncEncodeConfig::default())
-    }
-
-    /// JPEG via the jpegli encoder, with default configuration.
-    #[cfg(feature = "jpeg-encode-jpegli")]
-    pub fn jpeg_jpegli() -> Self {
-        Self::JpegJpegli(JpegliEncodeConfig::default())
+        Self::Jpeg(JpegEncodeConfig::default())
     }
 
     /// Lossy WebP with default configuration.
@@ -570,9 +585,7 @@ impl EncodeOptions {
             #[cfg(feature = "png-encode")]
             EncodeOptions::PngGamut(_) => OutputFormat::Png,
             #[cfg(feature = "jpeg-encode")]
-            EncodeOptions::JpegJpegEnc(_) => OutputFormat::Jpeg,
-            #[cfg(feature = "jpeg-encode-jpegli")]
-            EncodeOptions::JpegJpegli(_) => OutputFormat::Jpeg,
+            EncodeOptions::Jpeg(_) => OutputFormat::Jpeg,
             #[cfg(feature = "webp-encode")]
             EncodeOptions::WebpLibwebp(_) => OutputFormat::WebP,
             #[cfg(feature = "avif-encode")]
@@ -594,9 +607,7 @@ impl EncodeOptions {
             #[cfg(feature = "png-encode")]
             EncodeOptions::PngGamut(_) => CodecId::new("png/gamut"),
             #[cfg(feature = "jpeg-encode")]
-            EncodeOptions::JpegJpegEnc(_) => CodecId::new("jpeg/jpeg-encoder"),
-            #[cfg(feature = "jpeg-encode-jpegli")]
-            EncodeOptions::JpegJpegli(_) => CodecId::new("jpeg/jpegli"),
+            EncodeOptions::Jpeg(_) => CodecId::new("jpeg/gamut"),
             #[cfg(feature = "webp-encode")]
             EncodeOptions::WebpLibwebp(_) => CodecId::new("webp/libwebp"),
             #[cfg(feature = "avif-encode")]
@@ -619,9 +630,7 @@ impl EncodeOptions {
             #[cfg(feature = "png-encode")]
             EncodeOptions::PngGamut(c) => c.common,
             #[cfg(feature = "jpeg-encode")]
-            EncodeOptions::JpegJpegEnc(c) => c.common,
-            #[cfg(feature = "jpeg-encode-jpegli")]
-            EncodeOptions::JpegJpegli(c) => c.common,
+            EncodeOptions::Jpeg(c) => c.common,
             #[cfg(feature = "webp-encode")]
             EncodeOptions::WebpLibwebp(c) => c.common,
             #[cfg(feature = "avif-encode")]
@@ -674,7 +683,7 @@ mod tests {
     fn default_for_jpeg_is_jpeg() {
         let opts = EncodeOptions::default_for(StandardFormat::Jpeg).unwrap();
         assert_eq!(opts.format(), OutputFormat::Jpeg);
-        assert_eq!(opts.codec_id().id, "jpeg/jpeg-encoder");
+        assert_eq!(opts.codec_id().id, "jpeg/gamut");
     }
 
     #[test]

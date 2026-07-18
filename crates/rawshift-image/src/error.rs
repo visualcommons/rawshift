@@ -225,25 +225,9 @@ pub enum EncodeError {
         requested: BitDepth,
     },
 
-    /// JPEG encoding error.
-    #[cfg(feature = "jpeg-encode")]
-    #[error("JPEG encoding error: {0}")]
-    Jpeg(#[from] jpeg_encoder::EncodingError),
-
     /// WebP encoding error.
     #[error("WebP error: {0}")]
     WebP(String),
-
-    /// JPEG (jpegli) encoding error.
-    #[error("jpegli error: {0}")]
-    Jpegli(String),
-}
-
-#[cfg(feature = "jpeg-encode")]
-impl From<jpeg_encoder::EncodingError> for RawError {
-    fn from(err: jpeg_encoder::EncodingError) -> Self {
-        RawError::Encode(EncodeError::Jpeg(err))
-    }
 }
 
 /// Result type alias using RawError.

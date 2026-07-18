@@ -33,6 +33,7 @@ gamut-dng = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02e
 gamut-metadata = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
 gamut-xmp = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
 gamut-icc = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
+gamut-jpeg = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
 # default-features off: gamut-jxl defaults to decode+encode; rawshift's
 # `jxl-decode` / `jxl-encode` features select the halves explicitly.
 gamut-jxl = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151", default-features = false }

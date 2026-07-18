@@ -1,10 +1,10 @@
 //! ICC profile handling for image export.
 //!
 //! The profile bytes themselves are built and validated with `gamut-icc` (the
-//! upstream home for ICC parsing/serialization); the container embedding paths
-//! (JPEG APP2 via `img-parts`, AVIF box splicing) stay on this side until the
-//! per-format codec migrations move them behind the gamut codec boundaries
-//! (PNG and JXL already embed through their gamut encoders).
+//! upstream home for ICC parsing/serialization); the AVIF box-splicing
+//! embedding path stays on this side until the per-format codec migrations
+//! move it behind the gamut codec boundaries (JPEG, PNG, and JXL already
+//! embed through their gamut encoders).
 
 use crate::metadata::isobmff::{find_box, patch_iloc_extents, read_u32_be, write_u32_be};
 
@@ -28,13 +28,6 @@ impl std::fmt::Display for IccError {
 }
 
 impl std::error::Error for IccError {}
-
-#[cfg(feature = "container-embed")]
-impl From<img_parts::Error> for IccError {
-    fn from(e: img_parts::Error) -> Self {
-        IccError::Container(e.to_string())
-    }
-}
 
 impl From<std::io::Error> for IccError {
     fn from(e: std::io::Error) -> Self {
@@ -78,23 +71,6 @@ impl IccProfile {
     #[allow(dead_code)]
     pub fn is_valid(&self) -> bool {
         gamut_icc::IccProfile::parse(&self.data).is_ok()
-    }
-
-    /// Append ICC profile to existing JPEG data.
-    ///
-    /// Uses img-parts for segment manipulation.
-    #[cfg(feature = "container-embed")]
-    pub fn append_to_jpeg(&self, jpeg_data: Vec<u8>) -> Result<Vec<u8>, IccError> {
-        use img_parts::jpeg::Jpeg;
-        use img_parts::{Bytes, ImageICC};
-        use std::io::Cursor;
-
-        let mut jpeg = Jpeg::from_bytes(Bytes::from(jpeg_data))?;
-        jpeg.set_icc_profile(Some(Bytes::from(self.data.clone())));
-
-        let mut output = Cursor::new(Vec::new());
-        jpeg.encoder().write_to(&mut output)?;
-        Ok(output.into_inner())
     }
 
     /// Embed ICC profile into AVIF (ISOBMFF) data.

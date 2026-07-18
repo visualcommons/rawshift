@@ -1,3 +1,0 @@
-[submodule "crates/rawshift-image/third_party/jpegli"]
-	path = crates/rawshift-image/third_party/jpegli
-	url = https://github.com/google/jpegli.git

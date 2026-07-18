@@ -10,5 +10,7 @@ pub mod bridge;
 pub mod exif;
 pub mod icc;
 pub(crate) mod isobmff;
-#[cfg(feature = "container-embed")]
+// XMP box splicing is only needed by the AVIF encode path — JPEG, PNG, and
+// JXL embed XMP through their gamut encoders.
+#[cfg(feature = "avif-encode")]
 pub mod xmp;

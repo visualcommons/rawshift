@@ -71,19 +71,9 @@ jobs:
       # `image` crate; encode is pure-Rust gamut-avif), `heic` (pure-Rust
       # gamut-heic container/pipeline — no system library; pixel decode goes
       # through rawshift-hwdec, which `full`'s `hw` flag compiles as the
-      # no-backend stub until the platform backends land), `jxl-encode`
+      # no-backend stub until the platform backends land), and `jxl-encode`
       # (builds libjxl hermetically through gamut-jxl-sys — cmake + clang for
-      # its bindings), and `jpeg-encode-jpegli-vendored` builds the vendored
-      # google/jpegli submodule the same way (cmake + clang).
-      - name: Check out jpegli build submodules
-        # Init the vendored google/jpegli submodule and only its build-time
-        # dependencies — the 111 MB `testdata` and `googletest` submodules are for
-        # jpegli's own tests, which we disable, so they are skipped.
-        run: |
-          git submodule update --init crates/rawshift-image/third_party/jpegli
-          git -C crates/rawshift-image/third_party/jpegli submodule update --init \
-            third_party/highway third_party/libjpeg-turbo third_party/skcms \
-            third_party/lcms third_party/libpng third_party/zlib third_party/sjpeg
+      # its bindings).
       - name: Install system libraries
         run: |
           sudo apt-get update
@@ -94,7 +84,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - name: Generate standard format fixtures
         run: cargo run -p rawshift-image --example generate_test_fixtures
-      - run: cargo test --workspace --features rawshift-image/full,rawshift-image/jpeg-encode-jpegli-vendored
+      - run: cargo test --workspace --features rawshift-image/full
 
   image-only:
     name: Build (image only)
