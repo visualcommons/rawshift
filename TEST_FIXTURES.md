@@ -15,7 +15,19 @@ tarball via GitHub Releases. This repo pins specific device versions in
 
 Standard-format fixtures (JPEG, PNG, GIF, TIFF, WebP, SVG, AVIF, JXL) are
 generated locally by `examples/generate_test_fixtures.rs` with full EXIF, ICC,
-and XMP metadata embedded.
+and XMP metadata embedded. The HEIC fixture is generated with external tools
+(`heif-enc`, see `tests/heic_hw_decode.rs` module docs) because rawshift is
+deliberately HEIC decode-only.
+
+> **Post-gamut-migration note:** the standard-format encoders are now gamut
+> backends (gamut-jpeg, gamut-png, gamut-avif, gamut-jxl — replacing
+> zune-jpeg/jpegli, the `png`/zune-png stack, ravif/libaom, and the libjxl
+> glue; HEIC dropped libheif for gamut-heic + rawshift-hwdec). Encoded bytes
+> differ from pre-migration outputs, so locally generated fixtures from
+> before the migration are stale — re-run
+> `cargo run -p rawshift-image --example generate_test_fixtures --features full`
+> (or `just generate-fixtures`) to refresh them. `expected.json` ground truth
+> is byte-format-independent and remains valid.
 
 ---
 
@@ -60,7 +72,8 @@ test_data/
 │   ├── webp/test_8x8.webp
 │   ├── svg/test_8x8.svg
 │   ├── avif/test_8x8.avif         # (with avif-encode feature)
-│   └── jxl/test_8x8.jxl           # (with jxl-encode feature)
+│   ├── jxl/test_8x8.jxl           # (with jxl-encode feature)
+│   └── heic/test_64x64.heic       # (external: heif-enc, see tests/heic_hw_decode.rs)
 └── .device-versions/               # Per-device version stamps (written by fetch script)
     ├── sony-ilce-6700              # contains "1"
     └── apple-iphone-17-pro-max     # contains "1"
@@ -172,12 +185,21 @@ just test-fixtures
 # Individual test files
 cargo test --features=experimental --test raw_decode_fixtures
 cargo test --test standard_decode_fixtures
-cargo test --features=tiff-parser --test tiff_parser_tests
-cargo test --features=tiff-parser --test dng_check
+cargo test --features=arw --test ifd_decoder_tests
+cargo test --features=dng --test dng_check
+cargo test --features=heic --test heic_aux
+
+# Hardware decode (compiled with `hw`; skips gracefully without a GPU)
+cargo test --features=full --test heic_hw_decode --test avif_hw_decode
 
 # With specific features
 cargo test --features=full
 ```
+
+The pre-migration `tiff_parser_tests` suite died with the in-repo binrw TIFF
+parser (rawshift#21) — IFD structure walking is now gamut-ifd, exercised by
+`ifd_decoder_tests` and `dng_check`; its malformed-input corpus was
+contributed upstream (justin13888/gamut#262, #264).
 
 Tests skip gracefully when fixture files are missing — `cargo test` always
 passes even without test data.
@@ -194,12 +216,13 @@ passes even without test data.
 ### Test data gaps
 - [ ] RAW formats: CR2, CR3, CRW, NEF, RAF — need sample images sourced and
       added to rawshift-test-fixtures repo
-- [ ] JXL fixtures — generator implemented but gated behind `jxl-encode` feature;
-      needs `expected.json` and decode test
+- [ ] JXL fixture decode test — generator (gated behind `jxl-encode`) writes
+      `test_8x8.jxl` and its `expected.json`, but `standard_decode_fixtures`
+      has no JXL case yet (decode itself is covered by the
+      `export_format_tests` round-trips)
 - [ ] TIFF metadata — library reads EXIF from TIFF but no metadata is embedded
-      in the TIFF test fixture (tiff crate encoder doesn't use encode_rgb_image path)
-- [ ] AVIF fixtures — generator implemented but gated behind `avif-encode` feature;
-      needs `expected.json` and decode test
+      in the TIFF test fixture (tiff crate encoder doesn't use encode_rgb_image
+      path; TIFF is a blocked migration — gamut#299/#300, rawshift#22)
 
 ### Metadata coverage gaps
 - [ ] IPTC metadata — not implemented in rawshift at all

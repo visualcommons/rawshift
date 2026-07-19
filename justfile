@@ -96,4 +96,4 @@ coverage-report:
 
 # Run all fixture-based integration tests (fetches fixtures first)
 test-fixtures: setup-test-data
-    cargo test -p rawshift-image --features=full --test raw_decode_fixtures --test standard_decode_fixtures --test dng_check
+    cargo test -p rawshift-image --features=full --test raw_decode_fixtures --test standard_decode_fixtures --test ifd_decoder_tests --test dng_check
