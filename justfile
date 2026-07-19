@@ -31,9 +31,10 @@ build-features features:
 build-image:
     cargo build -p rawshift --no-default-features --features image
 
-# Build the video-only facade — verifies it pulls zero image crates
+# Build the parked video crate directly — the facade has no `video` feature
+# while rawshift-video is parked (see crates/rawshift/Cargo.toml)
 build-video:
-    cargo build -p rawshift --no-default-features --features video
+    cargo build -p rawshift-video --all-features
 
 # Run tests for the whole workspace (default features) — fetches fixtures first
 test: setup-test-data
@@ -43,26 +44,31 @@ test: setup-test-data
 test-features features:
     cargo test -p rawshift-image --no-default-features --features "{{features}}"
 
-# Run all workspace tests with all features
+# Run all workspace tests with the full feature set. NOT --all-features: the
+# explicit hw backend pins (hw-videotoolbox / hw-vaapi / hw-mediacodec) are
+# mutually exclusive verified flags — enabling them together compile_error!s
+# on every target by design.
 test-all:
-    cargo test --workspace --all-features
+    cargo test --workspace --features rawshift-image/full
 
 # Generate docs for the whole workspace
 doc:
     cargo doc --workspace --no-deps --open
 
-# Check docs build (no open)
+# Check docs build (no open). `rawshift-image/full`, not --all-features: the
+# hw backend pins are mutually exclusive by design (compile_error!).
 doc-check:
-    cargo doc --workspace --no-deps --all-features
+    cargo doc --workspace --no-deps --features rawshift-image/full
 
 # Run doc tests
 doc-test:
-    cargo test --workspace --doc --all-features
+    cargo test --workspace --doc --features rawshift-image/full
 
-# Pre-publish checks
+# Pre-publish checks (`rawshift-image/full`, not --all-features: the hw
+# backend pins are mutually exclusive by design)
 publish-check:
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
-    cargo test --workspace --all-features
+    cargo clippy --workspace --all-targets --features rawshift-image/full -- -D warnings
+    cargo test --workspace --features rawshift-image/full
     cargo doc --workspace --no-deps
     cargo publish --dry-run -p rawshift-core
     cargo publish --dry-run -p rawshift-image
@@ -90,4 +96,4 @@ coverage-report:
 
 # Run all fixture-based integration tests (fetches fixtures first)
 test-fixtures: setup-test-data
-    cargo test -p rawshift-image --features=full --test raw_decode_fixtures --test standard_decode_fixtures --test tiff_parser_tests --test dng_check
+    cargo test -p rawshift-image --features=full --test raw_decode_fixtures --test standard_decode_fixtures --test dng_check

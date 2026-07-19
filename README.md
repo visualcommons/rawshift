@@ -105,8 +105,9 @@ The image and video libraries each carry their own feature systems — restating
 them here would duplicate state that drifts. See each crate's README:
 
 - [`rawshift-image` feature flags](./crates/rawshift-image/README.md#feature-flags)
-  — a five-tier per-format system (bundles → formats → directions →
-  implementations → infrastructure) with selectable codec backends.
+  — a tiered per-format system (bundles → formats → directions →
+  infrastructure; gamut is the backend, plus six retained implementation
+  aliases for the permanent exceptions and blocked migrations).
 - [`rawshift-video` feature flags](./crates/rawshift-video/README.md#feature-flags)
   — mirrors the image tiers; currently gates no code (video is unimplemented).
 

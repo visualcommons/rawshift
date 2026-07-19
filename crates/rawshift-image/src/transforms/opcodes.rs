@@ -61,7 +61,7 @@ pub struct GainMap {
     pub map_origin_h: f64,
     /// Number of planes stored in the map data (1 = shared, 3 = per-channel)
     pub map_planes: u32,
-    /// Gain values, stored in [v][h][plane] order (row-major, f32 each)
+    /// Gain values, stored in `[v][h][plane]` order (row-major, f32 each)
     pub gain: Vec<f32>,
 }
 

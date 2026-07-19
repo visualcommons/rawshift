@@ -22,11 +22,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # Match rust-toolchain.toml exactly ("1.90.0"): rustup resolves the repo's
+      # Match rust-toolchain.toml exactly ("1.92.0"): rustup resolves the repo's
       # cargo to this toolchain regardless of what we install, so install it here.
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90.0"
+          toolchain: "1.92.0"
       - name: Run release-plz
         uses: release-plz/action@v0.5.129
         with:
@@ -56,7 +56,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90.0"
+          toolchain: "1.92.0"
       - name: Run release-plz
         uses: release-plz/action@v0.5.129
         with:

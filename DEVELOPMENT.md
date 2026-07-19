@@ -5,7 +5,7 @@ Contributor and maintainer guide for `rawshift`. For library design rules see
 
 ## Building & testing
 
-The toolchain is pinned by [`rust-toolchain.toml`](rust-toolchain.toml) (1.90.0).
+The toolchain is pinned by [`rust-toolchain.toml`](rust-toolchain.toml) (1.92.0).
 
 ```sh
 cargo build --workspace

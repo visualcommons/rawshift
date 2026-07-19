@@ -65,7 +65,8 @@ pub fn export_dng_to_writer<W: Write>(
 
 /// Export an RGB image as a demosaiced linear DNG file.
 ///
-/// Thin wrapper over [`export_dng_to_writer`] that creates the file at `path`.
+/// Thin wrapper over `export_dng_to_writer` (crate-internal) that creates the
+/// file at `path`.
 pub fn export_dng(
     path: &Path,
     image: &RgbImage,
