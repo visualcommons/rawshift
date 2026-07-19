@@ -39,9 +39,10 @@ gamut-ifd      = { workspace = true, optional = true, features = ["bigtiff"] }
 # uncompressed LinearRaw DNGs today.
 gamut-dng      = { workspace = true, optional = true }
 gamut-metadata = { workspace = true, optional = true }
-# gamut-png backs PNG encode (PngEncoder: 8/16-bit RGB, DEFLATE level + filter
+# gamut-png backs PNG decode (PngDecoder: every colour type and bit depth,
+# Adam7 interlace, eXIf/iCCP/XMP chunk extraction, hostile-input resource
+# guards) and encode (PngEncoder: 8/16-bit RGB, DEFLATE level + filter
 # strategy + lossless auto-reduce, and eXIf/iCCP/XMP-iTXt chunk embedding).
-# PNG decode stays on zune-png until the gamut decoder migration (#32).
 gamut-png      = { workspace = true, optional = true }
 # gamut-avif backs AVIF encode (AvifEncoder: 8-bit RGB, lossless or lossy AV1
 # intra at identity 4:4:4 — pure Rust, no C toolchain). 10/12-bit and alpha
@@ -83,7 +84,6 @@ serde          = { workspace = true, optional = true }
 thiserror      = { workspace = true }
 tracing        = { workspace = true }
 zune-core      = { version = "0.5",    optional = true }
-zune-png       = { version = "0.5",    optional = true }
 zune-ppm       = { version = "0.5",    optional = true }
 gif            = { version = "0.13",   optional = true }
 tiff           = { version = "0.11",   optional = true }
@@ -117,12 +117,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 #   tier 1  bundles            full, experimental, raw-stabilizing, …
 #   tier 2  format             jpeg, png, dng, …            (decode + encode)
 #   tier 3  direction          jpeg-decode, dng-encode, …   (default impl alias)
-#   tier 4  implementation     png-decode-zune, …           (compressed only)
+#   tier 4  implementation     ppm-decode-zune, …           (compressed only)
 #   tier 5  infrastructure     ifd-parser, serde, zune-runtime, exif, …
 #
 # Only tier-4 features (plus RAW tier-3 features and the gamut-backed
-# `jpeg-decode` / `jpeg-encode` / `png-encode` / `jxl-decode` / `jxl-encode` /
-# `avif-encode`, which have a single implementation) reference `dep:*`.
+# `jpeg-decode` / `jpeg-encode` / `png-decode` / `png-encode` / `jxl-decode` /
+# `jxl-encode` / `avif-encode`, which have a single implementation) reference
+# `dep:*`.
 default = ["jpeg", "png", "webp", "jxl-decode", "gif-decode", "tiff-decode", "ppm-decode"]
 
 # ── Tier 1: bundle features ───────────────────────────────────────────────────
@@ -156,7 +157,7 @@ raf  = ["raf-decode"]
 # format+direction's DEFAULT implementation (tier 4) — this is where the notion
 # of a per-format default lives. RAW direction features reference infra/deps
 # directly: RAW formats have a single in-repo implementation and no tier-4 layer.
-# JPEG is backed directly by gamut-jpeg (no tier-4 layer): like `png-encode`
+# JPEG is backed directly by gamut-jpeg (no tier-4 layer): like PNG
 # and the RAW direction features, each half has a single gamut-backed
 # implementation, so the format-direction feature itself pulls the dependency.
 # Decode covers baseline + progressive streams (grayscale/YCbCr/RGB/CMYK/YCCK);
@@ -164,15 +165,19 @@ raf  = ["raf-decode"]
 # EXIF builder/parser for the APP1 segment gamut-jpeg reads and writes.
 jpeg-decode = ["dep:gamut-jpeg", "exif"]
 jpeg-encode = ["dep:gamut-jpeg", "exif"]
-png-decode  = ["png-decode-zune"]
-# PNG encode is backed directly by gamut-png (no tier-4 layer): like the RAW
-# direction features, it has a single gamut-backed implementation, so the
-# format-direction feature itself pulls the dependency. `exif` supplies the
-# ExifBuilder used to serialise the eXIf chunk payload.
+# PNG is backed directly by gamut-png (no tier-4 layer): like JPEG and the RAW
+# direction features, each half has a single gamut-backed implementation, so
+# the format-direction feature itself pulls the dependency. Decode covers
+# every PNG colour type and bit depth (incl. Adam7 interlace) with
+# hostile-input resource guards, and surfaces eXIf/iCCP/XMP chunk metadata;
+# `exif` supplies the parser that maps the eXIf payload into `ImageMetadata`.
+png-decode  = ["dep:gamut-png", "exif"]
+# Encode: `exif` supplies the ExifBuilder used to serialise the eXIf chunk
+# payload.
 png-encode  = ["dep:gamut-png", "exif"]
 webp-decode = ["webp-decode-libwebp"]
 webp-encode = ["webp-encode-libwebp"]
-# JXL is backed directly by gamut-jxl (no tier-4 layer): like `png-encode` and
+# JXL is backed directly by gamut-jxl (no tier-4 layer): like PNG and
 # the RAW direction features, each half has a single gamut-backed
 # implementation, so the format-direction feature itself pulls the dependency.
 # Decode wraps the pure-Rust jxl-rs decoder; encode wraps the reference libjxl
@@ -184,7 +189,7 @@ gif-decode  = ["gif-decode-gif"]
 tiff-decode = ["tiff-decode-tiff"]
 avif-decode = ["avif-decode-image"]
 # AVIF encode is backed directly by gamut-avif (no tier-4 layer): like
-# `png-encode` and the RAW direction features, it has a single gamut-backed
+# PNG and the RAW direction features, it has a single gamut-backed
 # implementation, so the format-direction feature itself pulls the dependency.
 # Pure Rust (gamut-av1 AV1 intra + gamut-isobmff container) — 8-bit RGB,
 # lossless or lossy; 10/12-bit output is pending justin13888/gamut#251.
@@ -219,9 +224,8 @@ raf-decode  = []
 # standalone. Multiple implementations of the same format+direction may be
 # enabled at once; the active backend is chosen at the API level — see
 # `DecodeOptions` and `EncodeOptions`.
-# `zune-png` builds on the `zune-core` codec primitives, so each zune-backed
-# impl feature also pulls `zune-runtime`.
-png-decode-zune      = ["png-decode", "dep:zune-png", "zune-runtime", "exif"]
+# `zune-ppm` builds on the `zune-core` codec primitives, so its impl feature
+# also pulls `zune-runtime`.
 webp-decode-libwebp  = ["webp-decode", "dep:libwebp-sys", "exif"]
 webp-encode-libwebp  = ["webp-encode", "dep:libwebp-sys", "exif"]
 gif-decode-gif       = ["gif-decode", "dep:gif"]
@@ -236,7 +240,8 @@ ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
 ifd-parser    = ["dep:gamut-ifd"]
 serde         = ["dep:serde", "rawshift-core/serde"]
 # `zune-core` codec primitives (bit depth, colorspace, decoder/encoder option
-# builders). Pulled by every zune-backed decode/encode impl feature.
+# builders). Pulled by the zune-backed PPM impl feature (`zune-ppm` is a
+# permanent exception to the gamut migration — see AGENTS.md).
 zune-runtime  = ["dep:zune-core"]
 # Typed EXIF read/write via the gamut metadata stack (`gamut-exif` for the
 # blob model, `gamut-metadata` + `gamut-xmp` for the unified-model bridge).

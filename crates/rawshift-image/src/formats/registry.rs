@@ -87,10 +87,12 @@ pub fn available_decoders() -> Vec<CodecInfo> {
         "0.1",
         CodecDirection::Decode,
     ));
+    // Version tracks the gamut-png crate at the pinned gamut commit (git
+    // dependency). Hand-maintained — bump together with the gamut pin.
     #[cfg(feature = "png-decode")]
     decoders.push(CodecInfo::new(
-        CodecId::new("png/zune"),
-        "0.5",
+        CodecId::new("png/gamut"),
+        "0.1",
         CodecDirection::Decode,
     ));
     #[cfg(feature = "webp-decode")]

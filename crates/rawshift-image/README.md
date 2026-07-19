@@ -22,7 +22,7 @@ or an explicit hardware-decode backend pin (`hw-*`).
 | Nikon NEF    | Custom TIFF parser (Incomplete)                                                          | N/A                                                                                              | No test fixtures.                         |
 | Fujifilm RAF | Custom RAF parser (Incomplete)                                                           | N/A                                                                                              | No test fixtures.                         |
 | JPEG         | [gamut-jpeg](https://github.com/justin13888/gamut) (Stable)                             | [gamut-jpeg](https://github.com/justin13888/gamut) (Stable)                                      | Pure Rust. Decode: baseline + progressive, grayscale/YCbCr/RGB/CMYK/YCCK. Encode: baseline or progressive 8-bit DCT (quality/subsampling/restart/density); APP1/APP2 EXIF/XMP/ICC both ways. |
-| PNG          | [zune-png](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-png) (Stable)   | [gamut-png](https://github.com/justin13888/gamut) (Stable)                                       | Encode via gamut (8/16-bit RGB, eXIf/iCCP/XMP chunks). |
+| PNG          | [gamut-png](https://github.com/justin13888/gamut) (Stable)                              | [gamut-png](https://github.com/justin13888/gamut) (Stable)                                       | Pure Rust. Decode: every colour type/bit depth incl. Adam7, eXIf/iCCP/XMP extraction, resource guards. Encode: 8/16-bit RGB, eXIf/iCCP/XMP chunks. |
 | WebP         | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                              | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                                      | C FFI bindings to libwebp.                |
 | GIF          | [gif](https://github.com/image-rs/image-gif) (Stable)                                    | Not planned                                                                                      |                                           |
 | TIFF         | [tiff](https://github.com/image-rs/image-tiff) (Stable)                                  | Not planned                                                                                      |                                           |
@@ -46,8 +46,8 @@ implementations are named and selected.
 Cargo features are organised in five tiers, from high-level bundles down to
 individual library bindings. Each tier is defined purely in terms of the tier
 below it; only tier-4 features (plus RAW tier-3 features and the gamut-backed
-`jpeg-decode` / `jpeg-encode` / `png-encode` / `jxl-decode` / `jxl-encode` /
-`avif-encode`) pull in an external crate.
+`jpeg-decode` / `jpeg-encode` / `png-decode` / `png-encode` / `jxl-decode` /
+`jxl-encode` / `avif-encode`) pull in an external crate.
 
 1. **Bundle features** — coarse, ready-made groupings.
    - `default` — `jpeg`, `png`, `webp`, `jxl-decode`, `gif-decode`, `tiff-decode`, `ppm-decode`.
@@ -67,8 +67,8 @@ below it; only tier-4 features (plus RAW tier-3 features and the gamut-backed
      `ppm-decode` — each is an **alias for that format+direction's default
      implementation**.
      This is where the per-format default is defined. Exception: `jpeg-decode`,
-     `jpeg-encode`, `png-encode`, `jxl-decode`, `jxl-encode`, `avif-encode`,
-     and `heic-decode` each have a single gamut-backed implementation
+     `jpeg-encode`, `png-decode`, `png-encode`, `jxl-decode`, `jxl-encode`,
+     `avif-encode`, and `heic-decode` each have a single gamut-backed implementation
      (`gamut-jpeg` / `gamut-png` / `gamut-jxl` / `gamut-avif` / `gamut-heic`)
      and pull it directly, with no tier-4 layer
      below them. (`jxl-encode` wraps the
@@ -85,7 +85,6 @@ below it; only tier-4 features (plus RAW tier-3 features and the gamut-backed
    only tier that pulls an external crate. Multiple implementations of the same
    format+direction may be enabled simultaneously; the active backend is chosen
    at the API level via `DecodeOptions` / `EncodeOptions`.
-   - `png-decode-zune`
    - `webp-decode-libwebp`, `webp-encode-libwebp`
    - `gif-decode-gif`, `tiff-decode-tiff`
    - `avif-decode-image`
@@ -111,8 +110,8 @@ below it; only tier-4 features (plus RAW tier-3 features and the gamut-backed
    format implementations that need them — they exist so that a minimal
    `rawshift-image` build links no decoder/metadata crate it does not use.
 
-Resolution example: enabling `default` pulls in `png` → `png-decode` →
-`png-decode-zune` → the `zune-png` crate. To use a non-default implementation,
+Resolution example: enabling `default` pulls in `ppm` → `ppm-decode` →
+`ppm-decode-zune` → the `zune-ppm` crate. To use a non-default implementation,
 enable its tier-4 feature explicitly and select it per call through
 `DecodeOptions` / `EncodeOptions`; the default implementation stays available
 alongside it.

@@ -258,8 +258,6 @@ impl<'a> ExifBuilder<'a> {
 /// carries the EXIF TIFF stream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExifContainer {
-    /// PNG — `eXIf` chunk.
-    Png,
     /// TIFF — the whole file is the TIFF stream.
     Tiff,
     /// WebP — RIFF `EXIF` chunk.
@@ -281,7 +279,6 @@ impl ExifParser {
     /// the container/blob is malformed.
     pub fn parse_from_bytes(file_data: &[u8], container: ExifContainer) -> ImageMetadata {
         let blob = match container {
-            ExifContainer::Png => extract_exif_from_png(file_data),
             ExifContainer::Tiff => Some(file_data.to_vec()),
             ExifContainer::WebP => extract_exif_from_webp(file_data),
             ExifContainer::Avif => extract_exif_from_avif(file_data),
@@ -578,30 +575,9 @@ fn exif_value_to_metadata(value: &Value) -> crate::core::metadata::MetadataValue
 //
 // These scanners only *locate* the EXIF payload inside a container; parsing is
 // gamut-exif's job. They migrate behind the gamut codec boundaries (codec-side
-// `MetadataBlock`) with the per-format codec migrations. (JPEG already did:
-// `gamut_jpeg::metadata` locates and strips the APP1/APP2 payloads.)
-
-/// Extract the payload of a PNG `eXIf` chunk (a bare TIFF stream).
-fn extract_exif_from_png(data: &[u8]) -> Option<Vec<u8>> {
-    const PNG_SIG: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-    if data.get(..8) != Some(PNG_SIG) {
-        return None;
-    }
-    let mut pos = 8usize;
-    while let Some(header) = data.get(pos..pos + 8) {
-        let len = u32::from_be_bytes(header[..4].try_into().unwrap()) as usize;
-        let chunk_type = &header[4..8];
-        let payload = data.get(pos + 8..pos + 8 + len)?;
-        if chunk_type == b"eXIf" {
-            return Some(payload.to_vec());
-        }
-        if chunk_type == b"IEND" {
-            return None;
-        }
-        pos += 8 + len + 4; // header + data + CRC
-    }
-    None
-}
+// `MetadataBlock`) with the per-format codec migrations. (JPEG and PNG already
+// did: `gamut_jpeg::metadata` locates and strips the APP1/APP2 payloads, and
+// `gamut_png::PngDecoder::decode` surfaces the eXIf/iCCP/XMP chunk payloads.)
 
 /// Extract the payload of a WebP RIFF `EXIF` chunk.
 fn extract_exif_from_webp(data: &[u8]) -> Option<Vec<u8>> {
@@ -787,34 +763,9 @@ mod tests {
             ImageMetadata::default()
         );
         assert_eq!(
-            ExifParser::parse_from_bytes(b"\x00\x01\x02\x03", ExifContainer::Png),
+            ExifParser::parse_from_bytes(b"\x00\x01\x02\x03", ExifContainer::WebP),
             ImageMetadata::default()
         );
-    }
-
-    #[test]
-    fn test_extract_from_png_exif_chunk() {
-        let md = sample_metadata();
-        let tiff = ExifBuilder::new(&md).build_bytes().expect("bare tiff");
-
-        let mut png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-        // IHDR (contents irrelevant to the scanner)
-        png.extend_from_slice(&13u32.to_be_bytes());
-        png.extend_from_slice(b"IHDR");
-        png.extend_from_slice(&[0u8; 13]);
-        png.extend_from_slice(&[0u8; 4]); // CRC
-        // eXIf
-        png.extend_from_slice(&(tiff.len() as u32).to_be_bytes());
-        png.extend_from_slice(b"eXIf");
-        png.extend_from_slice(&tiff);
-        png.extend_from_slice(&[0u8; 4]); // CRC
-        // IEND
-        png.extend_from_slice(&0u32.to_be_bytes());
-        png.extend_from_slice(b"IEND");
-        png.extend_from_slice(&[0u8; 4]);
-
-        let parsed = ExifParser::parse_from_bytes(&png, ExifContainer::Png);
-        assert_eq!(parsed.camera.model, "ILCE-6700");
     }
 
     #[test]

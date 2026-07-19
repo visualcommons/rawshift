@@ -52,8 +52,8 @@ pub use crate::formats::export::{
 // formats — decoders, format detection, encode/decode entry points
 pub use crate::formats::{
     DecodeOptions, GifDecodeConfig, HeicDecodeConfig, ImageAvifDecodeConfig, ImageProbe,
-    JpegDecodeConfig, JxlDecodeConfig, LibwebpDecodeConfig, ResvgDecodeConfig, StandardFormat,
-    TiffDecodeConfig, ZunePngDecodeConfig, available_decoders, available_encoders,
+    JpegDecodeConfig, JxlDecodeConfig, LibwebpDecodeConfig, PngDecodeConfig, ResvgDecodeConfig,
+    StandardFormat, TiffDecodeConfig, available_decoders, available_encoders,
     decode_standard_image, decode_standard_image_with, detect_standard_format, encode_rgb_image,
     encode_rgb_image_to_vec, encode_rgb_image_to_writer, probe_standard_image,
     read_standard_image_metadata,

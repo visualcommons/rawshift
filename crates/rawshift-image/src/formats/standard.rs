@@ -417,82 +417,96 @@ fn decode_jpeg(data: &[u8], _cfg: &JpegDecodeConfig) -> RawResult<RgbImage> {
 
 // ── PNG ──────────────────────────────────────────────────────────────────────
 
+/// Builds a `gamut_png::PngDecoder` from a [`PngDecodeConfig`], applying only
+/// the guards the caller overrode (a `None` keeps gamut's default).
 #[cfg(feature = "png-decode")]
-fn decode_png(data: &[u8], cfg: &ZunePngDecodeConfig) -> RawResult<RgbImage> {
-    // Decode the PNG in its native color space (RGB, RGBA, Luma, LumaA, …)
-    // and then convert to packed RGB u16 manually.
-    let mut opts = DecoderOptions::default()
-        .png_set_strip_to_8bit(false)
-        .set_strict_mode(cfg.strict)
-        .png_set_confirm_crc(cfg.confirm_crc);
-    if let Some(w) = cfg.max_width {
-        opts = opts.set_max_width(w);
-    }
-    if let Some(h) = cfg.max_height {
-        opts = opts.set_max_height(h);
-    }
-    let cursor = ZCursor::new(data);
-    let mut decoder = zune_png::PngDecoder::new_with_options(cursor, opts);
+fn build_png_decoder(cfg: &PngDecodeConfig) -> gamut_png::PngDecoder {
+    // The spec's own dimension bound (§11.2.1): width/height are 1..=2³¹−1.
+    // Used when only one of the two dimension caps is overridden.
+    const SPEC_MAX_DIMENSION: u32 = i32::MAX as u32;
 
-    let result = decoder.decode().map_err(|e| {
+    let mut decoder = gamut_png::PngDecoder::new();
+    if cfg.max_width.is_some() || cfg.max_height.is_some() {
+        decoder = decoder.with_max_dimensions(
+            cfg.max_width.unwrap_or(SPEC_MAX_DIMENSION),
+            cfg.max_height.unwrap_or(SPEC_MAX_DIMENSION),
+        );
+    }
+    if let Some(bytes) = cfg.max_image_bytes {
+        decoder = decoder.with_max_image_bytes(bytes);
+    }
+    if let Some(bytes) = cfg.max_metadata_bytes {
+        decoder = decoder.with_max_metadata_bytes(bytes);
+    }
+    decoder
+}
+
+#[cfg(feature = "png-decode")]
+fn decode_png(data: &[u8], cfg: &PngDecodeConfig) -> RawResult<RgbImage> {
+    use gamut_png::PngImage;
+
+    // gamut-png's rich decode returns the pixels in the file's native layout
+    // (every colour type and bit depth, palettes carried alongside indices),
+    // which is then normalised to interleaved RGB u16 here: 16-bit samples
+    // pass through natively, 8-bit samples scale by 257, greyscale replicates
+    // across the channels, palettes expand, and alpha/transparency is dropped
+    // — matching every other standard decoder in this module. The typed
+    // `DecodeImage` impls are not used because they (correctly) refuse the
+    // lossy alpha drop.
+    let decoded = build_png_decoder(cfg).decode(data).map_err(|e| {
         RawError::Format(FormatError::ImageDecode {
             format: "PNG",
-            message: format!("{e:?}"),
+            message: e.to_string(),
         })
     })?;
 
-    let info = decoder.info().ok_or_else(|| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "PNG",
-            message: "could not read PNG info after decode".to_string(),
-        })
-    })?;
-
-    let w = info.width as u32;
-    let h = info.height as u32;
-
-    // Determine the output colorspace from the decoder
-    let colorspace = decoder.colorspace().unwrap_or(ColorSpace::RGB);
-    let n = colorspace.num_components();
-
-    // Convert raw samples to Vec<u16>
-    let samples_u16: Vec<u16> = match result {
-        DecodingResult::U8(px) => px.iter().map(|&v| u8_to_u16(v)).collect(),
-        DecodingResult::U16(px) => px,
-        _ => {
-            return Err(RawError::Format(FormatError::ImageDecode {
-                format: "PNG",
-                message: "unexpected pixel depth in decoded result".to_string(),
-            }));
-        }
-    };
-
-    // Convert any colorspace to packed RGB u16
-    let data_u16: Vec<u16> = match colorspace {
-        ColorSpace::RGB => samples_u16,
-        ColorSpace::RGBA => {
-            // Drop alpha channel (index 3)
-            samples_u16
-                .chunks_exact(n)
-                .flat_map(|px| [px[0], px[1], px[2]])
+    let (w, h) = (decoded.header.width, decoded.header.height);
+    let data_u16: Vec<u16> = match decoded.image {
+        PngImage::Gray8(img) => img
+            .as_samples()
+            .iter()
+            .flat_map(|&v| [u8_to_u16(v); 3])
+            .collect(),
+        PngImage::Gray16(img) => img.as_samples().iter().flat_map(|&v| [v; 3]).collect(),
+        PngImage::GrayAlpha8(img) => img
+            .as_samples()
+            .chunks_exact(2)
+            .flat_map(|px| [u8_to_u16(px[0]); 3])
+            .collect(),
+        PngImage::GrayAlpha16(img) => img
+            .as_samples()
+            .chunks_exact(2)
+            .flat_map(|px| [px[0]; 3])
+            .collect(),
+        PngImage::Rgb8(img) => img.as_samples().iter().map(|&v| u8_to_u16(v)).collect(),
+        PngImage::Rgb16(img) => img.into_samples(),
+        PngImage::Rgba8(img) => img
+            .as_samples()
+            .chunks_exact(4)
+            .flat_map(|px| [u8_to_u16(px[0]), u8_to_u16(px[1]), u8_to_u16(px[2])])
+            .collect(),
+        PngImage::Rgba16(img) => img
+            .as_samples()
+            .chunks_exact(4)
+            .flat_map(|px| [px[0], px[1], px[2]])
+            .collect(),
+        PngImage::Indexed8(img) => {
+            // The decoder validated every index against the palette, so the
+            // lookup cannot fail; a defensive default keeps this panic-free.
+            // Per-entry tRNS alpha is dropped like every other alpha channel.
+            let palette = decoded.palette.ok_or_else(|| {
+                RawError::Format(FormatError::ImageDecode {
+                    format: "PNG",
+                    message: "indexed PNG without a palette".to_string(),
+                })
+            })?;
+            img.as_samples()
+                .iter()
+                .flat_map(|&idx| {
+                    let [r, g, b] = palette.rgb(idx).unwrap_or_default();
+                    [u8_to_u16(r), u8_to_u16(g), u8_to_u16(b)]
+                })
                 .collect()
-        }
-        ColorSpace::Luma => {
-            // Expand grayscale to RGB
-            samples_u16.iter().flat_map(|&v| [v, v, v]).collect()
-        }
-        ColorSpace::LumaA => {
-            // Expand grayscale+alpha to RGB (drop alpha)
-            samples_u16
-                .chunks_exact(n)
-                .flat_map(|px| [px[0], px[0], px[0]])
-                .collect()
-        }
-        _ => {
-            return Err(RawError::Format(FormatError::ImageDecode {
-                format: "PNG",
-                message: format!("unsupported PNG colorspace: {colorspace:?}"),
-            }));
         }
     };
 
@@ -817,20 +831,28 @@ fn decode_ppm(data: &[u8], _cfg: &ZunePpmDecodeConfig) -> RawResult<RgbImage> {
 
 // ── Decoder implementation selection ──────────────────────────────────────────
 
-/// Per-implementation configuration for the `zune-png` PNG decoder.
+/// Per-implementation configuration for the `gamut-png` PNG decoder.
+///
+/// Every knob is a hostile-input resource guard; `None` keeps gamut's default.
+/// CRC verification of critical chunks and spec conformance are always on —
+/// they are not configurable (ancillary chunks with bad CRCs are skipped per
+/// PNG §13.1, never errors).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ZunePngDecodeConfig {
-    /// Reject images wider than this, in pixels. `None` keeps the decoder's
-    /// built-in limit.
-    pub max_width: Option<usize>,
-    /// Reject images taller than this, in pixels. `None` keeps the decoder's
-    /// built-in limit.
-    pub max_height: Option<usize>,
-    /// Verify per-chunk CRCs while decoding. Default: `false`.
-    pub confirm_crc: bool,
-    /// Reject streams that deviate from the PNG specification. Default: `false`.
-    pub strict: bool,
+pub struct PngDecodeConfig {
+    /// Reject images wider than this, in pixels, before any allocation.
+    /// `None` keeps the PNG spec maximum (2³¹ − 1).
+    pub max_width: Option<u32>,
+    /// Reject images taller than this, in pixels, before any allocation.
+    /// `None` keeps the PNG spec maximum (2³¹ − 1).
+    pub max_height: Option<u32>,
+    /// Cap on the decoded sample buffer, in bytes — the guard that bounds
+    /// peak memory against zlib bombs. `None` keeps gamut's default (64 MiB).
+    pub max_image_bytes: Option<usize>,
+    /// Cumulative cap on inflated compressed-metadata payloads (iCCP, zTXt,
+    /// compressed iTXt). Payloads past the budget are skipped, not errors.
+    /// `None` keeps gamut's default (16 MiB).
+    pub max_metadata_bytes: Option<usize>,
 }
 
 /// Per-implementation configuration for the `resvg` SVG renderer.
@@ -893,9 +915,10 @@ pub enum DecodeOptions {
     /// CMYK/YCCK).
     #[cfg(feature = "jpeg-decode")]
     Jpeg(JpegDecodeConfig),
-    /// PNG via `zune-png`.
+    /// PNG via `gamut-png` (every colour type and bit depth, incl. Adam7
+    /// interlace; alpha/transparency is dropped, palettes expand to RGB).
     #[cfg(feature = "png-decode")]
-    PngZune(ZunePngDecodeConfig),
+    Png(PngDecodeConfig),
     /// WebP via `libwebp`.
     #[cfg(feature = "webp-decode")]
     WebpLibwebp(LibwebpDecodeConfig),
@@ -930,7 +953,7 @@ impl DecodeOptions {
             #[cfg(feature = "jpeg-decode")]
             DecodeOptions::Jpeg(_) => StandardFormat::Jpeg,
             #[cfg(feature = "png-decode")]
-            DecodeOptions::PngZune(_) => StandardFormat::Png,
+            DecodeOptions::Png(_) => StandardFormat::Png,
             #[cfg(feature = "webp-decode")]
             DecodeOptions::WebpLibwebp(_) => StandardFormat::WebP,
             #[cfg(feature = "jxl-decode")]
@@ -960,7 +983,7 @@ impl DecodeOptions {
             #[cfg(feature = "jpeg-decode")]
             DecodeOptions::Jpeg(_) => CodecId::new("jpeg/gamut"),
             #[cfg(feature = "png-decode")]
-            DecodeOptions::PngZune(_) => CodecId::new("png/zune"),
+            DecodeOptions::Png(_) => CodecId::new("png/gamut"),
             #[cfg(feature = "webp-decode")]
             DecodeOptions::WebpLibwebp(_) => CodecId::new("webp/libwebp"),
             #[cfg(feature = "jxl-decode")]
@@ -991,7 +1014,7 @@ impl DecodeOptions {
             #[cfg(feature = "jpeg-decode")]
             StandardFormat::Jpeg => Some(DecodeOptions::Jpeg(JpegDecodeConfig::default())),
             #[cfg(feature = "png-decode")]
-            StandardFormat::Png => Some(DecodeOptions::PngZune(ZunePngDecodeConfig::default())),
+            StandardFormat::Png => Some(DecodeOptions::Png(PngDecodeConfig::default())),
             #[cfg(feature = "webp-decode")]
             StandardFormat::WebP => {
                 Some(DecodeOptions::WebpLibwebp(LibwebpDecodeConfig::default()))
@@ -1041,7 +1064,7 @@ pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<R
         #[cfg(feature = "jpeg-decode")]
         StandardFormat::Jpeg => decode_jpeg(data, &JpegDecodeConfig::default()),
         #[cfg(feature = "png-decode")]
-        StandardFormat::Png => decode_png(data, &ZunePngDecodeConfig::default()),
+        StandardFormat::Png => decode_png(data, &PngDecodeConfig::default()),
         #[cfg(feature = "webp-decode")]
         StandardFormat::WebP => decode_webp(data),
         #[cfg(feature = "jxl-decode")]
@@ -1078,7 +1101,7 @@ pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawRe
         #[cfg(feature = "jpeg-decode")]
         DecodeOptions::Jpeg(cfg) => decode_jpeg(data, cfg),
         #[cfg(feature = "png-decode")]
-        DecodeOptions::PngZune(cfg) => decode_png(data, cfg),
+        DecodeOptions::Png(cfg) => decode_png(data, cfg),
         #[cfg(feature = "webp-decode")]
         DecodeOptions::WebpLibwebp(_cfg) => decode_webp(data),
         #[cfg(feature = "jxl-decode")]
@@ -1519,7 +1542,7 @@ mod probe_tests {
 /// | TIFF   | IFD0 EXIF tags |
 /// | WebP   | EXIF chunk |
 /// | AVIF   | HEIF/ISOBMFF Exif item |
-/// | PNG    | eXIf chunk |
+/// | PNG    | eXIf + iCCP + XMP iTXt chunks (requires `png`) |
 /// | HEIC   | HEIF Exif + ICC + XMP items (requires the `heic` feature) |
 /// | GIF / JXL / SVG / APV | returns empty metadata |
 /// When the `exif` feature is disabled the crate has no EXIF parser, so this
@@ -1545,14 +1568,19 @@ pub fn read_standard_image_metadata(
         return read_jpeg_metadata(data);
     }
 
+    // PNG goes through gamut-png's rich decode so that ICC and XMP are
+    // extracted alongside EXIF.
+    #[cfg(any(feature = "png-decode", feature = "png-encode"))]
+    if format == StandardFormat::Png {
+        return read_png_metadata(data);
+    }
+
     let container = match format {
         StandardFormat::Tiff => ExifContainer::Tiff,
         StandardFormat::WebP => ExifContainer::WebP,
         StandardFormat::Avif => ExifContainer::Avif,
-        StandardFormat::Png => ExifContainer::Png,
-        // Formats without an EXIF extraction path (GIF, SVG, JXL, …), and
-        // JPEG when neither `jpeg-decode` nor `jpeg-encode` compiled the
-        // gamut-jpeg metadata reader in.
+        // Formats without an EXIF extraction path (GIF, SVG, JXL, …), plus
+        // JPEG/PNG when no feature compiled the gamut metadata reader in.
         _ => return crate::core::metadata::ImageMetadata::default(),
     };
 
@@ -1579,6 +1607,32 @@ fn read_jpeg_metadata(data: &[u8]) -> crate::core::metadata::ImageMetadata {
     };
     md.icc_profile = meta.icc;
     md.xmp = meta.xmp;
+    md
+}
+
+/// Extract EXIF / ICC / XMP from a PNG's ancillary chunks via `gamut-png`.
+///
+/// gamut-png exposes ancillary metadata only on its rich decode
+/// (`PngDecoder::decode`), so this decodes the pixels as a side effect — there
+/// is no header/metadata-only entry point upstream yet. The decoder's default
+/// resource guards (64 MiB of samples, 16 MiB of inflated metadata) bound the
+/// cost on hostile input.
+///
+/// Returns default (empty) metadata when the stream is malformed or carries
+/// none of the three payloads.
+#[cfg(all(feature = "exif", any(feature = "png-decode", feature = "png-encode")))]
+fn read_png_metadata(data: &[u8]) -> crate::core::metadata::ImageMetadata {
+    use crate::metadata::exif::ExifParser;
+
+    let Ok(decoded) = gamut_png::PngDecoder::new().decode(data) else {
+        return crate::core::metadata::ImageMetadata::default();
+    };
+    let mut md = match &decoded.exif {
+        Some(blob) => ExifParser::parse_exif_blob(blob),
+        None => crate::core::metadata::ImageMetadata::default(),
+    };
+    md.icc_profile = decoded.icc_profile.map(|icc| icc.profile);
+    md.xmp = decoded.xmp;
     md
 }
 
@@ -1765,30 +1819,93 @@ mod tests {
 
     // ── PNG roundtrip ─────────────────────────────────────────────────────
 
+    /// Encode `pixels` as PNG through gamut-png with the given typed layout.
+    #[cfg(all(feature = "png-decode", feature = "png-encode"))]
+    fn encode_png_as<P>(pixels: &[P::Sample], w: u32, h: u32) -> Vec<u8>
+    where
+        P: gamut_core::Pixel,
+        gamut_png::PngEncoder: gamut_core::EncodeImage<P>,
+    {
+        use gamut_core::{Dimensions as GDimensions, EncodeImage, ImageRef};
+        let img = ImageRef::<P>::new(pixels, GDimensions::new(w, h).unwrap()).expect("image shape");
+        let mut encoded = Vec::new();
+        gamut_png::PngEncoder::new()
+            .encode_image(img, &mut encoded)
+            .expect("PNG encode failed");
+        encoded
+    }
+
+    #[cfg(all(feature = "png-decode", feature = "png-encode"))]
     #[test]
     fn png_roundtrip_dimensions() {
         // Encode a 4x4 8-bit RGB image to PNG, then decode it and check
         // dimensions and that data contains 16-bit samples.
-        const W: usize = 4;
-        const H: usize = 4;
-        let pixels_u8: Vec<u8> = (0..(W * H * 3)).map(|i| (i * 13 % 256) as u8).collect();
-
-        let opts = zune_core::options::EncoderOptions::default()
-            .set_width(W)
-            .set_height(H)
-            .set_colorspace(ColorSpace::RGB);
-        let mut encoded = Vec::new();
-        let mut encoder = zune_png::PngEncoder::new(&pixels_u8, opts);
-        encoder.encode(&mut encoded).expect("PNG encode failed");
+        const W: u32 = 4;
+        const H: u32 = 4;
+        let pixels_u8: Vec<u8> = (0..(W * H * 3) as usize)
+            .map(|i| (i * 13 % 256) as u8)
+            .collect();
+        let encoded = encode_png_as::<gamut_core::Rgb8>(&pixels_u8, W, H);
 
         let decoded =
             decode_standard_image(&encoded, StandardFormat::Png).expect("PNG decode failed");
 
-        assert_eq!(decoded.width(), W as u32);
-        assert_eq!(decoded.height(), H as u32);
-        assert_eq!(decoded.data().len(), W * H * 3);
+        assert_eq!(decoded.width(), W);
+        assert_eq!(decoded.height(), H);
+        assert_eq!(decoded.data().len(), (W * H * 3) as usize);
         // Each u8 value should have been scaled to u16
         assert_eq!(decoded.data()[0], u8_to_u16(pixels_u8[0]));
+    }
+
+    #[cfg(all(feature = "png-decode", feature = "png-encode"))]
+    #[test]
+    fn png_16bit_samples_pass_through_natively() {
+        // 16-bit RGB sources must decode sample-exact (no 8-bit round trip).
+        let pixels: Vec<u16> = vec![0, 1, 257, 300, 32768, 65535, 4096, 512, 9];
+        let encoded = encode_png_as::<gamut_core::Rgb16>(&pixels, 3, 1);
+        let decoded = decode_standard_image(&encoded, StandardFormat::Png).unwrap();
+        assert_eq!(decoded.data(), pixels.as_slice());
+    }
+
+    #[cfg(all(feature = "png-decode", feature = "png-encode"))]
+    #[test]
+    fn png_rgba_drops_alpha() {
+        let pixels: Vec<u8> = vec![10, 20, 30, 0, 40, 50, 60, 128];
+        let encoded = encode_png_as::<gamut_core::Rgba8>(&pixels, 2, 1);
+        let decoded = decode_standard_image(&encoded, StandardFormat::Png).unwrap();
+        let expected: Vec<u16> = [10u8, 20, 30, 40, 50, 60]
+            .iter()
+            .map(|&v| u8_to_u16(v))
+            .collect();
+        assert_eq!(decoded.data(), expected.as_slice());
+    }
+
+    #[cfg(all(feature = "png-decode", feature = "png-encode"))]
+    #[test]
+    fn png_grayscale_expands_to_rgb() {
+        let pixels: Vec<u8> = vec![0, 7, 255, 128];
+        let encoded = encode_png_as::<gamut_core::Gray8>(&pixels, 2, 2);
+        let decoded = decode_standard_image(&encoded, StandardFormat::Png).unwrap();
+        let expected: Vec<u16> = pixels.iter().flat_map(|&v| [u8_to_u16(v); 3]).collect();
+        assert_eq!(decoded.data(), expected.as_slice());
+    }
+
+    #[cfg(all(feature = "png-decode", feature = "png-encode"))]
+    #[test]
+    fn png_decode_config_dimension_guard_rejects() {
+        // A 1x1 RGB PNG against a 0-width cap must refuse before decoding.
+        let png = encode_png_as::<gamut_core::Rgb8>(&[1, 2, 3], 1, 1);
+        let tight = PngDecodeConfig {
+            max_width: Some(0),
+            ..PngDecodeConfig::default()
+        };
+        assert!(decode_standard_image_with(&png, &DecodeOptions::Png(tight)).is_err());
+        let roomy = PngDecodeConfig {
+            max_width: Some(1),
+            max_height: Some(1),
+            ..PngDecodeConfig::default()
+        };
+        assert!(decode_standard_image_with(&png, &DecodeOptions::Png(roomy)).is_ok());
     }
 
     // ── DecodeOptions / decode_standard_image_with ────────────────────────
@@ -1804,37 +1921,32 @@ mod tests {
     fn decode_options_default_for_roundtrips_format() {
         let opts = DecodeOptions::default_for(StandardFormat::Png).expect("png decoder");
         assert_eq!(opts.format(), StandardFormat::Png);
-        assert!(matches!(opts, DecodeOptions::PngZune(_)));
+        assert!(matches!(opts, DecodeOptions::Png(_)));
     }
 
-    #[cfg(feature = "png-decode")]
+    #[cfg(all(feature = "png-decode", feature = "png-encode"))]
     #[test]
     fn decode_standard_image_with_selects_png_backend() {
-        const W: usize = 4;
-        const H: usize = 4;
-        let pixels_u8: Vec<u8> = (0..(W * H * 3)).map(|i| (i * 13 % 256) as u8).collect();
-
-        let opts = zune_core::options::EncoderOptions::default()
-            .set_width(W)
-            .set_height(H)
-            .set_colorspace(ColorSpace::RGB);
-        let mut encoded = Vec::new();
-        let mut encoder = zune_png::PngEncoder::new(&pixels_u8, opts);
-        encoder.encode(&mut encoded).expect("PNG encode failed");
+        const W: u32 = 4;
+        const H: u32 = 4;
+        let pixels_u8: Vec<u8> = (0..(W * H * 3) as usize)
+            .map(|i| (i * 13 % 256) as u8)
+            .collect();
+        let encoded = encode_png_as::<gamut_core::Rgb8>(&pixels_u8, W, H);
 
         // Decode through the explicit-backend API with a non-default config.
-        let cfg = ZunePngDecodeConfig {
-            confirm_crc: true,
-            ..ZunePngDecodeConfig::default()
+        let cfg = PngDecodeConfig {
+            max_image_bytes: Some(1 << 20),
+            ..PngDecodeConfig::default()
         };
-        let via_with = decode_standard_image_with(&encoded, &DecodeOptions::PngZune(cfg))
+        let via_with = decode_standard_image_with(&encoded, &DecodeOptions::Png(cfg))
             .expect("decode_standard_image_with failed");
         // The default-path API must produce an identical result.
         let via_default =
             decode_standard_image(&encoded, StandardFormat::Png).expect("PNG decode failed");
 
-        assert_eq!(via_with.width(), W as u32);
-        assert_eq!(via_with.height(), H as u32);
+        assert_eq!(via_with.width(), W);
+        assert_eq!(via_with.height(), H);
         assert_eq!(via_with.data(), via_default.data());
     }
 

@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- *(image)* **breaking**: PNG decode migrated to gamut-png (pure Rust; every
+  colour type and bit depth, incl. Adam7 interlace and 16-bit sources decoded
+  natively). `DecodeOptions::PngZune(ZunePngDecodeConfig)` becomes
+  `DecodeOptions::Png(PngDecodeConfig)` (codec id `png/zune` → `png/gamut`)
+  exposing gamut's hostile-input resource guards
+  (`max_width`/`max_height`/`max_image_bytes`/`max_metadata_bytes`); the old
+  `confirm_crc`/`strict` knobs are gone — critical-chunk CRCs and spec
+  conformance are now always enforced (ancillary chunks with bad CRCs are
+  skipped per spec, never errors). PNG metadata reads now also surface ICC
+  (iCCP) and XMP (iTXt) alongside EXIF via `gamut_png::PngDecoder::decode`,
+  and require the `png-decode`/`png-encode` feature (previously the bare
+  `exif` feature sufficed for the eXIf scan).
 - *(image)* **breaking**: JPEG migrated to gamut-jpeg (pure Rust, baseline +
   progressive both ways). Decode replaces `zune-jpeg` (`DecodeOptions::Jpeg`,
   codec id `jpeg/gamut`; CMYK/YCCK conversion is bit-identical to the previous
@@ -30,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- *(image)* **breaking**: the `png-decode-zune` feature and the `zune-png`
+  dependency; `ExifContainer::Png` and the hand-rolled PNG eXIf chunk scanner
+  (`zune-core` stays: rawshift's PPM decode path uses its codec primitives,
+  and `zune-ppm` is a permanent exception to the gamut migration).
 - *(image)* **breaking**: the `jpeg-decode-zune`, `jpeg-encode-jpeg-enc`,
   `jpeg-encode-jpegli`, `jpeg-encode-jpegli-vendored`, and `container-embed`
   features; the `zune-jpeg`, `jpeg-encoder`, and `img-parts` dependencies; the
