@@ -42,6 +42,9 @@ hw              = ["rawshift-image?/hw"]
 hw-videotoolbox = ["rawshift-image?/hw-videotoolbox"]
 hw-vaapi        = ["rawshift-image?/hw-vaapi"]
 hw-mediacodec   = ["rawshift-image?/hw-mediacodec"]
-# Everything: every image format, serde, and hardware decode. v1 is image-only
-# — there is no `video` feature until `rawshift-video` has an implementation.
-full = ["image", "rawshift-image/full", "serde"]
+# Everything: every image format, serde, and hardware decode (`hw` is listed
+# explicitly so the facade's own flag is active, matching the design contract
+# `full` = all formats + serde + experimental + `hw`; `rawshift-image/full`
+# already enables it transitively). v1 is image-only — there is no `video`
+# feature until `rawshift-video` has an implementation.
+full = ["image", "rawshift-image/full", "serde", "hw"]

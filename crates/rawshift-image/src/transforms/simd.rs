@@ -29,7 +29,8 @@
 /// # Panics
 ///
 /// Does not panic.  Any trailing samples that do not form a complete RGB
-/// triplet are silently ignored (identical behaviour to [`chunks_exact`]).
+/// triplet are silently ignored (identical behaviour to
+/// [`chunks_exact`](slice::chunks_exact)).
 ///
 /// # Performance
 ///

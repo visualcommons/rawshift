@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Must match rust-toolchain.toml exactly ("1.90.0" not "1.90"): rustup
+      # Must match rust-toolchain.toml exactly ("1.92.0" not "1.92"): rustup
       # treats the two as different toolchain entries, so components installed
-      # under "1.90" are invisible when cargo activates "1.90.0" from the file.
+      # under "1.92" are invisible when cargo activates "1.92.0" from the file.
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.92.0"
@@ -132,6 +132,102 @@ jobs:
             exit 1
           fi
           echo "OK: facade is free of rawshift-video"
+
+  # ── Compile boundaries (issue #34) ──────────────────────────────────────────
+  # The `hw-*` backend pins are *verified* feature flags: rawshift-hwdec holds
+  # a `compile_error!` for each explicit backend on any target its platform
+  # API does not exist on (docs/SUPPORT.md is the permanent matrix). This job
+  # proves the boundary in both directions: every invalid feature x target
+  # combination MUST fail to compile with that backend's `compile_error!`
+  # text, and the valid combinations (an explicit pin on its native target;
+  # the portable `hw` anywhere — including no-API targets, where it compiles
+  # the no-backend stub) MUST succeed. `cargo check --target` only needs the
+  # target's std, which `rustup target add` ships, and the `compile_error!`
+  # fires long before linking — so Apple and musl targets check fine from a
+  # Linux host.
+  compile-boundaries:
+    name: Compile boundaries (feature x target)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.92.0"
+          targets: aarch64-apple-darwin,x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - name: Invalid combos must fail with the compile_error text
+        run: |
+          check_fails() {
+            local features="$1" target="$2" expect="$3"
+            echo "::group::EXPECT FAIL: --features ${features} --target ${target}"
+            if out=$(cargo check -p rawshift-image --no-default-features \
+                       --features "${features}" --target "${target}" 2>&1); then
+              echo "${out}"
+              echo "::error::--features ${features} --target ${target} compiled, but must fail"
+              exit 1
+            fi
+            if ! grep -qF "${expect}" <<<"${out}"; then
+              echo "${out}"
+              echo "::error::--features ${features} --target ${target} failed, but not with the expected compile_error (\"${expect}\")"
+              exit 1
+            fi
+            echo "OK: failed with the expected compile_error"
+            echo "::endgroup::"
+          }
+          check_fails hw-vaapi        aarch64-apple-darwin      "requires a linux-gnu target"
+          check_fails hw-vaapi        x86_64-unknown-linux-musl "requires a linux-gnu target"
+          check_fails hw-videotoolbox x86_64-unknown-linux-gnu  "requires an Apple target"
+          check_fails hw-mediacodec   x86_64-unknown-linux-gnu  "requires an Android target"
+      - name: Valid combos must succeed
+        run: |
+          # Explicit pin on its native target.
+          cargo check -p rawshift-image --no-default-features --features hw-vaapi --target x86_64-unknown-linux-gnu
+          # The portable `hw` is valid everywhere: it selects the native
+          # backend where one exists and compiles the no-backend stub (with a
+          # build-script warning) where none does (musl).
+          cargo check -p rawshift-image --no-default-features --features hw --target aarch64-apple-darwin
+          cargo check -p rawshift-image --no-default-features --features hw --target x86_64-unknown-linux-musl
+
+  # ── `full` on tier-1 targets (issue #34) ────────────────────────────────────
+  # docs/SUPPORT.md tier 1: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu,
+  # aarch64-apple-darwin, aarch64-apple-ios, aarch64-linux-android, and
+  # x86_64-pc-windows-msvc. The four with native GitHub runners get an
+  # explicit `--features full` check here (the test matrix only exercises
+  # default features at the OS level). aarch64-apple-ios and
+  # aarch64-linux-android are excluded: `full` includes `jxl-encode`
+  # (cmake-built libjxl via gamut-jxl-sys) and `webp` (libwebp, C), and hosted
+  # runners have no cross C/C++ toolchain for those targets; their
+  # boundary-relevant half (the hw pins) is covered by compile-boundaries.
+  full-check:
+    name: Check (full)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.92.0"
+      - uses: Swatinem/rust-cache@v2
+      # `full` pulls `jxl-encode` (gamut-jxl-sys cmake-builds libjxl; clang for
+      # its bindings). The macOS and Windows runners ship cmake + LLVM already.
+      - name: Install system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake clang libclang-dev
+      - run: cargo check -p rawshift-image --features full
+      - run: cargo check -p rawshift --features full
 
   coverage-report:
     name: Coverage Report

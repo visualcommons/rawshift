@@ -6,8 +6,9 @@ upstream-first for every gap (see the policy in [AGENTS.md](../AGENTS.md)),
 hardware codestream decode for HEVC/AV1, and no video. **v1 is the clean
 final state: 0.x source compatibility is a non-goal.**
 
-gamut is consumed as a git dependency pinned to commit
-`295c89248b9130873fe40c99529a99769c590f98`.
+gamut is consumed as a git dependency pinned to an exact commit hash in the
+workspace `Cargo.toml` (see README "Bumping the gamut pin" for the
+procedure); this document does not restate the hash.
 
 ## Workspace layout
 
@@ -104,9 +105,9 @@ BitDepth (Sixteen where supported) }`.
 | --- | --- | --- | --- |
 | JPEG | ✅ | ✅ | gamut JPEG (upstream #28) |
 | PNG | ✅ | ✅ | gamut-png (decoder upstream) |
-| WebP | ✅ | ✅ | gamut-webp |
+| WebP | ✅ | ✅ | libwebp (`libwebp-sys`) — gamut-webp migration blocked upstream (gamut#302, tracked by rawshift#24) |
 | JXL | ✅ (pure Rust) | ✅ (libjxl via gamut-jxl-sys) | gamut-jxl |
-| TIFF | ✅ | ✅ (new) | gamut-tiff |
+| TIFF | ✅ | — | `tiff` crate — gamut-tiff migration (incl. new encode) blocked upstream (gamut#299/#300, tracked by rawshift#22) |
 | AVIF | ✅ hardware | ✅ (Rgb8 lossless now; 10/12-bit upstream) | gamut-avif container + rawshift-hwdec AV1 |
 | HEIC | ✅ hardware | — | gamut-heic container + rawshift-hwdec HEVC |
 | DNG | ✅ | ✅ | gamut-dng |
@@ -116,7 +117,9 @@ BitDepth (Sixteen where supported) }`.
 
 ## Feature flags & compile boundaries
 
-Defaults: `jpeg, png, webp, jxl, tiff, gif, ppm`. Formats compose
+Defaults: `jpeg, png, webp, jxl-decode, gif, tiff, ppm` — `jxl-encode` is
+excluded from defaults because it wraps the reference libjxl (cmake + C++
+toolchain via gamut-jxl-sys); it is part of `jxl` and `full`. Formats compose
 `<format>-decode`/`<format>-encode`. Bundles: `raw-stabilizing` (arw, dng),
 `raw-incomplete` (cr2, cr3, crw, nef, raf), `experimental`, `serde`, and
 `full` = all formats + serde + experimental + `hw`.
@@ -133,9 +136,16 @@ Hardware backends are **verified feature flags**:
   (valid; pixel decode returns `HwDecoderUnavailable`).
 
 CI compiles the invalid combinations expecting failure and `full` on every
-tier-1 target expecting success. Deleted feature axes: all per-implementation
-flags, `zune-runtime`, `exif`, `container-embed`, `tiff-parser`,
-`heic-vendored`, every `*-vendored` linking flag.
+tier-1 target expecting success. Deleted feature axes: the per-implementation
+flags of every gamut-backed format, `container-embed`, `tiff-parser`
+(replaced by `ifd-parser` over gamut-ifd), `heic-vendored`, every
+`*-vendored` linking flag. Retained (delivered reality, post-#34 audit):
+six implementation aliases — `gif-decode-gif` / `svg-decode-resvg` /
+`ppm-decode-zune` (permanent exceptions per AGENTS.md) and
+`tiff-decode-tiff` / `webp-decode-libwebp` / `webp-encode-libwebp` (blocked
+migrations: gamut#299/#300 via rawshift#22, gamut#302 via rawshift#24) —
+plus the `zune-runtime` and `exif` infrastructure flags they and the
+gamut metadata stack hang off.
 
 ## Hardware decode (rawshift-hwdec)
 
@@ -174,11 +184,16 @@ the current parser's guarantees.
 
 ## Dependencies deleted
 
-zune-jpeg, zune-png, zune-jpegxl, zune-core, jpeg-encoder, vendored jpegli
-(+submodule/cc/cmake/bindgen), libwebp-sys, jxl-oxide, direct libjxl glue,
-ravif, avif-serialize, libaom-sys, image, libheif-rs, tiff, little_exif,
+zune-jpeg, zune-png, zune-jpegxl, jpeg-encoder, vendored jpegli
+(+submodule/cc/cmake/bindgen), jxl-oxide, direct libjxl glue,
+ravif, avif-serialize, libaom-sys, image, libheif-rs, little_exif,
 img-parts, binrw. `build.rs` shrinks to cfg aliases + feature/target
 verification.
+
+Still present, pending blocked upstream migrations (post-#34 audit):
+`libwebp-sys` (gamut-webp — gamut#302 via rawshift#24) and `tiff`
+(gamut-tiff — gamut#299/#300 via rawshift#22). Permanent exceptions that
+stay: `gif`, `resvg`, `zune-ppm` (+ its `zune-core` runtime).
 
 ## Release
 

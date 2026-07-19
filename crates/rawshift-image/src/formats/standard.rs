@@ -176,8 +176,8 @@ impl std::fmt::Display for StandardFormat {
 /// Detect a standard image format from the first bytes of image data.
 ///
 /// Note: TIFF-based RAW formats (DNG, ARW, NEF, CR2) share the TIFF magic
-/// bytes and will be detected as `StandardFormat::Tiff`. Use [`RawFile::open()`]
-/// to distinguish RAW formats first.
+/// bytes and will be detected as `StandardFormat::Tiff`. Use `RawFile::open()`
+/// (available with any RAW format feature) to distinguish RAW formats first.
 ///
 /// Returns `None` if the format is not recognised or if `data` is too short.
 pub fn detect_standard_format(data: &[u8]) -> Option<StandardFormat> {
@@ -1034,8 +1034,8 @@ impl DecodeOptions {
 /// order. 8-bit source images are scaled to 16-bit by multiplying by 257.
 ///
 /// # Errors
-/// Returns [`RawError::ImageDecodeError`] on decode failure, or
-/// [`RawError::UnsupportedFormat`] for formats without a decoder.
+/// Returns the failing decoder's error (e.g. [`RawError::Format`]) on decode
+/// failure, or [`RawError::Unsupported`] for formats without a decoder.
 pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<RgbImage> {
     let decoded: RawResult<RgbImage> = match format {
         #[cfg(feature = "gif-decode")]
@@ -1510,7 +1510,8 @@ mod probe_tests {
 /// Extract EXIF metadata from a standard image without decoding pixel data.
 ///
 /// Reads embedded EXIF from image file bytes and maps the tags to the unified
-/// [`ImageMetadata`] type.  Returns a default (empty) [`ImageMetadata`] when
+/// [`ImageMetadata`](crate::core::metadata::ImageMetadata) type.  Returns a
+/// default (empty) `ImageMetadata` when
 /// the format carries no EXIF or when the format is not supported for metadata
 /// extraction (e.g. GIF, SVG, APV).
 ///
