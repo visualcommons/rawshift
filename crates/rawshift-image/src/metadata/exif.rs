@@ -621,8 +621,12 @@ fn exif_value_to_metadata(value: &Value) -> crate::core::metadata::MetadataValue
                 .collect(),
         ),
         // BigTIFF 64-bit types: these `gamut_ifd::Value` variants exist only
-        // when the RAW decoders' `ifd-parser` feature enables gamut-ifd's
-        // `bigtiff` (EXIF streams themselves are classic TIFF).
+        // when *something* in the build graph enables gamut-ifd's `bigtiff`
+        // (the RAW decoders' `ifd-parser` feature, or the dev-dependency used
+        // by integration tests — Cargo unifies features across the graph, so
+        // a cfg on our own feature cannot track their presence). EXIF streams
+        // themselves are classic TIFF, so these arms are effectively dead
+        // here; they exist for exhaustiveness under every feature unification.
         #[cfg(feature = "ifd-parser")]
         Value::Long8(v) | Value::Ifd8(v) => {
             collapse(v.iter().map(|&l| MetadataValue::U64(l)).collect())
@@ -630,8 +634,14 @@ fn exif_value_to_metadata(value: &Value) -> crate::core::metadata::MetadataValue
         #[cfg(feature = "ifd-parser")]
         Value::SLong8(v) => collapse(v.iter().map(|&l| MetadataValue::I64(l)).collect()),
         // An entry whose field type is unrecognised: keep the verbatim
-        // value/offset word so nothing is silently dropped.
-        Value::Unknown(u) => MetadataValue::Bytes(u.word().to_vec()),
+        // value/offset word so nothing is silently dropped. The wildcard also
+        // absorbs the bigtiff variants when they exist but `ifd-parser` is off
+        // (see above) — without it, that feature unification fails to compile.
+        #[allow(unreachable_patterns)]
+        other => match other {
+            Value::Unknown(u) => MetadataValue::Bytes(u.word().to_vec()),
+            _ => MetadataValue::Bytes(Vec::new()),
+        },
     }
 }
 

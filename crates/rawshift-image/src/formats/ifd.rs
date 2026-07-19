@@ -33,6 +33,7 @@ use crate::error::{ParseError, RawError, RawResult};
 /// Sony SR2 documentation. Names follow the legacy `TiffTag` variants.
 pub(crate) mod tags {
     // ── Baseline TIFF (TIFF 6.0 §8) ──────────────────────────────────────────
+    pub const NEW_SUBFILE_TYPE: u16 = 0x00FE;
     pub const IMAGE_WIDTH: u16 = 0x0100;
     pub const IMAGE_LENGTH: u16 = 0x0101;
     pub const BITS_PER_SAMPLE: u16 = 0x0102;
@@ -97,6 +98,12 @@ pub(crate) mod tags {
     pub const WHITE_LEVEL: u16 = 0xC61D;
     pub const DEFAULT_CROP_ORIGIN: u16 = 0xC61F;
     pub const DEFAULT_CROP_SIZE: u16 = 0xC620;
+    /// DNG 1.2 `ProfileName` (read from gamut-dng's RawTag extras).
+    pub const PROFILE_NAME: u16 = 0xC6F8;
+    /// DNG 1.2 `ProfileToneCurve` (read from gamut-dng's RawTag extras).
+    pub const PROFILE_TONE_CURVE: u16 = 0xC6FC;
+    /// DNG 1.3 `NoiseProfile` (read from gamut-dng's RawTag extras).
+    pub const NOISE_PROFILE: u16 = 0xC761;
 
     // ── Sony SR2 private tags (community-documented) ─────────────────────────
     /// SR2 private sub-IFD pointer in IFD0 (also the XMP tag id in plain TIFF;

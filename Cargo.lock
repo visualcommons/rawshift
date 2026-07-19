@@ -257,30 +257,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "binrw"
-version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d53195f985e88ab94d1cc87e80049dd2929fd39e4a772c5ae96a7e5c4aad3642"
-dependencies = [
- "array-init",
- "binrw_derive",
- "bytemuck",
-]
-
-[[package]]
-name = "binrw_derive"
-version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5910da05ee556b789032c8ff5a61fb99239580aa3fd0bfaa8f4d094b2aee00ad"
-dependencies = [
- "either",
- "owo-colors",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -817,6 +793,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "795cbfc56d419a7ce47ccbb7504dd9a5b7c484c083c356e797de08bd988d9629"
 
 [[package]]
+name = "gamut-bitstream"
+version = "0.2.2"
+source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+dependencies = [
+ "gamut-core",
+]
+
+[[package]]
+name = "gamut-codec-abi"
+version = "0.1.0"
+source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+
+[[package]]
 name = "gamut-color"
 version = "1.1.0"
 source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
@@ -830,6 +819,18 @@ version = "2.0.0"
 source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
 dependencies = [
  "thiserror",
+]
+
+[[package]]
+name = "gamut-dng"
+version = "1.0.0"
+source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+dependencies = [
+ "gamut-bitstream",
+ "gamut-core",
+ "gamut-ifd",
+ "gamut-jxl",
+ "miniz_oxide",
 ]
 
 [[package]]
@@ -868,6 +869,16 @@ dependencies = [
  "gamut-core",
  "gamut-xmp",
  "thiserror",
+]
+
+[[package]]
+name = "gamut-jxl"
+version = "0.3.0"
+source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+dependencies = [
+ "gamut-codec-abi",
+ "gamut-core",
+ "jxl",
 ]
 
 [[package]]
@@ -1119,6 +1130,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "jxl"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96d1c706ad4b79469f7e713886c1d62b1cef365f38978c5e78d6e44258b18b99"
+dependencies = [
+ "array-init",
+ "byteorder",
+ "jxl_macros",
+ "jxl_simd",
+ "jxl_transforms",
+ "num-derive",
+ "num-traits",
+ "thiserror",
+]
+
+[[package]]
 name = "jxl-bitstream"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1294,6 +1321,33 @@ dependencies = [
  "jxl-oxide-common",
  "jxl-threadpool",
  "tracing",
+]
+
+[[package]]
+name = "jxl_macros"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d67c8b0a177004f4b05f73513c4be845845d2b5b1f93b6db71b5c72a1c9ad748"
+dependencies = [
+ "proc-macro-error2",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "jxl_simd"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15d37f283bbcd785c0a1b128a9c1249feb8bdca899fffb0f281a6b183d3c3761"
+
+[[package]]
+name = "jxl_transforms"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3dcc4291b69be45f42167d1722b286fec0ff8644e75e9e74d4c8db24e7e90bdf"
+dependencies = [
+ "jxl_simd",
 ]
 
 [[package]]
@@ -1630,12 +1684,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
-name = "owo-colors"
-version = "4.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
-
-[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1745,6 +1793,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
 dependencies = [
  "proc-macro2",
+ "syn",
+]
+
+[[package]]
+name = "proc-macro-error-attr2"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96de42df36bb9bba5542fe9f1a054b8cc87e172759a1868aa05c1f3acc89dfc5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "proc-macro-error2"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11ec05c52be0a07b08061f7dd003e7d7092e0472bc731b4af7bb1ef876109802"
+dependencies = [
+ "proc-macro-error-attr2",
+ "proc-macro2",
+ "quote",
  "syn",
 ]
 
@@ -1916,13 +1986,13 @@ version = "0.1.1"
 dependencies = [
  "avif-serialize",
  "bindgen",
- "binrw",
  "cc",
  "clap",
  "cmake",
  "criterion",
  "eyre",
  "gamut-core",
+ "gamut-dng",
  "gamut-exif",
  "gamut-icc",
  "gamut-ifd",

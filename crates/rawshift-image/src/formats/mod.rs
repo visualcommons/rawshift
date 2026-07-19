@@ -29,7 +29,7 @@ pub mod registry;
 pub(crate) mod standard;
 
 #[cfg(feature = "dng-encode")]
-pub use dng_export::{DngExportConfig, export_dng};
+pub use dng_export::{DngEncodeConfig, export_dng};
 pub use encode::{encode_rgb_image, encode_rgb_image_to_vec, encode_rgb_image_to_writer};
 #[cfg(feature = "heic-decode")]
 pub use heic::{HeicAuxImage, HeicAuxKind, HeicFile};
@@ -254,8 +254,13 @@ impl<R: Read + Seek> RawFile<R> {
             #[cfg(feature = "dng-decode")]
             {
                 tracing::trace!("Using LinearRaw path (already demosaiced)");
-                let RawFile::Dng(dng) = self else {
-                    unreachable!()
+                // A match (not let-else) so a dng-only build, where this is
+                // the sole variant, compiles without an irrefutable-pattern
+                // warning.
+                let dng = match self {
+                    RawFile::Dng(dng) => dng,
+                    #[allow(unreachable_patterns)]
+                    _ => unreachable!("is_linear_raw_dng() implies the Dng variant"),
                 };
 
                 let metadata = dng.metadata();

@@ -72,7 +72,7 @@
 //!    `format-direction-impl` (e.g. `jpeg-decode-zune`). Multiple may be enabled
 //!    at once; the active backend is chosen via [`formats::DecodeOptions`] and
 //!    [`formats::export::EncodeOptions`].
-//! 5. **Infrastructure** — `tiff-parser`, `serde`, `heic-vendored`.
+//! 5. **Infrastructure** — `ifd-parser`, `serde`, `heic-vendored`.
 //!
 //! See the "Feature Flags" section of the README for the full hierarchy.
 
@@ -83,8 +83,6 @@ pub mod error;
 pub mod formats;
 pub(crate) mod metadata;
 pub mod processing;
-#[cfg(feature = "tiff-parser")]
-pub mod tiff;
 pub mod transforms;
 
 pub mod prelude;

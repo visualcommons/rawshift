@@ -16,7 +16,7 @@
 //! `avif-encode-libaom` features respectively.
 
 #[cfg(feature = "dng-encode")]
-use crate::formats::dng_export::DngExportConfig;
+use crate::formats::dng_export::DngEncodeConfig;
 
 use super::standard::StandardFormat;
 use crate::core::CodecId;
@@ -583,7 +583,7 @@ pub enum EncodeOptions {
     JxlLibjxl(LibjxlEncodeConfig),
     /// DNG via the in-repo encoder (requires `dng-encode`).
     #[cfg(feature = "dng-encode")]
-    Dng(DngExportConfig),
+    Dng(DngEncodeConfig),
 }
 
 #[cfg(feature = "png-encode")]
@@ -652,7 +652,7 @@ impl EncodeOptions {
     /// DNG with default configuration.
     #[cfg(feature = "dng-encode")]
     pub fn dng() -> Self {
-        Self::Dng(DngExportConfig::default())
+        Self::Dng(DngEncodeConfig::default())
     }
 
     /// The output format this encoder produces.
@@ -712,7 +712,7 @@ impl EncodeOptions {
     /// The encoder-agnostic options (metadata embedding, bit depth) in effect.
     ///
     /// For DNG — which has its own configuration shape — a `CommonEncodeOptions`
-    /// is synthesised from [`DngExportConfig`].
+    /// is synthesised from [`DngEncodeConfig`].
     pub fn common(&self) -> CommonEncodeOptions {
         match self {
             #[cfg(feature = "png-encode")]
