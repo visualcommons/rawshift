@@ -7,7 +7,7 @@ use std::fmt;
 
 /// A stable identifier for one codec implementation, in `"{format}/{impl}"` form.
 ///
-/// For example `"jpeg/mozjpeg"` or `"avif/ravif"`. The string is stable across
+/// For example `"jpeg/mozjpeg"` or `"avif/gamut"`. The string is stable across
 /// releases, so callers may use it as part of a cache key.
 ///
 /// Only [`Serialize`](serde::Serialize) is derived: the `&'static str` is

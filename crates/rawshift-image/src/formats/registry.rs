@@ -52,18 +52,12 @@ pub fn available_encoders() -> Vec<CodecInfo> {
         "0.14",
         CodecDirection::Encode,
     ));
+    // Version tracks the gamut-avif crate at the pinned gamut commit (git
+    // dependency). Hand-maintained — bump together with the gamut pin.
     #[cfg(feature = "avif-encode")]
     encoders.push(CodecInfo::new(
-        CodecId::new("avif/ravif"),
-        "0.13",
-        CodecDirection::Encode,
-    ));
-    // Version tracks the libaom bundled by `libaom-sys` (vendored); a system
-    // libaom may differ. Hand-maintained — bump with the `libaom-sys` dependency.
-    #[cfg(feature = "avif-encode-libaom")]
-    encoders.push(CodecInfo::new(
-        CodecId::new("avif/libaom"),
-        "3.11",
+        CodecId::new("avif/gamut"),
+        "1.0",
         CodecDirection::Encode,
     ));
     // Version tracks the gamut-jxl crate at the pinned gamut commit (git

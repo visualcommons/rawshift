@@ -367,31 +367,6 @@ fn generate_avif(data_dir: &Path, fixture_dir: &Path) {
     println!("  Generated {}", name);
 }
 
-#[cfg(feature = "avif-encode-libaom")]
-fn generate_avif_libaom(data_dir: &Path, fixture_dir: &Path) {
-    let dir = data_dir.join("avif_libaom");
-    let fdir = fixture_dir.join("avif_libaom");
-    fs::create_dir_all(&dir).unwrap();
-    fs::create_dir_all(&fdir).unwrap();
-
-    let (w, h, pixels_u8) = reference_pixels_u8();
-    let pixels_u16 = pixels_u8_to_u16(&pixels_u8);
-    let img = RgbImage::new(w, h, pixels_u16).expect("valid RGB buffer");
-
-    // Default libaom config: 10-bit, 4:4:4.
-    let name = "test_8x8.avif";
-    encode_rgb_image(
-        &img,
-        &reference_metadata(),
-        &dir.join(name),
-        &EncodeOptions::avif_libaom(),
-    )
-    .expect("libaom AVIF encode");
-
-    write_expected_json(&fdir, name, w, h, "AVIF", true);
-    println!("  Generated {}", name);
-}
-
 #[cfg(feature = "jxl-encode")]
 fn generate_jxl(data_dir: &Path, fixture_dir: &Path) {
     let dir = data_dir.join("jxl");
@@ -434,8 +409,6 @@ fn main() {
     generate_svg(&data_dir, &fixture_dir);
     #[cfg(feature = "avif-encode")]
     generate_avif(&data_dir, &fixture_dir);
-    #[cfg(feature = "avif-encode-libaom")]
-    generate_avif_libaom(&data_dir, &fixture_dir);
     #[cfg(feature = "jxl-encode")]
     generate_jxl(&data_dir, &fixture_dir);
 

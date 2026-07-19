@@ -2430,7 +2430,7 @@ mod tests {
         use crate::core::metadata::*;
         use crate::formats::encode_rgb_image;
         use crate::formats::export::{
-            CommonEncodeOptions, EncodeOptions, MetadataEmbedOptions, RavifEncodeConfig,
+            AvifEncodeConfig, CommonEncodeOptions, EncodeOptions, MetadataEmbedOptions,
         };
 
         // Build a 2×2 synthetic image (solid red).
@@ -2457,9 +2457,7 @@ mod tests {
         };
 
         let tmp = std::env::temp_dir().join("rawshift_avif_exif_test.avif");
-        let opts = EncodeOptions::AvifRavif(RavifEncodeConfig {
-            quality: 60,
-            speed: 10,
+        let opts = EncodeOptions::Avif(AvifEncodeConfig {
             common: CommonEncodeOptions {
                 metadata: MetadataEmbedOptions {
                     embed_icc: false,
@@ -2467,6 +2465,7 @@ mod tests {
                 },
                 ..Default::default()
             },
+            ..AvifEncodeConfig::default()
         });
         encode_rgb_image(&rgb, &md, &tmp, &opts).expect("encode AVIF");
 

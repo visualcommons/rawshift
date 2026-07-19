@@ -67,16 +67,13 @@ jobs:
         with:
           toolchain: "1.92.0"
       - uses: Swatinem/rust-cache@v2
-      # `rawshift-image/full` enables `avif` (links system dav1d) and `heic`.
+      # `rawshift-image/full` enables `avif` (decode links system dav1d via the
+      # `image` crate; encode is pure-Rust gamut-avif) and `heic`.
       # Ubuntu 24.04's libheif-dev is 1.17.x, but libheif-sys requires >= 1.21,
       # so we add `heic-vendored` to build libheif 1.21.2 from source instead.
-      # `nasm` is required to build `rav1e` (pulled in by the `image` crate's
-      # AVIF encoder) with its `asm` feature enabled.
       # `jxl-encode` builds libjxl hermetically through gamut-jxl-sys (cmake +
       # clang for its bindings). `jpeg-encode-jpegli-vendored` builds the
       # vendored google/jpegli submodule the same way (cmake + clang).
-      # `avif-encode-libaom-vendored` builds libaom from source via cmake (through
-      # `libaom-sys`); it reuses the same `nasm` + `cmake` + `clang`/`libclang`.
       - name: Check out jpegli build submodules
         # Init the vendored google/jpegli submodule and only its build-time
         # dependencies — the 111 MB `testdata` and `googletest` submodules are for
@@ -89,14 +86,14 @@ jobs:
       - name: Install system libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libdav1d-dev nasm cmake clang libclang-dev
+          sudo apt-get install -y --no-install-recommends libdav1d-dev cmake clang libclang-dev
       - name: Fetch test fixtures
         run: bash scripts/fetch_test_fixtures.sh
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Generate standard format fixtures
         run: cargo run -p rawshift-image --example generate_test_fixtures
-      - run: cargo test --workspace --features rawshift-image/full,rawshift-image/heic-vendored,rawshift-image/jpeg-encode-jpegli-vendored,rawshift-image/avif-encode-libaom-vendored
+      - run: cargo test --workspace --features rawshift-image/full,rawshift-image/heic-vendored,rawshift-image/jpeg-encode-jpegli-vendored
 
   image-only:
     name: Build (image only)

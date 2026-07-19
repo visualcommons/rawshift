@@ -1,7 +1,5 @@
 #[cfg(feature = "arw-decode")]
 pub(crate) mod arw;
-#[cfg(feature = "avif-encode-libaom")]
-pub(crate) mod avif_libaom;
 #[cfg(any(feature = "arw-decode", feature = "cr2-decode", feature = "nef-decode"))]
 pub(crate) mod bit_pump;
 #[cfg(feature = "heic-decode")]

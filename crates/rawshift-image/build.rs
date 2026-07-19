@@ -64,13 +64,6 @@ fn main() {
     #[cfg(feature = "jpeg-encode-jpegli")]
     jpegli::generate();
 
-    // libaom AVIF encoder backend: link libaom and generate its C-API bindings.
-    // Only compiled when an `avif-encode-libaom*` feature is on. The bindgen /
-    // pkg-config build deps are shared with the jpegli backend; the vendored
-    // build of libaom itself comes from the BSD-2 `libaom-sys` crate.
-    #[cfg(feature = "avif-encode-libaom")]
-    aom::generate();
-
     // TODO: Generate large static tables from constant files
 }
 
@@ -223,89 +216,5 @@ mod jpegli {
         } else if cfg!(target_os = "linux") {
             println!("cargo:rustc-link-lib=stdc++");
         }
-    }
-}
-
-/// Resolve libaom, ensure its link directives are emitted, and run `bindgen` over
-/// its C encoder API into `$OUT_DIR/aom_bindings.rs` (included by
-/// `src/codecs/avif_libaom.rs`).
-///
-/// libaom only emits a raw AV1 bitstream; the `avif-serialize` crate muxes that
-/// into the AVIF container. We bind libaom ourselves (no GPL wrapper crates).
-#[cfg(feature = "avif-encode-libaom")]
-mod aom {
-    use std::env;
-    use std::path::PathBuf;
-
-    pub fn generate() {
-        let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR is set by cargo"));
-        let include_dirs = link_and_include_dirs();
-
-        // `aomcx.h` is the AV1 encoder control interface; it pulls in `aom.h`,
-        // `aom_encoder.h`, and `aom_image.h`. Allowlists keep the output scoped.
-        let mut builder = bindgen::Builder::default()
-            // This crate is edition 2024, where `extern` blocks must be
-            // `unsafe extern` — make bindgen emit edition-2024-correct code.
-            .rust_edition(bindgen::RustEdition::Edition2024)
-            .header_contents(
-                "rawshift_aom_wrapper.h",
-                "#include <aom/aomcx.h>\n#include <aom/aom_encoder.h>\n#include <aom/aom_image.h>\n",
-            )
-            .allowlist_function("aom_codec_.*")
-            .allowlist_function("aom_img_.*")
-            .allowlist_type("aom_.*")
-            .allowlist_var("AOM_.*")
-            .allowlist_var("AV1E_.*")
-            .allowlist_var("AOME_.*")
-            // C enums as integer type-aliases + consts: simplest to compare against
-            // and to pass to the variadic `aom_codec_control`. `prepend_enum_name(false)`
-            // keeps the original C names (`AOM_CODEC_OK`, `AV1E_SET_CQ_LEVEL`).
-            .default_enum_style(bindgen::EnumVariation::Consts)
-            .prepend_enum_name(false)
-            .layout_tests(false)
-            .generate_comments(false)
-            .merge_extern_blocks(true);
-        for dir in &include_dirs {
-            builder = builder.clang_arg(format!("-I{}", dir.display()));
-        }
-
-        let bindings = builder
-            .generate()
-            .expect("bindgen failed to generate libaom bindings");
-        bindings
-            .write_to_file(out_dir.join("aom_bindings.rs"))
-            .expect("failed to write aom_bindings.rs");
-
-        println!("cargo:rerun-if-changed=build.rs");
-    }
-
-    /// Return the header include dirs for bindgen. The vendored build is performed
-    /// by `libaom-sys` (BSD-2), which cmake-builds the bundled source, links it
-    /// statically, and exposes the installed headers via `DEP_AOM_INCLUDE`;
-    /// otherwise a system libaom is resolved via pkg-config.
-    #[cfg(feature = "avif-encode-libaom-vendored")]
-    fn link_and_include_dirs() -> Vec<PathBuf> {
-        // `libaom-sys`'s build script (it declares `links = "aom"`) already emitted
-        // the `cargo:rustc-link-{search,lib}` directives and a `cargo:include` that
-        // cargo forwards to us as `DEP_AOM_INCLUDE`. The headers live under
-        // `<include>/aom/`, so bindgen's `<aom/aomcx.h>` resolves with `-I<include>`.
-        let include = env::var("DEP_AOM_INCLUDE")
-            .expect("DEP_AOM_INCLUDE is set by the libaom-sys build script");
-        vec![PathBuf::from(include)]
-    }
-
-    #[cfg(not(feature = "avif-encode-libaom-vendored"))]
-    fn link_and_include_dirs() -> Vec<PathBuf> {
-        pkg_config::Config::new()
-            .probe("aom")
-            .unwrap_or_else(|e| {
-                panic!(
-                    "could not find system `aom` via pkg-config ({e}); install \
-                     libaom development files (e.g. `libaom-dev` / `libaom-devel`) \
-                     or enable the `avif-encode-libaom-vendored` feature to build it \
-                     from source"
-                )
-            })
-            .include_paths
     }
 }

@@ -502,13 +502,74 @@ fn jxl_is_container(data: &[u8]) -> bool {
 #[cfg(feature = "avif-encode")]
 mod avif_tests {
     use super::*;
-    use rawshift_image::formats::export::RavifEncodeConfig;
+    use rawshift_image::formats::export::AvifEncodeConfig;
 
     fn avif(exif: bool, icc: bool) -> EncodeOptions {
-        EncodeOptions::AvifRavif(RavifEncodeConfig {
+        EncodeOptions::Avif(AvifEncodeConfig {
             common: common(exif, icc, true),
-            ..RavifEncodeConfig::default()
+            ..AvifEncodeConfig::default()
         })
+    }
+
+    /// The bytes are a valid ISO-BMFF AVIF file (`ftyp` box, AVIF brand).
+    fn is_avif(data: &[u8]) -> bool {
+        data.len() > 12
+            && &data[4..8] == b"ftyp"
+            && matches!(&data[8..12], b"avif" | b"avis" | b"mif1")
+    }
+
+    #[test]
+    fn encodes_lossless_and_lossy() {
+        let img = synthetic_image();
+        for lossless in [true, false] {
+            let opts = EncodeOptions::Avif(AvifEncodeConfig {
+                common: common(false, false, false),
+                lossless,
+                quality: 60,
+            });
+            let data = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts)
+                .unwrap_or_else(|e| panic!("AVIF encode (lossless={lossless}) failed: {e}"));
+            assert!(
+                is_avif(&data),
+                "lossless={lossless} output must be a valid AVIF"
+            );
+        }
+    }
+
+    /// 10/12-bit AVIF output is temporarily unavailable — gamut-avif is 8-bit
+    /// only until justin13888/gamut#251 lands — and must be reported, not
+    /// silently degraded.
+    #[test]
+    fn rejects_10_and_12_bit() {
+        let img = synthetic_image();
+        for depth in [BitDepth::Ten, BitDepth::Twelve] {
+            let opts = EncodeOptions::Avif(AvifEncodeConfig {
+                common: CommonEncodeOptions {
+                    bit_depth: depth,
+                    ..common(false, false, false)
+                },
+                ..AvifEncodeConfig::default()
+            });
+            let err = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts)
+                .expect_err("10/12-bit AVIF encode must be rejected");
+            let msg = err.to_string();
+            assert!(
+                msg.contains("justin13888/gamut#251"),
+                "error must reference the upstream issue, got: {msg}"
+            );
+        }
+    }
+
+    /// Strongest proof the AV1 bitstream + container are valid: decode it back.
+    #[cfg(feature = "avif-decode")]
+    #[test]
+    fn round_trips_through_decoder() {
+        use rawshift_image::formats::{StandardFormat, decode_standard_image};
+        let img = synthetic_image();
+        let data = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &avif(false, false))
+            .expect("AVIF encode");
+        let decoded = decode_standard_image(&data, StandardFormat::Avif).expect("decode AVIF");
+        assert_eq!((decoded.width(), decoded.height()), (4, 4));
     }
 
     #[test]
@@ -544,92 +605,6 @@ mod avif_tests {
         let data = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &EncodeOptions::avif())
             .expect("Export AVIF");
         assert!(avif_has_icc(&data), "Default AVIF should embed ICC");
-    }
-}
-
-// ============================================================================
-// AVIF (libaom) Export Tests
-// ============================================================================
-
-#[cfg(feature = "avif-encode-libaom")]
-mod avif_libaom_tests {
-    use super::*;
-    use rawshift_image::formats::export::LibaomEncodeConfig;
-
-    fn libaom(bit_depth: BitDepth, exif: bool, icc: bool) -> EncodeOptions {
-        EncodeOptions::AvifLibaom(LibaomEncodeConfig {
-            common: CommonEncodeOptions {
-                bit_depth,
-                ..common(exif, icc, true)
-            },
-            ..LibaomEncodeConfig::default()
-        })
-    }
-
-    /// The bytes are a valid ISO-BMFF AVIF file (`ftyp` box, AVIF brand).
-    fn is_avif(data: &[u8]) -> bool {
-        data.len() > 12
-            && &data[4..8] == b"ftyp"
-            && matches!(&data[8..12], b"avif" | b"avis" | b"mif1")
-    }
-
-    #[test]
-    fn encodes_8_10_12_bit() {
-        let img = synthetic_image();
-        for depth in [BitDepth::Eight, BitDepth::Ten, BitDepth::Twelve] {
-            let data = encode_rgb_image_to_vec(
-                &img,
-                &ImageMetadata::default(),
-                &libaom(depth, false, false),
-            )
-            .unwrap_or_else(|e| panic!("libaom encode at {depth:?} failed: {e}"));
-            assert!(is_avif(&data), "{depth:?} output must be a valid AVIF");
-        }
-    }
-
-    #[test]
-    fn rejects_16bit() {
-        let img = synthetic_image();
-        let result = encode_rgb_image_to_vec(
-            &img,
-            &ImageMetadata::default(),
-            &libaom(BitDepth::Sixteen, false, false),
-        );
-        assert!(
-            result.is_err(),
-            "16-bit must be rejected (AV1 maxes at 12-bit)"
-        );
-    }
-
-    #[test]
-    fn embeds_icc() {
-        let img = synthetic_image();
-        let data = encode_rgb_image_to_vec(
-            &img,
-            &ImageMetadata::default(),
-            &libaom(BitDepth::Ten, false, true),
-        )
-        .expect("libaom encode");
-        assert!(
-            avif_has_icc(&data),
-            "libaom AVIF should embed an ICC profile"
-        );
-    }
-
-    /// Strongest proof the AV1 bitstream + container are valid: decode it back.
-    #[cfg(feature = "avif-decode")]
-    #[test]
-    fn round_trips_through_decoder() {
-        use rawshift_image::formats::decode_standard_image;
-        let img = synthetic_image();
-        let data = encode_rgb_image_to_vec(
-            &img,
-            &ImageMetadata::default(),
-            &libaom(BitDepth::Eight, false, false),
-        )
-        .expect("libaom encode");
-        let decoded = decode_standard_image(&data).expect("decode libaom AVIF");
-        assert_eq!((decoded.width(), decoded.height()), (4, 4));
     }
 }
 

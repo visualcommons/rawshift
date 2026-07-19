@@ -60,7 +60,6 @@ test_data/
 │   ├── webp/test_8x8.webp
 │   ├── svg/test_8x8.svg
 │   ├── avif/test_8x8.avif         # (with avif-encode feature)
-│   ├── avif_libaom/test_8x8.avif  # (with avif-encode-libaom feature; 10-bit)
 │   └── jxl/test_8x8.jxl           # (with jxl-encode feature)
 └── .device-versions/               # Per-device version stamps (written by fetch script)
     ├── sony-ilce-6700              # contains "1"

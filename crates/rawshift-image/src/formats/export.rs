@@ -10,9 +10,8 @@
 //! (libjpeg-turbo, MozJPEG, SVT-AV1) can be added without a breaking
 //! change. Their configuration structs are already defined below — see
 //! [`MozjpegEncodeConfig`] and friends — so the API surface is stable ahead of
-//! the implementations. The jpegli ([`JpegliEncodeConfig`]) and libaom
-//! ([`LibaomEncodeConfig`]) backends are wired up behind the
-//! `jpeg-encode-jpegli` and `avif-encode-libaom` features respectively.
+//! the implementations. The jpegli ([`JpegliEncodeConfig`]) backend is wired
+//! up behind the `jpeg-encode-jpegli` feature.
 
 #[cfg(feature = "dng-encode")]
 use crate::formats::dng_export::DngEncodeConfig;
@@ -123,17 +122,6 @@ pub enum JpegSubsampling {
     Yuv422,
     /// 4:4:4 — full-resolution chroma. Largest files, best chroma fidelity.
     Yuv444,
-}
-
-/// Rate-control strategy for AV1-based AVIF encoders.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum AvifRateControl {
-    /// Constant quality / constant quantizer — quality knob drives file size.
-    #[default]
-    ConstantQuality,
-    /// Constrained quality — quality target with a bitrate ceiling.
-    Constrained,
 }
 
 /// DEFLATE compression level for the `gamut-png` PNG encoder
@@ -273,68 +261,43 @@ impl Default for LibwebpEncodeConfig {
     }
 }
 
-/// Configuration for the `ravif` (rav1e) AVIF encoder.
+/// Configuration for the `gamut-avif` AVIF encoder (pure Rust — the AV1 intra
+/// codestream from gamut-av1 wrapped in a gamut-isobmff container).
+///
+/// Exposes exactly gamut-avif's encoder options: lossless (the default) or
+/// lossy AV1 intra coding at identity-matrix 4:4:4, with a `0..=100` quality
+/// factor in lossy mode. The encoder takes 8-bit RGB input, so `common.bit_depth`
+/// honours `BitDepth::Eight` and `BitDepth::Sixteen` (16-bit samples are
+/// down-converted to 8-bit, as with every 8-bit-only backend); `Ten` and
+/// `Twelve` return
+/// [`EncodeError::UnsupportedBitDepth`](crate::error::EncodeError::UnsupportedBitDepth)
+/// — high-bit-depth AVIF encode is **temporarily unavailable** pending
+/// 10/12-bit support in gamut-avif
+/// ([justin13888/gamut#251](https://github.com/justin13888/gamut/issues/251)).
+///
+/// EXIF / ICC / XMP metadata is spliced into the encoded container as ISOBMFF
+/// items by rawshift (gamut-avif does not emit metadata items yet).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct RavifEncodeConfig {
-    /// Encoder-agnostic options. This backend currently produces 8-bit AVIF.
+pub struct AvifEncodeConfig {
+    /// Encoder-agnostic options (metadata embedding, bit depth).
     pub common: CommonEncodeOptions,
-    /// Quality, `0..=100`. Higher is better quality and larger files (monotonic).
-    /// Default: `80`.
+    /// Lossless encoding (decoded output bit-exact to the 8-bit input). When
+    /// set, `quality` is ignored. Default: `true`, matching gamut-avif's
+    /// default mode.
+    pub lossless: bool,
+    /// Quality for lossy encoding, `0..=100` (values above `100` are clamped).
+    /// Higher is better quality and larger files (monotonic). Used only when
+    /// `lossless` is `false`. Default: `80`.
     pub quality: u8,
-    /// Encoding speed, `1` (slowest, best) to `10` (fastest). Default: `6`.
-    pub speed: u8,
 }
 
-impl Default for RavifEncodeConfig {
+impl Default for AvifEncodeConfig {
     fn default() -> Self {
         Self {
             common: CommonEncodeOptions::default(),
+            lossless: true,
             quality: 80,
-            speed: 6,
-        }
-    }
-}
-
-/// Configuration for the **libaom** AVIF encoder (the AV1 reference encoder).
-///
-/// Produces full-range BT.709 YUV 4:4:4 AVIF. Requires the `avif-encode-libaom`
-/// feature.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LibaomEncodeConfig {
-    /// Encoder-agnostic options. libaom honours `BitDepth::Eight`, `Ten`, and
-    /// `Twelve`; a `Sixteen` request returns
-    /// [`EncodeError::UnsupportedBitDepth`](crate::error::EncodeError::UnsupportedBitDepth)
-    /// (AV1 tops out at 12-bit). Defaults to 10-bit.
-    pub common: CommonEncodeOptions,
-    /// Constant-quantiser level, `0..=63`. Lower is better quality and larger
-    /// files (monotonic). Used under [`AvifRateControl::ConstantQuality`].
-    pub cq_level: u8,
-    /// Minimum quantizer, `0..=63`.
-    pub min_quantizer: u8,
-    /// Maximum quantizer, `0..=63`.
-    pub max_quantizer: u8,
-    /// Speed/quality trade-off, `0` (slowest, best) to `8` (fastest).
-    pub cpu_used: u8,
-    /// Rate-control strategy.
-    pub rate_control: AvifRateControl,
-}
-
-impl Default for LibaomEncodeConfig {
-    fn default() -> Self {
-        Self {
-            // libaom is the HDR-capable backend; default to 10-bit rather than the
-            // global 16-bit default it cannot honour.
-            common: CommonEncodeOptions {
-                bit_depth: BitDepth::Ten,
-                ..CommonEncodeOptions::default()
-            },
-            cq_level: 30,
-            min_quantizer: 0,
-            max_quantizer: 63,
-            cpu_used: 6,
-            rate_control: AvifRateControl::ConstantQuality,
         }
     }
 }
@@ -533,13 +496,9 @@ pub enum EncodeOptions {
     /// WebP via `libwebp` (requires `webp-encode`).
     #[cfg(feature = "webp-encode")]
     WebpLibwebp(LibwebpEncodeConfig),
-    /// AVIF via `ravif` / rav1e (requires `avif-encode`).
+    /// AVIF via `gamut-avif` (requires `avif-encode`).
     #[cfg(feature = "avif-encode")]
-    AvifRavif(RavifEncodeConfig),
-    /// AVIF via `libaom`, the AV1 reference encoder: 8/10/12-bit, 4:4:4
-    /// (requires `avif-encode-libaom`).
-    #[cfg(feature = "avif-encode-libaom")]
-    AvifLibaom(LibaomEncodeConfig),
+    Avif(AvifEncodeConfig),
     /// JPEG XL via `gamut-jxl`, wrapping the reference libjxl encoder
     /// (requires `jxl-encode`).
     #[cfg(feature = "jxl-encode")]
@@ -587,17 +546,10 @@ impl EncodeOptions {
         Self::WebpLibwebp(LibwebpEncodeConfig::lossless())
     }
 
-    /// AVIF with default configuration.
+    /// AVIF with default configuration (lossless).
     #[cfg(feature = "avif-encode")]
     pub fn avif() -> Self {
-        Self::AvifRavif(RavifEncodeConfig::default())
-    }
-
-    /// AVIF via the libaom reference encoder, with default configuration
-    /// (10-bit, 4:4:4).
-    #[cfg(feature = "avif-encode-libaom")]
-    pub fn avif_libaom() -> Self {
-        Self::AvifLibaom(LibaomEncodeConfig::default())
+        Self::Avif(AvifEncodeConfig::default())
     }
 
     /// JPEG XL with default configuration (lossless).
@@ -624,9 +576,7 @@ impl EncodeOptions {
             #[cfg(feature = "webp-encode")]
             EncodeOptions::WebpLibwebp(_) => OutputFormat::WebP,
             #[cfg(feature = "avif-encode")]
-            EncodeOptions::AvifRavif(_) => OutputFormat::Avif,
-            #[cfg(feature = "avif-encode-libaom")]
-            EncodeOptions::AvifLibaom(_) => OutputFormat::Avif,
+            EncodeOptions::Avif(_) => OutputFormat::Avif,
             #[cfg(feature = "jxl-encode")]
             EncodeOptions::Jxl(_) => OutputFormat::Jxl,
             #[cfg(feature = "dng-encode")]
@@ -650,9 +600,7 @@ impl EncodeOptions {
             #[cfg(feature = "webp-encode")]
             EncodeOptions::WebpLibwebp(_) => CodecId::new("webp/libwebp"),
             #[cfg(feature = "avif-encode")]
-            EncodeOptions::AvifRavif(_) => CodecId::new("avif/ravif"),
-            #[cfg(feature = "avif-encode-libaom")]
-            EncodeOptions::AvifLibaom(_) => CodecId::new("avif/libaom"),
+            EncodeOptions::Avif(_) => CodecId::new("avif/gamut"),
             #[cfg(feature = "jxl-encode")]
             EncodeOptions::Jxl(_) => CodecId::new("jxl/gamut"),
             #[cfg(feature = "dng-encode")]
@@ -677,9 +625,7 @@ impl EncodeOptions {
             #[cfg(feature = "webp-encode")]
             EncodeOptions::WebpLibwebp(c) => c.common,
             #[cfg(feature = "avif-encode")]
-            EncodeOptions::AvifRavif(c) => c.common,
-            #[cfg(feature = "avif-encode-libaom")]
-            EncodeOptions::AvifLibaom(c) => c.common,
+            EncodeOptions::Avif(c) => c.common,
             #[cfg(feature = "jxl-encode")]
             EncodeOptions::Jxl(c) => c.common,
             #[cfg(feature = "dng-encode")]

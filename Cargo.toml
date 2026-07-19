@@ -36,6 +36,7 @@ gamut-icc = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02e
 # `jxl-decode` / `jxl-encode` features select the halves explicitly.
 gamut-jxl = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151", default-features = false }
 gamut-png = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
+gamut-avif = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
 
 # Shared infrastructure dependencies (used across multiple workspace crates).
 thiserror = "2.0"

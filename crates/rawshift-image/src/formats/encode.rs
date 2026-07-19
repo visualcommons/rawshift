@@ -44,9 +44,7 @@ pub fn encode_rgb_image_to_vec(
         #[cfg(feature = "webp-encode")]
         EncodeOptions::WebpLibwebp(cfg) => encode_webp(image, metadata, cfg),
         #[cfg(feature = "avif-encode")]
-        EncodeOptions::AvifRavif(cfg) => encode_avif(image, metadata, cfg),
-        #[cfg(feature = "avif-encode-libaom")]
-        EncodeOptions::AvifLibaom(cfg) => encode_avif_libaom(image, metadata, cfg),
+        EncodeOptions::Avif(cfg) => encode_avif(image, metadata, cfg),
         #[cfg(feature = "jxl-encode")]
         EncodeOptions::Jxl(cfg) => encode_jxl(image, metadata, cfg),
         #[cfg(feature = "dng-encode")]
@@ -407,121 +405,56 @@ fn encode_webp(
 fn encode_avif(
     image: &RgbImage,
     metadata: &ImageMetadata,
-    cfg: &super::export::RavifEncodeConfig,
+    cfg: &super::export::AvifEncodeConfig,
 ) -> RawResult<Vec<u8>> {
     use crate::metadata::exif::ExifBuilder;
     use crate::metadata::icc::IccProfile;
     use crate::metadata::xmp::append_xmp_to_avif;
-    use ravif::{Encoder, Img, RGBA8};
+    use gamut_avif::AvifEncoder;
+    use gamut_core::{Dimensions, EncodeImage, ImageRef, Rgb8};
 
-    check_8bit_backend(cfg.common.bit_depth, "AVIF")?;
-
-    let rgba_data: Vec<RGBA8> = image
-        .data()
-        .chunks_exact(3)
-        .map(|rgb| {
-            RGBA8::new(
-                (rgb[0] >> 8) as u8,
-                (rgb[1] >> 8) as u8,
-                (rgb[2] >> 8) as u8,
-                255,
-            )
-        })
-        .collect();
-
-    let img = Img::new(
-        rgba_data.as_slice(),
-        image.width() as usize,
-        image.height() as usize,
-    );
-
-    let encoder = Encoder::new()
-        .with_quality(cfg.quality as f32)
-        .with_speed(cfg.speed);
-
-    // Encode failures are domain errors, never panics — this runs on a worker
-    // pool and a failed target must be reported, not crash the process.
-    let result = encoder.encode_rgba(img).map_err(|e| {
-        RawError::Encode(EncodeError::Encoding {
-            format: "AVIF",
-            message: format!("{e:?}"),
-        })
-    })?;
-    let mut avif_bytes = result.avif_file;
-
-    let m = &cfg.common.metadata;
-    if m.embed_icc {
-        match IccProfile::srgb().append_to_avif(avif_bytes.clone()) {
-            Ok(data) => avif_bytes = data,
-            Err(e) => tracing::warn!("Failed to embed ICC in AVIF: {e}"),
-        }
-    }
-    if m.embed_exif {
-        match ExifBuilder::new(metadata).append_to_avif(avif_bytes.clone()) {
-            Ok(data) => avif_bytes = data,
-            Err(e) => tracing::warn!("Failed to embed EXIF in AVIF: {e}"),
-        }
-    }
-    if m.embed_xmp
-        && let Some(xmp_data) = &metadata.xmp
-    {
-        match append_xmp_to_avif(xmp_data, avif_bytes.clone()) {
-            Ok(data) => avif_bytes = data,
-            Err(e) => tracing::warn!("Failed to embed XMP in AVIF: {e}"),
-        }
-    }
-
-    Ok(avif_bytes)
-}
-
-// ── AVIF (libaom reference encoder) ─────────────────────────────────────────────
-
-#[cfg(feature = "avif-encode-libaom")]
-fn encode_avif_libaom(
-    image: &RgbImage,
-    metadata: &ImageMetadata,
-    cfg: &super::export::LibaomEncodeConfig,
-) -> RawResult<Vec<u8>> {
-    use super::export::AvifRateControl;
-    use crate::codecs::avif_libaom::{self, AvifLibaomParams};
-    use crate::metadata::exif::ExifBuilder;
-    use crate::metadata::icc::IccProfile;
-    use crate::metadata::xmp::append_xmp_to_avif;
-
-    // libaom is HDR-capable: 8/10/12-bit map straight to AV1 depths. AV1 cannot
-    // represent 16-bit, so that (and anything deeper) is reported rather than
-    // silently degraded.
-    let depth: u8 = match cfg.common.bit_depth {
-        BitDepth::Eight => 8,
-        BitDepth::Ten => 10,
-        BitDepth::Twelve => 12,
+    // gamut-avif takes 8-bit RGB: `Eight` and `Sixteen` are accepted
+    // (`Sixteen` is down-converted, as with every 8-bit-only backend).
+    // 10/12-bit AVIF output is temporarily unavailable — it is pending
+    // high-bit-depth support in gamut-avif (justin13888/gamut#251) — so those
+    // requests are reported rather than silently degraded.
+    match cfg.common.bit_depth {
+        BitDepth::Eight | BitDepth::Sixteen => {}
         other => {
             return Err(RawError::Encode(EncodeError::UnsupportedBitDepth {
-                format: "AVIF",
+                format: "AVIF (10/12-bit output pending justin13888/gamut#251)",
                 requested: other,
             }));
         }
+    }
+
+    let encoding_error = |e: gamut_core::Error| {
+        RawError::Encode(EncodeError::Encoding {
+            format: "AVIF",
+            message: format!("AVIF encoding error: {e}"),
+        })
     };
 
-    let params = AvifLibaomParams {
-        cq_level: u32::from(cfg.cq_level),
-        min_quantizer: u32::from(cfg.min_quantizer),
-        max_quantizer: u32::from(cfg.max_quantizer),
-        cpu_used: u32::from(cfg.cpu_used),
-        constant_quality: cfg.rate_control == AvifRateControl::ConstantQuality,
+    let dims = Dimensions::new(image.width(), image.height()).map_err(encoding_error)?;
+    let samples = pack_rgb8(image);
+    let img = ImageRef::<Rgb8>::new(&samples, dims).map_err(encoding_error)?;
+
+    let encoder = if cfg.lossless {
+        AvifEncoder::lossless()
+    } else {
+        AvifEncoder::lossy(cfg.quality)
     };
 
-    let mut avif_bytes =
-        avif_libaom::encode(image.data(), image.width(), image.height(), depth, &params).map_err(
-            |e| {
-                RawError::Encode(EncodeError::Encoding {
-                    format: "AVIF",
-                    message: e,
-                })
-            },
-        )?;
+    // Encode failures are domain errors, never panics — this runs on a worker
+    // pool and a failed target must be reported, not crash the process.
+    let mut avif_bytes = Vec::new();
+    encoder
+        .encode_image(img, &mut avif_bytes)
+        .map_err(encoding_error)?;
 
-    // Metadata embedding mirrors the `ravif` `encode_avif` path exactly.
+    // gamut-avif does not emit metadata items yet (deferred upstream), so
+    // EXIF / ICC / XMP are spliced into the encoded container as ISOBMFF
+    // items by rawshift's own muxer (`metadata::isobmff::insert_item`).
     let m = &cfg.common.metadata;
     if m.embed_icc {
         match IccProfile::srgb().append_to_avif(avif_bytes.clone()) {

@@ -27,7 +27,7 @@ the `tiff-parser` API, or `heic-vendored` linking.
 | GIF          | [gif](https://github.com/image-rs/image-gif) (Stable)                                    | Not planned                                                                                      |                                           |
 | TIFF         | [tiff](https://github.com/image-rs/image-tiff) (Stable)                                  | Not planned                                                                                      |                                           |
 | JXL          | [gamut-jxl](https://github.com/justin13888/gamut) (Stable)                               | [gamut-jxl](https://github.com/justin13888/gamut) (Stable)                                       | Decode is pure Rust (jxl-rs); encode wraps the reference libjxl, cmake-built and statically linked by gamut-jxl-sys. |
-| AVIF         | [image/avif-native](https://github.com/image-rs/image) (Functional)                      | [ravif](https://github.com/kornelski/cavif-rs/tree/main/ravif) (Functional, default) · [libaom](https://aomedia.googlesource.com/aom/) (8/10/12-bit, 4:4:4, opt-in) | libaom via `avif-encode-libaom` (system) / `avif-encode-libaom-vendored` (from source). |
+| AVIF         | [image/avif-native](https://github.com/image-rs/image) (Functional)                      | [gamut-avif](https://github.com/justin13888/gamut) (Functional)                                  | Encode via gamut (pure Rust; 8-bit RGB, lossless/lossy AV1 intra, 4:4:4). 10/12-bit encode temporarily unavailable, pending [gamut#251](https://github.com/justin13888/gamut/issues/251). |
 | HEIC         | [libheif](https://github.com/strukturag/libheif) (Functional)                            | Not planned                                                                                      | Requires `heic` feature; `heic-vendored` builds libheif from source. |
 | SVG          | [resvg/tiny-skia](https://github.com/linebender/resvg) (Functional)                      | Not planned                                                                                      |                                           |
 | PPM          | [zune-ppm](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-ppm) (Functional) | Not planned                                                                                    | Netpbm family: P5, P6, P7, PFM.           |
@@ -46,7 +46,8 @@ implementations are named and selected.
 Cargo features are organised in five tiers, from high-level bundles down to
 individual library bindings. Each tier is defined purely in terms of the tier
 below it; only tier-4 features (plus RAW tier-3 features and the gamut-backed
-`png-encode` / `jxl-decode` / `jxl-encode`) pull in an external crate.
+`png-encode` / `jxl-decode` / `jxl-encode` / `avif-encode`) pull in an
+external crate.
 
 1. **Bundle features** — coarse, ready-made groupings.
    - `default` — `jpeg`, `png`, `webp`, `jxl-decode`, `gif-decode`, `tiff-decode`, `ppm-decode`.
@@ -66,11 +67,14 @@ below it; only tier-4 features (plus RAW tier-3 features and the gamut-backed
      `ppm-decode` — each is an **alias for that format+direction's default
      implementation**.
      This is where the per-format default is defined. Exception: `png-encode`,
-     `jxl-decode`, and `jxl-encode` each have a single gamut-backed
-     implementation (`gamut-png` / `gamut-jxl`) and pull it directly, with no
-     tier-4 layer below them. (`jxl-encode` wraps the reference libjxl, which
-     `gamut-jxl-sys` cmake-builds and links statically — it needs cmake and a
-     C++ toolchain.)
+     `jxl-decode`, `jxl-encode`, and `avif-encode` each have a single
+     gamut-backed implementation (`gamut-png` / `gamut-jxl` / `gamut-avif`) and
+     pull it directly, with no tier-4 layer below them. (`jxl-encode` wraps the
+     reference libjxl, which `gamut-jxl-sys` cmake-builds and links statically
+     — it needs cmake and a C++ toolchain. `avif-encode` is pure Rust: 8-bit
+     RGB, lossless or lossy AV1 intra; 10/12-bit AVIF encode is temporarily
+     unavailable, pending
+     [gamut#251](https://github.com/justin13888/gamut/issues/251).)
    - RAW formats: `arw-decode`, `cr2-decode`, `cr3-decode`, `crw-decode`,
      `dng-decode`, `dng-encode`, `nef-decode`, `raf-decode` — RAW formats have a
      single in-repo implementation, so there is no tier-4 layer below them.
@@ -83,7 +87,7 @@ below it; only tier-4 features (plus RAW tier-3 features and the gamut-backed
    - `png-decode-zune`
    - `webp-decode-libwebp`, `webp-encode-libwebp`
    - `gif-decode-gif`, `tiff-decode-tiff`
-   - `avif-decode-image`, `avif-encode-ravif`, `avif-encode-libaom`
+   - `avif-decode-image`
    - `heic-decode-libheif`, `svg-decode-resvg`
    - `ppm-decode-zune`
 5. **Infrastructure / linking features** — cross-cutting, not tied to one format.
@@ -101,12 +105,6 @@ below it; only tier-4 features (plus RAW tier-3 features and the gamut-backed
      libjpegli (`jpeg-encode-jpegli`). Requires a C/C++ toolchain, cmake, and
      `libclang`; init the submodule with
      `git submodule update --init --recursive crates/rawshift-image/third_party/jpegli`.
-   - `avif-encode-libaom` — alternative AVIF encoder via libaom (8/10/12-bit,
-     4:4:4); links the system libaom (`aom`, resolved by pkg-config, ≥ 3.2). The
-     AV1 bitstream is bound with our own bindgen and muxed with `avif-serialize`.
-   - `avif-encode-libaom-vendored` — build libaom from source via cmake (through
-     `libaom-sys`) and link it statically, instead of linking the system libaom.
-     Requires a C/C++ toolchain, cmake, nasm, and `libclang` (for bindgen).
 
    The `zune-runtime` / `exif` / `container-embed` features are pulled in
    automatically by the format implementations that need them — they exist so
