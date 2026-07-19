@@ -15,12 +15,17 @@
 //! - `Compression = 6` (JPEG/LJPEG)
 //! - `StripOffsets` / `StripByteCounts` pointing to the LJPEG data
 //! - Canon-specific `CR2Slice` tag (0xC640) for slice reconstruction
+//!
+//! IFD structure walking is backed by [`gamut_ifd`].
 
 use std::io::{Read, Seek};
+use std::marker::PhantomData;
 
+use gamut_ifd::{Ifd, Value};
+
+use super::ifd::{self, tags};
 use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
 use crate::error::{FormatError, ParseError, RawError, RawResult};
-use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
 /// Magic marker bytes: byte offset 8-10 in a CR2 file.
 /// Bytes 8-9 = "CR", byte 10 = 0x02 (CR2 version).
@@ -61,11 +66,14 @@ pub struct Cr2Metadata {
 
 /// Parsed Canon CR2 file.
 pub struct Cr2File<R> {
-    parser: TiffParser<R>,
+    /// The whole file, read into memory (IFD offsets are absolute).
+    data: Vec<u8>,
     /// The main IFD chain (IFD 0 through IFD 3)
     ifds: Vec<Ifd>,
     /// Extracted metadata
     metadata: Option<Cr2Metadata>,
+    /// The reader type this file was parsed from.
+    _reader: PhantomData<R>,
 }
 
 impl<R> std::fmt::Debug for Cr2File<R> {
@@ -82,21 +90,20 @@ impl<R: Read + Seek> Cr2File<R> {
     /// This opens the file, validates it as a CR2, walks the IFD chain,
     /// and extracts all available metadata.
     pub fn parse(reader: R) -> RawResult<Self> {
-        let mut parser = TiffParser::new(reader)?;
+        let data = ifd::read_all(reader)?;
+        let tree = ifd::parse_tree(&data, "CR2: TIFF structure")?;
 
-        // Walk the IFD chain (IFD 0, 1, 2, 3)
-        let ifds = parser.walk_ifd_chain()?;
-
-        if ifds.is_empty() {
+        if tree.ifds.is_empty() {
             return Err(RawError::Format(FormatError::Cr2(
                 "No IFDs found in file".to_string(),
             )));
         }
 
         let mut cr2 = Cr2File {
-            parser,
-            ifds,
+            data,
+            ifds: tree.ifds,
             metadata: None,
+            _reader: PhantomData,
         };
 
         cr2.extract_metadata()?;
@@ -118,18 +125,9 @@ impl<R: Read + Seek> Cr2File<R> {
         if self.ifds.len() >= 4 {
             let ifd = &self.ifds[3];
             // Validate that this IFD has JPEG compression and non-trivial dimensions
-            let compression = ifd
-                .get(TiffTag::Compression)
-                .map(|e| e.value_offset as u16)
-                .unwrap_or(0);
-            let width = ifd
-                .get(TiffTag::ImageWidth)
-                .map(|e| e.value_offset as u32)
-                .unwrap_or(0);
-            let height = ifd
-                .get(TiffTag::ImageLength)
-                .map(|e| e.value_offset as u32)
-                .unwrap_or(0);
+            let compression = ifd::first_u32(ifd, tags::COMPRESSION).unwrap_or(0) as u16;
+            let width = ifd::first_u32(ifd, tags::IMAGE_WIDTH).unwrap_or(0);
+            let height = ifd::first_u32(ifd, tags::IMAGE_LENGTH).unwrap_or(0);
 
             if compression == COMPRESSION_JPEG && width > 0 && height > 0 {
                 return Some(ifd);
@@ -139,21 +137,12 @@ impl<R: Read + Seek> Cr2File<R> {
         // Fallback: search all IFDs for one with JPEG compression and large dimensions
         let mut best: Option<(usize, u64)> = None;
         for (idx, ifd) in self.ifds.iter().enumerate() {
-            let compression = ifd
-                .get(TiffTag::Compression)
-                .map(|e| e.value_offset as u16)
-                .unwrap_or(0);
+            let compression = ifd::first_u32(ifd, tags::COMPRESSION).unwrap_or(0) as u16;
             if compression != COMPRESSION_JPEG {
                 continue;
             }
-            let width = ifd
-                .get(TiffTag::ImageWidth)
-                .map(|e| e.value_offset as u32)
-                .unwrap_or(0);
-            let height = ifd
-                .get(TiffTag::ImageLength)
-                .map(|e| e.value_offset as u32)
-                .unwrap_or(0);
+            let width = ifd::first_u32(ifd, tags::IMAGE_WIDTH).unwrap_or(0);
+            let height = ifd::first_u32(ifd, tags::IMAGE_LENGTH).unwrap_or(0);
             let pixels = width as u64 * height as u64;
             if pixels > 0 && (best.is_none() || best.unwrap().1 < pixels) {
                 best = Some((idx, pixels));
@@ -170,7 +159,7 @@ impl<R: Read + Seek> Cr2File<R> {
 
     /// Extract metadata from the parsed IFDs.
     fn extract_metadata(&mut self) -> RawResult<()> {
-        let ifd0 = self.ifd0().cloned().ok_or_else(|| {
+        let ifd0 = self.ifd0().ok_or_else(|| {
             RawError::Parse(ParseError::InvalidIfd {
                 offset: 0,
                 reason: "No IFD0 found".to_string(),
@@ -178,12 +167,7 @@ impl<R: Read + Seek> Cr2File<R> {
         })?;
 
         // Extract Make
-        let make = if let Some(entry) = ifd0.get(TiffTag::Make) {
-            let value = self.parser.read_value(entry)?;
-            value.as_str().unwrap_or("").trim().to_string()
-        } else {
-            String::new()
-        };
+        let make = ifd::ascii_tag(ifd0, tags::MAKE).unwrap_or_default();
 
         // Validate that this is a Canon file
         if !make.to_uppercase().contains("CANON") {
@@ -194,69 +178,43 @@ impl<R: Read + Seek> Cr2File<R> {
         }
 
         // Extract Model
-        let model = if let Some(entry) = ifd0.get(TiffTag::Model) {
-            let value = self.parser.read_value(entry)?;
-            value.as_str().unwrap_or("").trim().to_string()
-        } else {
-            String::new()
-        };
+        let model = ifd::ascii_tag(ifd0, tags::MODEL).unwrap_or_default();
 
         // Get the raw IFD (IFD 3)
-        let raw_ifd = self.raw_ifd().cloned().ok_or_else(|| {
+        let raw_ifd = self.raw_ifd().ok_or_else(|| {
             RawError::Format(FormatError::Cr2(
                 "Could not find raw data IFD (IFD 3)".to_string(),
             ))
         })?;
 
         // Extract dimensions from raw IFD
-        let width = raw_ifd
-            .get(TiffTag::ImageWidth)
-            .map(|e| e.value_offset as u32)
-            .ok_or(RawError::Parse(ParseError::TagNotFound(
-                TiffTag::ImageWidth,
-            )))?;
+        let width = ifd::first_u32(raw_ifd, tags::IMAGE_WIDTH)
+            .ok_or(RawError::Parse(ParseError::MissingTag(tags::IMAGE_WIDTH)))?;
 
-        let height = raw_ifd
-            .get(TiffTag::ImageLength)
-            .map(|e| e.value_offset as u32)
-            .ok_or(RawError::Parse(ParseError::TagNotFound(
-                TiffTag::ImageLength,
-            )))?;
+        let height = ifd::first_u32(raw_ifd, tags::IMAGE_LENGTH)
+            .ok_or(RawError::Parse(ParseError::MissingTag(tags::IMAGE_LENGTH)))?;
 
         let sensor_size = Dimensions { width, height };
 
         // Extract bit depth
-        let bit_depth = if let Some(entry) = raw_ifd.get(TiffTag::BitsPerSample) {
-            let value = self.parser.read_value(entry)?;
-            value.as_u32().unwrap_or(14) as u8
-        } else {
-            14 // Canon CR2 default is 14-bit
-        };
+        let bit_depth = raw_ifd
+            .get(tags::BITS_PER_SAMPLE)
+            .and_then(Value::as_u32)
+            .unwrap_or(14) as u8; // Canon CR2 default is 14-bit
 
-        // Extract CFA pattern
-        let cfa_pattern = if let Some(entry) = raw_ifd.get(TiffTag::CFAPattern) {
-            let value = self.parser.read_value(entry)?;
-            if let TiffValue::Bytes(bytes) = value {
-                if bytes.len() >= 4 {
-                    let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
-                    CfaPattern::from_array(arr).unwrap_or(CfaPattern::Rggb)
-                } else {
-                    CfaPattern::Rggb
-                }
-            } else {
-                CfaPattern::Rggb
-            }
-        } else {
-            // Canon cameras typically use RGGB
-            CfaPattern::Rggb
-        };
+        // Extract CFA pattern (Canon cameras typically use RGGB)
+        let cfa_pattern = raw_ifd
+            .get(tags::CFA_PATTERN)
+            .and_then(Value::as_bytes)
+            .filter(|bytes| bytes.len() >= 4)
+            .and_then(|bytes| CfaPattern::from_array([bytes[0], bytes[1], bytes[2], bytes[3]]))
+            .unwrap_or(CfaPattern::Rggb);
 
         // Use full sensor size as active area (CR2 doesn't typically have an ActiveArea tag)
         let active_area = Rect::from_coords(0, 0, width, height);
 
         // Extract black level (try DNG-style BlackLevel tag 0xC61A, synthesize if absent)
-        let black_levels = if let Some(entry) = raw_ifd.get(TiffTag::BlackLevel) {
-            let value = self.parser.read_value(entry)?;
+        let black_levels = if let Some(value) = raw_ifd.get(tags::BLACK_LEVEL) {
             if let Some(vec) = value.as_u32_vec() {
                 if vec.len() >= 4 {
                     [vec[0] as u16, vec[1] as u16, vec[2] as u16, vec[3] as u16]
@@ -278,17 +236,12 @@ impl<R: Read + Seek> Cr2File<R> {
         let white_level = white_level_from_bit_depth(bit_depth);
 
         // Get raw data location from StripOffsets / StripByteCounts
-        let (raw_data_offset, raw_data_size) = if let (Some(offset_entry), Some(count_entry)) = (
-            raw_ifd.get(TiffTag::StripOffsets),
-            raw_ifd.get(TiffTag::StripByteCounts),
+        // (CR2 uses a single strip for the raw data)
+        let (raw_data_offset, raw_data_size) = if let (Some(offsets), Some(counts)) = (
+            raw_ifd.get(tags::STRIP_OFFSETS),
+            raw_ifd.get(tags::STRIP_BYTE_COUNTS),
         ) {
-            let offsets = self.parser.read_value(offset_entry)?;
-            let counts = self.parser.read_value(count_entry)?;
-
-            // CR2 uses a single strip for the raw data
-            let offset = offsets.as_u64().unwrap_or(0);
-            let size = counts.as_u64().unwrap_or(0);
-            (offset, size)
+            (offsets.as_u64().unwrap_or(0), counts.as_u64().unwrap_or(0))
         } else {
             (0, 0)
         };
@@ -322,30 +275,7 @@ impl<R: Read + Seek> Cr2File<R> {
             Some(ifd) => ifd,
             None => return Ok(None),
         };
-        let offset_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormat) {
-            Some(e) => e.clone(),
-            None => return Ok(None),
-        };
-        let length_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormatLength) {
-            Some(e) => e.clone(),
-            None => return Ok(None),
-        };
-        let offset = match self.parser.read_value(&offset_entry)? {
-            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
-            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
-            _ => return Ok(None),
-        };
-        let length = match self.parser.read_value(&length_entry)? {
-            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
-            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
-            _ => return Ok(None),
-        };
-        if length == 0 {
-            return Ok(None);
-        }
-        self.parser.seek_to(offset)?;
-        let data = self.parser.read_bytes(length)?;
-        Ok(Some(data))
+        ifd::jpeg_thumbnail(&self.data, ifd0)
     }
 
     /// Decode the raw image data into a [`RawImage`].
@@ -357,15 +287,18 @@ impl<R: Read + Seek> Cr2File<R> {
         })?;
 
         // Read the LJPEG-compressed data
-        self.parser.seek_to(metadata.raw_data_offset)?;
-        let data = self.parser.read_bytes(metadata.raw_data_size as usize)?;
+        let data = ifd::read_range(
+            &self.data,
+            metadata.raw_data_offset,
+            metadata.raw_data_size as usize,
+        )?;
 
         // Decode with LJPEG decoder
         use crate::codecs::ljpeg::LjpegDecoder;
         let mut decoder = LjpegDecoder::new();
         decoder.set_dimensions(metadata.sensor_size.width, metadata.sensor_size.height);
 
-        let pixels = decoder.decode(&data)?;
+        let pixels = decoder.decode(data)?;
 
         let expected = metadata
             .sensor_size

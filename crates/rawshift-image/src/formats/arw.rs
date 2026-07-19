@@ -2,12 +2,18 @@
 //!
 //! This module provides parsing for Sony Alpha Raw (ARW) files,
 //! which are based on the TIFF container format with Sony-specific extensions.
+//!
+//! IFD structure walking is backed by [`gamut_ifd`]; Sony tag semantics stay
+//! here (see [`super::ifd::tags`]).
 
 use std::io::{Read, Seek};
+use std::marker::PhantomData;
 
+use gamut_ifd::{ByteOrder, Ifd, IfdReader, Value, Variant};
+
+use super::ifd::{self, tags};
 use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
 use crate::error::{FormatError, ParseError, RawError, RawResult};
-use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
 /// Metadata extracted from a Sony ARW file.
 #[derive(Debug, Clone)]
@@ -60,31 +66,40 @@ pub struct ArwMetadata {
 
 /// Parsed Sony ARW file.
 pub struct ArwFile<R> {
-    parser: TiffParser<R>,
-    /// The main IFD chain
+    /// The whole file, read into memory (IFD offsets are absolute).
+    data: Vec<u8>,
+    /// The container byte order.
+    order: ByteOrder,
+    /// Classic TIFF or BigTIFF.
+    variant: Variant,
+    /// The main IFD chain (with SubIFDs/Exif/GPS pointer groups resolved)
     ifds: Vec<Ifd>,
-    /// The SubIFD containing the raw image (ifd_index, sub_ifd_index)
+    /// The SubIFD containing the raw image (ifd_index, sub_ifd_index within
+    /// the SubIFDs pointer group)
     raw_ifd_index: Option<(usize, usize)>,
     /// Extracted metadata
     metadata: Option<ArwMetadata>,
+    /// The reader type this file was parsed from.
+    _reader: PhantomData<R>,
 }
 
 impl<R: Read + Seek> ArwFile<R> {
     /// Parse a Sony ARW file.
     pub fn parse(reader: R) -> RawResult<Self> {
-        let mut parser = TiffParser::new(reader)?;
-
-        // Walk the IFD chain
-        let ifds = parser.walk_ifd_chain()?;
+        let data = ifd::read_all(reader)?;
+        let tree = ifd::parse_tree(&data, "ARW: TIFF structure")?;
 
         // Find the raw SubIFD
-        let raw_ifd_index = Self::find_raw_ifd(&ifds);
+        let raw_ifd_index = Self::find_raw_ifd(&tree.ifds);
 
         let mut arw = ArwFile {
-            parser,
-            ifds,
+            data,
+            order: tree.order,
+            variant: tree.variant,
+            ifds: tree.ifds,
             raw_ifd_index,
             metadata: None,
+            _reader: PhantomData,
         };
 
         // Extract metadata
@@ -103,27 +118,18 @@ impl<R: Read + Seek> ArwFile<R> {
         let mut best_match: Option<(usize, usize, u64)> = None;
 
         for (ifd_idx, ifd) in ifds.iter().enumerate() {
-            for (sub_idx, sub_ifd) in ifd.sub_ifds.iter().enumerate() {
-                // Check for CFA photometric interpretation
-                if let Some(entry) = sub_ifd.get(TiffTag::PhotometricInterpretation) {
-                    // CFA is 32803
-                    if entry.value_offset == 32803 {
-                        // Get dimensions
-                        let width = sub_ifd
-                            .get(TiffTag::ImageWidth)
-                            .map(|e| e.value_offset as u32)
-                            .unwrap_or(0);
-                        let height = sub_ifd
-                            .get(TiffTag::ImageLength)
-                            .map(|e| e.value_offset as u32)
-                            .unwrap_or(0);
+            for (sub_idx, sub_ifd) in ifd::sub_ifd_group(ifd, tags::SUB_IFDS).iter().enumerate() {
+                // Check for CFA photometric interpretation (CFA is 32803)
+                if sub_ifd.get_u32(tags::PHOTOMETRIC_INTERPRETATION) == Some(32803) {
+                    // Get dimensions
+                    let width = ifd::first_u32(sub_ifd, tags::IMAGE_WIDTH).unwrap_or(0);
+                    let height = ifd::first_u32(sub_ifd, tags::IMAGE_LENGTH).unwrap_or(0);
 
-                        let pixel_count = width as u64 * height as u64;
+                    let pixel_count = width as u64 * height as u64;
 
-                        // Keep the largest one
-                        if best_match.is_none() || best_match.as_ref().unwrap().2 < pixel_count {
-                            best_match = Some((ifd_idx, sub_idx, pixel_count));
-                        }
+                    // Keep the largest one
+                    if best_match.is_none() || best_match.as_ref().unwrap().2 < pixel_count {
+                        best_match = Some((ifd_idx, sub_idx, pixel_count));
                     }
                 }
             }
@@ -134,8 +140,9 @@ impl<R: Read + Seek> ArwFile<R> {
 
     /// Get the raw SubIFD.
     fn raw_ifd(&self) -> Option<&Ifd> {
-        self.raw_ifd_index
-            .map(|(ifd_idx, sub_idx)| &self.ifds[ifd_idx].sub_ifds[sub_idx])
+        self.raw_ifd_index.map(|(ifd_idx, sub_idx)| {
+            &ifd::sub_ifd_group(&self.ifds[ifd_idx], tags::SUB_IFDS)[sub_idx]
+        })
     }
 
     /// Get the main IFD (IFD0).
@@ -150,8 +157,7 @@ impl<R: Read + Seek> ArwFile<R> {
 
     /// Extract metadata from the parsed IFDs.
     fn extract_metadata(&mut self) -> RawResult<()> {
-        // Clone the IFDs we need to avoid borrow issues
-        let ifd0 = self.ifd0().cloned().ok_or_else(|| {
+        let ifd0 = self.ifd0().ok_or_else(|| {
             RawError::Parse(ParseError::InvalidIfd {
                 offset: 0,
                 reason: "No IFD0 found".to_string(),
@@ -159,12 +165,7 @@ impl<R: Read + Seek> ArwFile<R> {
         })?;
 
         // Extract Make
-        let make = if let Some(entry) = ifd0.get(TiffTag::Make) {
-            let value = self.parser.read_value(entry)?;
-            value.as_str().unwrap_or("").trim().to_string()
-        } else {
-            String::new()
-        };
+        let make = ifd::ascii_tag(ifd0, tags::MAKE).unwrap_or_default();
 
         // Validate this is a Sony file
         if !make.to_uppercase().contains("SONY") {
@@ -175,82 +176,46 @@ impl<R: Read + Seek> ArwFile<R> {
         }
 
         // Extract Model
-        let model = if let Some(entry) = ifd0.get(TiffTag::Model) {
-            let value = self.parser.read_value(entry)?;
-            value.as_str().unwrap_or("").trim().to_string()
-        } else {
-            String::new()
-        };
+        let model = ifd::ascii_tag(ifd0, tags::MODEL).unwrap_or_default();
 
         // Get the raw SubIFD
         let raw_ifd = self
             .raw_ifd()
-            .cloned()
             .ok_or_else(|| RawError::Unsupported("Could not find raw SubIFD".to_string()))?;
 
         // Extract dimensions from raw SubIFD
-        let width = raw_ifd
-            .get(TiffTag::ImageWidth)
-            .map(|e| e.value_offset as u32)
-            .ok_or(RawError::Parse(ParseError::TagNotFound(
-                TiffTag::ImageWidth,
-            )))?;
+        let width = ifd::first_u32(raw_ifd, tags::IMAGE_WIDTH)
+            .ok_or(RawError::Parse(ParseError::MissingTag(tags::IMAGE_WIDTH)))?;
 
-        let height = raw_ifd
-            .get(TiffTag::ImageLength)
-            .map(|e| e.value_offset as u32)
-            .ok_or(RawError::Parse(ParseError::TagNotFound(
-                TiffTag::ImageLength,
-            )))?;
+        let height = ifd::first_u32(raw_ifd, tags::IMAGE_LENGTH)
+            .ok_or(RawError::Parse(ParseError::MissingTag(tags::IMAGE_LENGTH)))?;
 
         let sensor_size = Dimensions { width, height };
 
         // Extract bit depth
-        let bit_depth = if let Some(entry) = raw_ifd.get(TiffTag::BitsPerSample) {
-            let value = self.parser.read_value(entry)?;
-            value.as_u32().unwrap_or(14) as u8
-        } else {
-            14 // Default for modern Sony cameras
-        };
+        let bit_depth = raw_ifd
+            .get(tags::BITS_PER_SAMPLE)
+            .and_then(Value::as_u32)
+            .unwrap_or(14) as u8; // Default for modern Sony cameras
 
         // Extract compression
-        let compression = raw_ifd
-            .get(TiffTag::Compression)
-            .map(|e| e.value_offset as u16)
-            .unwrap_or(1);
+        let compression = ifd::first_u32(raw_ifd, tags::COMPRESSION).unwrap_or(1) as u16;
 
-        // Extract CFA pattern
-        let cfa_pattern = if let Some(entry) = raw_ifd.get(TiffTag::CFAPattern) {
-            let value = self.parser.read_value(entry)?;
-            if let TiffValue::Bytes(bytes) = value {
-                if bytes.len() >= 4 {
-                    let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
-                    CfaPattern::from_array(arr).unwrap_or(CfaPattern::Rggb)
-                } else {
-                    CfaPattern::Rggb
-                }
-            } else {
-                CfaPattern::Rggb
-            }
-        } else {
-            // Sony typically uses RGGB
-            CfaPattern::Rggb
-        };
+        // Extract CFA pattern (Sony typically uses RGGB)
+        let cfa_pattern = raw_ifd
+            .get(tags::CFA_PATTERN)
+            .and_then(Value::as_bytes)
+            .filter(|bytes| bytes.len() >= 4)
+            .and_then(|bytes| CfaPattern::from_array([bytes[0], bytes[1], bytes[2], bytes[3]]))
+            .unwrap_or(CfaPattern::Rggb);
 
         // Extract crop/active area
-        let active_area = if let (Some(origin_entry), Some(size_entry)) = (
-            raw_ifd.get(TiffTag::DefaultCropOrigin),
-            raw_ifd.get(TiffTag::DefaultCropSize),
+        let active_area = if let (Some(origin_vec), Some(size_vec)) = (
+            raw_ifd.get_u32_vec(tags::DEFAULT_CROP_ORIGIN),
+            raw_ifd.get_u32_vec(tags::DEFAULT_CROP_SIZE),
         ) {
-            let origin = self.parser.read_value(origin_entry)?;
-            let size = self.parser.read_value(size_entry)?;
-
-            if let (Some(origin_vec), Some(size_vec)) = (origin.as_u32_vec(), size.as_u32_vec()) {
-                if origin_vec.len() >= 2 && size_vec.len() >= 2 {
-                    Rect::from_coords(origin_vec[0], origin_vec[1], size_vec[0], size_vec[1])
-                } else {
-                    Rect::from_coords(0, 0, width, height)
-                }
+            if origin_vec.len() >= 2 && size_vec.len() >= 2 {
+                Rect::from_coords(origin_vec[0], origin_vec[1], size_vec[0], size_vec[1])
             } else {
                 Rect::from_coords(0, 0, width, height)
             }
@@ -259,9 +224,8 @@ impl<R: Read + Seek> ArwFile<R> {
         };
 
         // Extract black levels
-        let black_levels = if let Some(entry) = raw_ifd.get(TiffTag::BlackLevel) {
-            let value = self.parser.read_value(entry)?;
-            if let Some(vec) = value.as_u32_vec() {
+        let black_levels = if let Some(entry) = raw_ifd.get(tags::BLACK_LEVEL) {
+            if let Some(vec) = entry.as_u32_vec() {
                 if vec.len() >= 4 {
                     [vec[0] as u16, vec[1] as u16, vec[2] as u16, vec[3] as u16]
                 } else if vec.len() == 1 {
@@ -278,125 +242,90 @@ impl<R: Read + Seek> ArwFile<R> {
         };
 
         // Extract white level
-        let white_level = if let Some(entry) = raw_ifd.get(TiffTag::WhiteLevel) {
-            let value = self.parser.read_value(entry)?;
-            value
-                .as_u32()
-                .unwrap_or(white_level_from_bit_depth(bit_depth) as u32) as u16
-        } else {
-            white_level_from_bit_depth(bit_depth)
-        };
+        let white_level = raw_ifd
+            .get(tags::WHITE_LEVEL)
+            .and_then(Value::as_u32)
+            .unwrap_or(white_level_from_bit_depth(bit_depth) as u32)
+            as u16;
 
-        // Get raw data location from strips
-        let (raw_data_offset, raw_data_size) = if let (Some(offset_entry), Some(count_entry)) = (
-            raw_ifd.get(TiffTag::StripOffsets),
-            raw_ifd.get(TiffTag::StripByteCounts),
+        // Get raw data location from strips (Sony typically uses a single strip)
+        let (raw_data_offset, raw_data_size) = if let (Some(offsets), Some(counts)) = (
+            raw_ifd.get(tags::STRIP_OFFSETS),
+            raw_ifd.get(tags::STRIP_BYTE_COUNTS),
         ) {
-            let offsets = self.parser.read_value(offset_entry)?;
-            let counts = self.parser.read_value(count_entry)?;
-
-            // For Sony, typically single strip
-            let offset = offsets.as_u64().unwrap_or(0);
-            let size = counts.as_u64().unwrap_or(0);
-            (offset, size)
+            (offsets.as_u64().unwrap_or(0), counts.as_u64().unwrap_or(0))
         } else {
             (0, 0)
         };
 
         // Get tile dimensions
-        let tile_width = if let Some(entry) = raw_ifd.get(TiffTag::TileWidth) {
-            entry.value_offset as u32
-        } else {
-            0
-        };
-
-        let tile_height = if let Some(entry) = raw_ifd.get(TiffTag::TileLength) {
-            entry.value_offset as u32
-        } else {
-            0
-        };
+        let tile_width = ifd::first_u32(raw_ifd, tags::TILE_WIDTH).unwrap_or(0);
+        let tile_height = ifd::first_u32(raw_ifd, tags::TILE_LENGTH).unwrap_or(0);
 
         // Get tile offsets and byte counts
-        let tile_offsets = if let Some(entry) = raw_ifd.get(TiffTag::TileOffsets) {
-            let value = self.parser.read_value(entry)?;
-            value
-                .as_u32_vec()
-                .map(|v| v.into_iter().map(|x| x as u64).collect())
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+        let tile_offsets: Vec<u64> = raw_ifd
+            .get_u32_vec(tags::TILE_OFFSETS)
+            .map(|v| v.into_iter().map(u64::from).collect())
+            .unwrap_or_default();
 
-        let tile_byte_counts = if let Some(entry) = raw_ifd.get(TiffTag::TileByteCounts) {
-            let value = self.parser.read_value(entry)?;
-            value
-                .as_u32_vec()
-                .map(|v| v.into_iter().map(|x| x as u64).collect())
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+        let tile_byte_counts: Vec<u64> = raw_ifd
+            .get_u32_vec(tags::TILE_BYTE_COUNTS)
+            .map(|v| v.into_iter().map(u64::from).collect())
+            .unwrap_or_default();
 
         // Extract White Balance from raw SubIFD first (most reliable for newer Sony cameras).
         // Sony ILCE series cameras (e.g., ILCE-6700) store WB_RGGBLevels (0x7313) as
         // SSHORT values directly in the raw SubIFD, not in the MakerNote.
         let mut as_shot_neutral: Option<[f64; 3]> = None;
 
-        if let Some(entry) = raw_ifd.other_tags.get(&0x7313) {
-            match self.parser.read_value(entry) {
-                Ok(value) => {
-                    let vals_opt: Option<(f64, f64, f64, f64)> = match &value {
-                        TiffValue::SShorts(vals) if vals.len() >= 4 => Some((
-                            vals[0] as f64,
-                            vals[1] as f64,
-                            vals[2] as f64,
-                            vals[3] as f64,
-                        )),
-                        TiffValue::Shorts(vals) if vals.len() >= 4 => Some((
-                            vals[0] as f64,
-                            vals[1] as f64,
-                            vals[2] as f64,
-                            vals[3] as f64,
-                        )),
-                        _ => None,
-                    };
-                    if let Some((r, g1, g2, b)) = vals_opt {
-                        let g = (g1 + g2) / 2.0;
-                        if r > 0.0 && g > 0.0 && b > 0.0 {
-                            as_shot_neutral = Some([g / r, 1.0, g / b]);
-                            tracing::debug!(
-                                "Found WB_RGGBLevels in raw SubIFD (0x7313): RGGB=[{},{},{},{}] -> AsShotNeutral={:?}",
-                                r,
-                                g1,
-                                g2,
-                                b,
-                                as_shot_neutral
-                            );
-                        }
-                    }
+        if let Some(value) = raw_ifd.get(tags::SONY_WB_RGGB_LEVELS) {
+            let vals_opt: Option<(f64, f64, f64, f64)> = match value {
+                Value::SShort(vals) if vals.len() >= 4 => Some((
+                    vals[0] as f64,
+                    vals[1] as f64,
+                    vals[2] as f64,
+                    vals[3] as f64,
+                )),
+                Value::Short(vals) if vals.len() >= 4 => Some((
+                    vals[0] as f64,
+                    vals[1] as f64,
+                    vals[2] as f64,
+                    vals[3] as f64,
+                )),
+                _ => None,
+            };
+            if let Some((r, g1, g2, b)) = vals_opt {
+                let g = (g1 + g2) / 2.0;
+                if r > 0.0 && g > 0.0 && b > 0.0 {
+                    as_shot_neutral = Some([g / r, 1.0, g / b]);
+                    tracing::debug!(
+                        "Found WB_RGGBLevels in raw SubIFD (0x7313): RGGB=[{},{},{},{}] -> AsShotNeutral={:?}",
+                        r,
+                        g1,
+                        g2,
+                        b,
+                        as_shot_neutral
+                    );
                 }
-                Err(e) => tracing::debug!("Failed to read 0x7313 from raw SubIFD: {}", e),
             }
         }
 
         // Fallback: extract White Balance from MakerNote if not found in raw SubIFD.
         // MakerNote is usually in the EXIF IFD
-        let makernote_entry = if let Some(exif_ifd) = &ifd0.exif_ifd {
-            tracing::debug!("Found Exif IFD at offset {}", exif_ifd.offset);
-            exif_ifd.get(TiffTag::MakerNote)
+        let makernote_value = if let Some(exif_ifd) = ifd::exif_ifd(ifd0) {
+            tracing::debug!("Found Exif IFD");
+            exif_ifd.get(tags::MAKER_NOTE)
         } else {
             // Sometimes directly in IFD0?
-            ifd0.get(TiffTag::MakerNote)
+            ifd0.get(tags::MAKER_NOTE)
         };
 
         if as_shot_neutral.is_none()
-            && let Some(entry) = makernote_entry
-            && let Ok(value) = self.parser.read_value(entry)
-            && let TiffValue::Undefined(bytes) = value
+            && let Some(Value::Undefined(bytes)) = makernote_value
         {
             tracing::debug!("Found Sony MakerNote ({} bytes).", bytes.len());
 
-            use std::io::{Cursor, Read};
+            use std::io::Cursor;
 
             let offset = if bytes.starts_with(b"SONY DSC ") || bytes.starts_with(b"SONY CAM ") {
                 12
@@ -444,10 +373,11 @@ impl<R: Read + Seek> ArwFile<R> {
                                 let mut v3 = 0;
                                 let mut v4 = 0;
 
-                                // Try Absolute Offset
+                                // Try Absolute Offset (into the whole file)
                                 let mut found_abs = false;
-                                if self.parser.seek_to(value_offset as u64).is_ok()
-                                    && let Ok(v) = self.parser.read_bytes(8)
+                                let abs = value_offset as usize;
+                                if let Some(v) =
+                                    abs.checked_add(8).and_then(|end| self.data.get(abs..end))
                                 {
                                     v1 = u16::from_le_bytes([v[0], v[1]]);
                                     v2 = u16::from_le_bytes([v[2], v[3]]);
@@ -499,107 +429,86 @@ impl<R: Read + Seek> ArwFile<R> {
             }
         }
 
-        // Warn about unknown tags
-        for tag in ifd0.other_tags.keys() {
-            tracing::warn!("Unknown/Unimplemented tag 0x{:04X} in IFD0", tag);
-        }
-        if let Some(exif) = &ifd0.exif_ifd {
-            for tag in exif.other_tags.keys() {
-                // MakerNote is handled, don't warn about it if it ended up here (it shouldn't, as it's known)
-                if *tag != 0x927C {
-                    tracing::warn!("Unknown/Unimplemented tag 0x{:04X} in Exif IFD", tag);
-                }
-            }
-        }
-
         // Check for Sony SR2 SubIFD (Tag 0x02BC) which often contains the WB data
-        // 0x02BC is usually treated as "Unknown" tag in generic parser, so check other_tags.
         if as_shot_neutral.is_none()
-            && let Some(entry) = ifd0.other_tags.get(&0x02BC)
+            && let Some(val) = ifd0.get(tags::SONY_SR2_PRIVATE)
         {
-            tracing::debug!(
-                "Found Tag 0x02BC (SR2 Offset Candidate). Type={:?} Count={}",
-                entry.tiff_type,
-                entry.count
-            );
+            tracing::debug!("Found Tag 0x02BC (SR2 Offset Candidate): {:?}", val);
 
-            match self.parser.read_value(entry) {
-                Ok(val) => {
-                    tracing::debug!("Read Tag 0x02BC Value: {:?}", val);
-                    let offset_opt = match val {
-                        TiffValue::Longs(ref v) if !v.is_empty() => Some(v[0]),
-                        TiffValue::Shorts(ref v) if !v.is_empty() => Some(v[0] as u32),
-                        _ => None,
-                    };
+            let offset_opt = match val {
+                Value::Long(v) | Value::Ifd(v) if !v.is_empty() => Some(v[0]),
+                Value::Short(v) if !v.is_empty() => Some(v[0] as u32),
+                _ => None,
+            };
 
-                    if let Some(offset) = offset_opt {
-                        tracing::debug!("Found Sony SR2 SubIFD at offset {}", offset);
-                        match self.parser.parse_ifd(offset as u64) {
-                            Ok(sr2_ifd) => {
-                                // Check for WB_RGGBLevels (0x7313)
-                                if let Some(wb_entry) = sr2_ifd.other_tags.get(&0x7313) {
-                                    match self.parser.read_value(wb_entry) {
-                                        Ok(TiffValue::Shorts(vals)) if vals.len() >= 4 => {
-                                            let v1 = vals[0];
-                                            let v2 = vals[1];
-                                            let v3 = vals[2];
-                                            let v4 = vals[3];
+            if let Some(offset) = offset_opt {
+                tracing::debug!("Found Sony SR2 SubIFD at offset {}", offset);
+                // The SR2 block is a directory at an absolute file offset; read
+                // it lazily so a garbled (encrypted) entry only fails its own
+                // value fetch, not the whole directory.
+                let mut sr2_reader =
+                    IfdReader::with_layout(&self.data[..], self.order, self.variant);
+                match sr2_reader.read_ifd(u64::from(offset)) {
+                    Ok(sr2_ifd) => {
+                        // Check for WB_RGGBLevels (0x7313)
+                        if let Some(wb_entry) = sr2_ifd.entry(tags::SONY_WB_RGGB_LEVELS) {
+                            match sr2_reader.value(wb_entry) {
+                                Ok(Value::Short(vals)) if vals.len() >= 4 => {
+                                    let v1 = vals[0];
+                                    let v2 = vals[1];
+                                    let v3 = vals[2];
+                                    let v4 = vals[3];
 
-                                            tracing::debug!("Found WB Levels: {:?}", vals);
+                                    tracing::debug!("Found WB Levels: {:?}", vals);
 
-                                            if v1 > 0 && v2 > 0 && v3 > 0 && v4 > 0 {
-                                                let r_gain = v1 as f64;
-                                                let g_gain = (v2 as f64 + v3 as f64) / 2.0;
-                                                let b_gain = v4 as f64;
+                                    if v1 > 0 && v2 > 0 && v3 > 0 && v4 > 0 {
+                                        let r_gain = v1 as f64;
+                                        let g_gain = (v2 as f64 + v3 as f64) / 2.0;
+                                        let b_gain = v4 as f64;
 
-                                                as_shot_neutral =
-                                                    Some([g_gain / r_gain, 1.0, g_gain / b_gain]);
-                                                tracing::debug!(
-                                                    "Found WB_RGGBLevels in SR2: Gains=[{}, {}, {}] -> AsShotNeutral={:?}",
-                                                    r_gain,
-                                                    g_gain,
-                                                    b_gain,
-                                                    as_shot_neutral
-                                                );
-                                            }
-                                        }
-                                        Ok(other_val) => tracing::warn!(
-                                            "WB_RGGBLevels (0x7313) has unexpected value: {:?}",
-                                            other_val
-                                        ),
-                                        Err(e) => tracing::warn!(
-                                            "Failed to read WB_RGGBLevels (0x7313): {}",
-                                            e
-                                        ),
+                                        as_shot_neutral =
+                                            Some([g_gain / r_gain, 1.0, g_gain / b_gain]);
+                                        tracing::debug!(
+                                            "Found WB_RGGBLevels in SR2: Gains=[{}, {}, {}] -> AsShotNeutral={:?}",
+                                            r_gain,
+                                            g_gain,
+                                            b_gain,
+                                            as_shot_neutral
+                                        );
                                     }
-                                } else {
-                                    tracing::debug!(
-                                        "SR2 SubIFD parsed but WB_RGGBLevels (0x7313) not found"
-                                    );
+                                }
+                                Ok(other_val) => tracing::warn!(
+                                    "WB_RGGBLevels (0x7313) has unexpected value: {:?}",
+                                    other_val
+                                ),
+                                Err(e) => {
+                                    tracing::warn!("Failed to read WB_RGGBLevels (0x7313): {}", e)
                                 }
                             }
-                            Err(e) => {
-                                tracing::warn!("Failed to parse SR2 SubIFD at {}: {}", offset, e)
-                            }
+                        } else {
+                            tracing::debug!(
+                                "SR2 SubIFD parsed but WB_RGGBLevels (0x7313) not found"
+                            );
                         }
-                    } else {
-                        tracing::warn!(
-                            "Tag 0x02BC found but value not a valid offset (found {:?})",
-                            val
-                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse SR2 SubIFD at {}: {}", offset, e)
                     }
                 }
-                Err(e) => tracing::warn!("Failed to read Tag 0x02BC value: {}", e),
+            } else {
+                tracing::warn!(
+                    "Tag 0x02BC found but value not a valid offset (found {:?})",
+                    val
+                );
             }
         }
 
         // Extract EXIF/GPS/DateTime/orientation from IFD0
-        use crate::tiff::metadata_helper;
-        let exif = metadata_helper::extract_exif(&mut self.parser, &ifd0);
-        let datetime = metadata_helper::extract_datetime(&mut self.parser, &ifd0);
-        let gps = metadata_helper::extract_gps(&mut self.parser, &ifd0);
-        let (lens_make, lens_model) = metadata_helper::extract_lens_info(&mut self.parser, &ifd0);
-        let orientation = metadata_helper::extract_orientation(&mut self.parser, &ifd0);
+        let exif = ifd::extract_exif(ifd0);
+        let datetime = ifd::extract_datetime(ifd0);
+        let gps = ifd::extract_gps(ifd0);
+        let (lens_make, lens_model) = ifd::extract_lens_info(ifd0);
+        let orientation = ifd::extract_orientation(ifd0);
 
         self.metadata = Some(ArwMetadata {
             make,
@@ -687,13 +596,7 @@ impl<R: Read + Seek> ArwFile<R> {
         let offset = metadata.raw_data_offset;
         let size = metadata.raw_data_size as usize;
 
-        // Seek to the raw data
-        self.parser.seek_to(offset)?;
-
-        // Read the data
-        let data = self.parser.read_bytes(size)?;
-
-        Ok(data)
+        Ok(ifd::read_range(&self.data, offset, size)?.to_vec())
     }
 
     /// Extract the embedded JPEG thumbnail from IFD 0, if present.
@@ -702,30 +605,7 @@ impl<R: Read + Seek> ArwFile<R> {
             Some(ifd) => ifd,
             None => return Ok(None),
         };
-        let offset_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormat) {
-            Some(e) => e.clone(),
-            None => return Ok(None),
-        };
-        let length_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormatLength) {
-            Some(e) => e.clone(),
-            None => return Ok(None),
-        };
-        let offset = match self.parser.read_value(&offset_entry)? {
-            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
-            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
-            _ => return Ok(None),
-        };
-        let length = match self.parser.read_value(&length_entry)? {
-            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
-            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
-            _ => return Ok(None),
-        };
-        if length == 0 {
-            return Ok(None);
-        }
-        self.parser.seek_to(offset)?;
-        let data = self.parser.read_bytes(length)?;
-        Ok(Some(data))
+        ifd::jpeg_thumbnail(&self.data, ifd0)
     }
 
     /// Decode the raw image data into a RawImage.
@@ -764,8 +644,7 @@ impl<R: Read + Seek> ArwFile<R> {
                     let tile_y = tile_row * tile_h;
 
                     // Read tile data
-                    self.parser.seek_to(tile_offset)?;
-                    let tile_data = self.parser.read_bytes(tile_size as usize)?;
+                    let tile_data = ifd::read_range(&self.data, tile_offset, tile_size as usize)?;
 
                     // Decode this tile
                     let mut decoder = LjpegDecoder::new();
@@ -773,7 +652,7 @@ impl<R: Read + Seek> ArwFile<R> {
                     // that produces a 512x512 tile
                     decoder.set_dimensions(tile_w as u32, tile_h as u32);
 
-                    let tile_pixels = match decoder.decode(&tile_data) {
+                    let tile_pixels = match decoder.decode(tile_data) {
                         Ok(pixels) => pixels,
                         Err(e) => {
                             tracing::warn!("Failed to decode tile {}: {}", tile_idx, e);

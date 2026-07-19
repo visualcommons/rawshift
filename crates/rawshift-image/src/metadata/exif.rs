@@ -620,6 +620,15 @@ fn exif_value_to_metadata(value: &Value) -> crate::core::metadata::MetadataValue
                 .map(|&(n, d)| MetadataValue::SRational(SRational::new(n, d)))
                 .collect(),
         ),
+        // BigTIFF 64-bit types: these `gamut_ifd::Value` variants exist only
+        // when the RAW decoders' `ifd-parser` feature enables gamut-ifd's
+        // `bigtiff` (EXIF streams themselves are classic TIFF).
+        #[cfg(feature = "ifd-parser")]
+        Value::Long8(v) | Value::Ifd8(v) => {
+            collapse(v.iter().map(|&l| MetadataValue::U64(l)).collect())
+        }
+        #[cfg(feature = "ifd-parser")]
+        Value::SLong8(v) => collapse(v.iter().map(|&l| MetadataValue::I64(l)).collect()),
         // An entry whose field type is unrecognised: keep the verbatim
         // value/offset word so nothing is silently dropped.
         Value::Unknown(u) => MetadataValue::Bytes(u.word().to_vec()),

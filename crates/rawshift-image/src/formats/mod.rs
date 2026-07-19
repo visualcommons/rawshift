@@ -19,6 +19,8 @@ mod encode;
 pub mod export;
 #[cfg(feature = "heic-decode")]
 pub(crate) mod heic;
+#[cfg(feature = "ifd-parser")]
+pub(crate) mod ifd;
 #[cfg(feature = "nef-decode")]
 pub(crate) mod nef;
 #[cfg(feature = "raf-decode")]
@@ -41,9 +43,6 @@ pub use standard::{
     decode_standard_image_with, detect_standard_format, probe_standard_image,
     read_standard_image_metadata,
 };
-
-#[cfg(feature = "tiff-parser")]
-use crate::tiff::{TiffParser, TiffTag};
 
 #[cfg(any_raw)]
 use {
@@ -590,21 +589,30 @@ impl<R: Read + Seek> RawFile<R> {
             return Ok(RawFormat::Cr2);
         }
 
-        // Parse as TIFF to inspect Make tag for format detection
-        #[cfg(feature = "tiff-parser")]
+        // Parse IFD0 (lazily, via the streaming gamut-ifd reader) to inspect
+        // the Make tag / DNGVersion presence for format detection. Each of the
+        // gating format features implies `ifd-parser`.
+        #[cfg(any(feature = "arw-decode", feature = "nef-decode", feature = "dng-decode"))]
         {
-            let mut parser = TiffParser::new(reader)?;
-            let ifd0 = parser.parse_ifd0()?;
+            use gamut_ifd::{IfdReader, StreamSource};
+
+            let mut ifd_reader = IfdReader::open(StreamSource::new(&mut *reader))
+                .map_err(|e| RawError::gamut("detect_format: TIFF header", e))?;
+            let first = ifd_reader.first_ifd_offset();
+            let ifd0 = ifd_reader
+                .read_ifd(first)
+                .map_err(|e| RawError::gamut("detect_format: IFD0", e))?;
 
             // Check for DNG version first - if present, it's a DNG regardless of Make
             #[cfg(feature = "dng-decode")]
-            if ifd0.get(TiffTag::DNGVersion).is_some() {
+            if ifd0.entry(ifd::tags::DNG_VERSION).is_some() {
                 return Ok(RawFormat::Dng);
             }
 
             // Check Make tag to determine specific format
-            if let Some(make_entry) = ifd0.get(TiffTag::Make)
-                && let Ok(value) = parser.read_value(make_entry)
+            #[cfg(any(feature = "arw-decode", feature = "nef-decode"))]
+            if let Some(make_entry) = ifd0.entry(ifd::tags::MAKE)
+                && let Ok(value) = ifd_reader.value(make_entry)
                 && let Some(make) = value.as_str()
             {
                 let make_lower = make.to_lowercase();
@@ -767,7 +775,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "tiff-parser")]
+    #[cfg(any(feature = "arw-decode", feature = "nef-decode", feature = "dng-decode"))]
     #[test]
     fn test_detect_format_tiff_no_make() {
         // Valid TIFF header but no Make tag - should return UnsupportedFormat

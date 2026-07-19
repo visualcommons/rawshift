@@ -97,6 +97,14 @@ pub enum ParseError {
     #[error("Required tag not found: {0}")]
     TagNotFound(TiffTag),
 
+    /// Required tag not found, identified by its raw 16-bit id.
+    ///
+    /// Used by the gamut-ifd-based decoders, which address tags numerically;
+    /// [`ParseError::TagNotFound`] is the legacy binrw-parser equivalent and is
+    /// removed with it in the DNG migration (#21).
+    #[error("Required tag not found: 0x{0:04X}")]
+    MissingTag(u16),
+
     /// Offset exceeds file boundaries.
     #[error("Offset out of bounds: offset {offset} + size {size} exceeds file size {file_size}")]
     OffsetOutOfBounds {

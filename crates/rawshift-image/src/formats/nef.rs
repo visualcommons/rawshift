@@ -2,12 +2,17 @@
 //!
 //! This module provides parsing for Nikon Electronic Format (NEF) files,
 //! which are based on the TIFF container format with Nikon-specific extensions.
+//!
+//! IFD structure walking is backed by [`gamut_ifd`].
 
 use std::io::{Read, Seek};
+use std::marker::PhantomData;
 
+use gamut_ifd::{Ifd, Value};
+
+use super::ifd::{self, tags};
 use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
 use crate::error::{FormatError, ParseError, RawError, RawResult};
-use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
 /// Metadata extracted from a Nikon NEF file.
 #[derive(Debug, Clone)]
@@ -38,31 +43,34 @@ pub struct NefMetadata {
 
 /// Parsed Nikon NEF file.
 pub struct NefFile<R> {
-    parser: TiffParser<R>,
-    /// The main IFD chain
+    /// The whole file, read into memory (IFD offsets are absolute).
+    data: Vec<u8>,
+    /// The main IFD chain (with SubIFDs/Exif/GPS pointer groups resolved)
     ifds: Vec<Ifd>,
-    /// Index into the flat IFD list (main IFD index, sub IFD index within it)
+    /// Index into the IFD list (main IFD index, sub IFD index within the
+    /// SubIFDs pointer group)
     raw_ifd_index: Option<(usize, usize)>,
     /// Extracted metadata
     metadata: Option<NefMetadata>,
+    /// The reader type this file was parsed from.
+    _reader: PhantomData<R>,
 }
 
 impl<R: Read + Seek> NefFile<R> {
     /// Parse a Nikon NEF file.
     pub fn parse(reader: R) -> RawResult<Self> {
-        let mut parser = TiffParser::new(reader)?;
-
-        // Walk the IFD chain
-        let ifds = parser.walk_ifd_chain()?;
+        let data = ifd::read_all(reader)?;
+        let tree = ifd::parse_tree(&data, "NEF: TIFF structure")?;
 
         // Find the raw SubIFD
-        let raw_ifd_index = Self::find_raw_ifd(&ifds);
+        let raw_ifd_index = Self::find_raw_ifd(&tree.ifds);
 
         let mut nef = NefFile {
-            parser,
-            ifds,
+            data,
+            ifds: tree.ifds,
             raw_ifd_index,
             metadata: None,
+            _reader: PhantomData,
         };
 
         // Extract metadata
@@ -81,25 +89,17 @@ impl<R: Read + Seek> NefFile<R> {
         let mut best_match: Option<(usize, usize, u64)> = None;
 
         for (ifd_idx, ifd) in ifds.iter().enumerate() {
-            for (sub_idx, sub_ifd) in ifd.sub_ifds.iter().enumerate() {
-                // Check for CFA photometric interpretation
-                let is_cfa = if let Some(entry) = sub_ifd.get(TiffTag::PhotometricInterpretation) {
-                    // CFA is 32803
-                    entry.value_offset == 32803
-                } else {
-                    // Also treat as potential CFA if it has a CFAPattern tag
-                    sub_ifd.get(TiffTag::CFAPattern).is_some()
+            for (sub_idx, sub_ifd) in ifd::sub_ifd_group(ifd, tags::SUB_IFDS).iter().enumerate() {
+                // Check for CFA photometric interpretation (CFA is 32803);
+                // also treat as potential CFA if it has a CFAPattern tag.
+                let is_cfa = match sub_ifd.get_u32(tags::PHOTOMETRIC_INTERPRETATION) {
+                    Some(photometric) => photometric == 32803,
+                    None => sub_ifd.get(tags::CFA_PATTERN).is_some(),
                 };
 
                 if is_cfa {
-                    let width = sub_ifd
-                        .get(TiffTag::ImageWidth)
-                        .map(|e| e.value_offset as u32)
-                        .unwrap_or(0);
-                    let height = sub_ifd
-                        .get(TiffTag::ImageLength)
-                        .map(|e| e.value_offset as u32)
-                        .unwrap_or(0);
+                    let width = ifd::first_u32(sub_ifd, tags::IMAGE_WIDTH).unwrap_or(0);
+                    let height = ifd::first_u32(sub_ifd, tags::IMAGE_LENGTH).unwrap_or(0);
 
                     let pixel_count = width as u64 * height as u64;
 
@@ -116,8 +116,9 @@ impl<R: Read + Seek> NefFile<R> {
 
     /// Get the raw SubIFD.
     fn raw_ifd(&self) -> Option<&Ifd> {
-        self.raw_ifd_index
-            .map(|(ifd_idx, sub_idx)| &self.ifds[ifd_idx].sub_ifds[sub_idx])
+        self.raw_ifd_index.map(|(ifd_idx, sub_idx)| {
+            &ifd::sub_ifd_group(&self.ifds[ifd_idx], tags::SUB_IFDS)[sub_idx]
+        })
     }
 
     /// Get the main IFD (IFD0).
@@ -132,8 +133,7 @@ impl<R: Read + Seek> NefFile<R> {
 
     /// Extract metadata from the parsed IFDs.
     fn extract_metadata(&mut self) -> RawResult<()> {
-        // Clone the IFDs we need to avoid borrow issues
-        let ifd0 = self.ifd0().cloned().ok_or_else(|| {
+        let ifd0 = self.ifd0().ok_or_else(|| {
             RawError::Parse(ParseError::InvalidIfd {
                 offset: 0,
                 reason: "No IFD0 found".to_string(),
@@ -141,12 +141,7 @@ impl<R: Read + Seek> NefFile<R> {
         })?;
 
         // Extract Make
-        let make = if let Some(entry) = ifd0.get(TiffTag::Make) {
-            let value = self.parser.read_value(entry)?;
-            value.as_str().unwrap_or("").trim().to_string()
-        } else {
-            String::new()
-        };
+        let make = ifd::ascii_tag(ifd0, tags::MAKE).unwrap_or_default();
 
         // Validate this is a Nikon file
         let make_upper = make.to_uppercase();
@@ -158,67 +153,35 @@ impl<R: Read + Seek> NefFile<R> {
         }
 
         // Extract Model
-        let model = if let Some(entry) = ifd0.get(TiffTag::Model) {
-            let value = self.parser.read_value(entry)?;
-            value.as_str().unwrap_or("").trim().to_string()
-        } else {
-            String::new()
-        };
+        let model = ifd::ascii_tag(ifd0, tags::MODEL).unwrap_or_default();
 
         // Get the raw SubIFD
         let raw_ifd = self
             .raw_ifd()
-            .cloned()
             .ok_or_else(|| RawError::Unsupported("Could not find raw SubIFD".to_string()))?;
 
         // Extract dimensions from raw SubIFD
-        let width = raw_ifd
-            .get(TiffTag::ImageWidth)
-            .map(|e| e.value_offset as u32)
-            .ok_or(RawError::Parse(ParseError::TagNotFound(
-                TiffTag::ImageWidth,
-            )))?;
+        let width = ifd::first_u32(raw_ifd, tags::IMAGE_WIDTH)
+            .ok_or(RawError::Parse(ParseError::MissingTag(tags::IMAGE_WIDTH)))?;
 
-        let height = raw_ifd
-            .get(TiffTag::ImageLength)
-            .map(|e| e.value_offset as u32)
-            .ok_or(RawError::Parse(ParseError::TagNotFound(
-                TiffTag::ImageLength,
-            )))?;
+        let height = ifd::first_u32(raw_ifd, tags::IMAGE_LENGTH)
+            .ok_or(RawError::Parse(ParseError::MissingTag(tags::IMAGE_LENGTH)))?;
 
         let sensor_size = Dimensions { width, height };
 
-        // Extract bit depth
-        let bit_depth = if let Some(entry) = raw_ifd.get(TiffTag::BitsPerSample) {
-            let value = self.parser.read_value(entry)?;
-            value.first_u32().unwrap_or(14) as u8
-        } else {
-            14 // Default for modern Nikon cameras
-        };
+        // Extract bit depth (first element; NEF stores one value per sample)
+        let bit_depth = ifd::first_u32(raw_ifd, tags::BITS_PER_SAMPLE).unwrap_or(14) as u8;
 
         // Extract compression
-        let compression = raw_ifd
-            .get(TiffTag::Compression)
-            .map(|e| e.value_offset as u16)
-            .unwrap_or(1);
+        let compression = ifd::first_u32(raw_ifd, tags::COMPRESSION).unwrap_or(1) as u16;
 
-        // Extract CFA pattern
-        let cfa_pattern = if let Some(entry) = raw_ifd.get(TiffTag::CFAPattern) {
-            let value = self.parser.read_value(entry)?;
-            if let TiffValue::Bytes(bytes) = value {
-                if bytes.len() >= 4 {
-                    let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
-                    CfaPattern::from_array(arr).unwrap_or(CfaPattern::Rggb)
-                } else {
-                    CfaPattern::Rggb
-                }
-            } else {
-                CfaPattern::Rggb
-            }
-        } else {
-            // Nikon typically uses RGGB
-            CfaPattern::Rggb
-        };
+        // Extract CFA pattern (Nikon typically uses RGGB)
+        let cfa_pattern = raw_ifd
+            .get(tags::CFA_PATTERN)
+            .and_then(Value::as_bytes)
+            .filter(|bytes| bytes.len() >= 4)
+            .and_then(|bytes| CfaPattern::from_array([bytes[0], bytes[1], bytes[2], bytes[3]]))
+            .unwrap_or(CfaPattern::Rggb);
 
         // Extract crop/active area (Nikon uses standard TIFF; no DNG tags typically)
         let active_area = Rect::from_coords(0, 0, width, height);
@@ -234,16 +197,11 @@ impl<R: Read + Seek> NefFile<R> {
         let white_level = white_level_from_bit_depth(bit_depth);
 
         // Get raw data location from strips
-        let (raw_data_offset, raw_data_size) = if let (Some(offset_entry), Some(count_entry)) = (
-            raw_ifd.get(TiffTag::StripOffsets),
-            raw_ifd.get(TiffTag::StripByteCounts),
+        let (raw_data_offset, raw_data_size) = if let (Some(offsets), Some(counts)) = (
+            raw_ifd.get(tags::STRIP_OFFSETS),
+            raw_ifd.get(tags::STRIP_BYTE_COUNTS),
         ) {
-            let offsets = self.parser.read_value(offset_entry)?;
-            let counts = self.parser.read_value(count_entry)?;
-
-            let offset = offsets.as_u64().unwrap_or(0);
-            let size = counts.as_u64().unwrap_or(0);
-            (offset, size)
+            (offsets.as_u64().unwrap_or(0), counts.as_u64().unwrap_or(0))
         } else {
             (0, 0)
         };
@@ -308,13 +266,7 @@ impl<R: Read + Seek> NefFile<R> {
         let offset = metadata.raw_data_offset;
         let size = metadata.raw_data_size as usize;
 
-        // Seek to the raw data
-        self.parser.seek_to(offset)?;
-
-        // Read the data
-        let data = self.parser.read_bytes(size)?;
-
-        Ok(data)
+        Ok(ifd::read_range(&self.data, offset, size)?.to_vec())
     }
 
     /// Extract the embedded JPEG thumbnail from IFD 0, if present.
@@ -323,30 +275,7 @@ impl<R: Read + Seek> NefFile<R> {
             Some(ifd) => ifd,
             None => return Ok(None),
         };
-        let offset_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormat) {
-            Some(e) => e.clone(),
-            None => return Ok(None),
-        };
-        let length_entry = match ifd0.get(crate::tiff::TiffTag::JPEGInterchangeFormatLength) {
-            Some(e) => e.clone(),
-            None => return Ok(None),
-        };
-        let offset = match self.parser.read_value(&offset_entry)? {
-            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as u64,
-            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as u64,
-            _ => return Ok(None),
-        };
-        let length = match self.parser.read_value(&length_entry)? {
-            crate::tiff::TiffValue::Longs(v) if !v.is_empty() => v[0] as usize,
-            crate::tiff::TiffValue::Shorts(v) if !v.is_empty() => v[0] as usize,
-            _ => return Ok(None),
-        };
-        if length == 0 {
-            return Ok(None);
-        }
-        self.parser.seek_to(offset)?;
-        let data = self.parser.read_bytes(length)?;
-        Ok(Some(data))
+        ifd::jpeg_thumbnail(&self.data, ifd0)
     }
 
     /// Decode the raw image data into a RawImage.

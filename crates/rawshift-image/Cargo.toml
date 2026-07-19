@@ -28,6 +28,10 @@ gamut-core     = { workspace = true }
 # part of the public `core` surface), so it is a required dependency.
 gamut-icc      = { workspace = true }
 gamut-exif     = { workspace = true, optional = true }
+# gamut-ifd backs the TIFF IFD structure walking of the TIFF-based RAW decoders
+# (ARW/CR2/NEF, and CR3's embedded CMT TIFF blocks). `bigtiff` is enabled so
+# BigTIFF-shaped containers parse (and DNG needs it when it migrates in #21).
+gamut-ifd      = { workspace = true, optional = true, features = ["bigtiff"] }
 gamut-metadata = { workspace = true, optional = true }
 gamut-xmp      = { workspace = true, optional = true }
 binrw          = { version = "0.15",   optional = true }
@@ -141,13 +145,17 @@ avif-encode = ["avif-encode-ravif"]
 heic-decode = ["heic-decode-libheif"]
 svg-decode  = ["svg-decode-resvg"]
 ppm-decode  = ["ppm-decode-zune"]
-arw-decode  = ["tiff-parser"]
-cr2-decode  = ["tiff-parser"]
-cr3-decode  = ["tiff-parser"]
+arw-decode  = ["ifd-parser"]
+cr2-decode  = ["ifd-parser"]
+cr3-decode  = ["ifd-parser"]
 crw-decode  = []
-dng-decode  = ["tiff-parser", "jxl-decode"]
+# dng-decode still parses its IFD structure with the legacy binrw engine
+# (`tiff-parser`); it migrates wholesale to gamut-dng in #21. `ifd-parser` is
+# additionally pulled because format sniffing (`RawFile::detect_format`) reads
+# IFD0 through gamut-ifd.
+dng-decode  = ["tiff-parser", "ifd-parser", "jxl-decode"]
 dng-encode  = ["tiff-parser"]
-nef-decode  = ["tiff-parser"]
+nef-decode  = ["ifd-parser"]
 raf-decode  = []
 
 # ── Tier 4: implementation features (compressed formats only) ─────────────────
@@ -192,8 +200,12 @@ svg-decode-resvg     = ["svg-decode", "dep:resvg"]
 ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
 
 # ── Tier 5: infrastructure / linking features ─────────────────────────────────
-# Internal TIFF structure parser (used by TIFF-based RAW formats) + public API.
+# Legacy binrw TIFF structure parser + public `tiff` module API. Only DNG
+# decode/encode still consume it; it is removed with the DNG migration (#21).
 tiff-parser   = ["dep:binrw"]
+# gamut-ifd TIFF/IFD structure engine (used by the migrated TIFF-based RAW
+# decoders and by format detection).
+ifd-parser    = ["dep:gamut-ifd"]
 serde         = ["dep:serde", "rawshift-core/serde"]
 # `zune-core` codec primitives (bit depth, colorspace, decoder/encoder option
 # builders). Pulled by every zune-backed decode/encode impl feature.
@@ -267,6 +279,10 @@ required-features = ["heic"]
 [[test]]
 name = "tiff_parser_tests"
 required-features = ["tiff-parser"]
+
+[[test]]
+name = "ifd_decoder_tests"
+required-features = ["arw"]
 
 [[test]]
 name = "dng_check"

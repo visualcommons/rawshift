@@ -1925,6 +1925,7 @@ dependencies = [
  "gamut-core",
  "gamut-exif",
  "gamut-icc",
+ "gamut-ifd",
  "gamut-metadata",
  "gamut-xmp",
  "gif",

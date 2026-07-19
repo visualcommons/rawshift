@@ -19,13 +19,14 @@
 //! This implementation fully extracts metadata but stubs the pixel decode, returning
 //! a clear error indicating that CRX decoding is not yet implemented.
 
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 
+use gamut_ifd::{IfdReader, Value};
 use tracing::instrument;
 
+use super::ifd::{self, tags};
 use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
 use crate::error::{FormatError, RawError, RawResult};
-use crate::tiff::{TiffParser, TiffTag, TiffValue};
 
 // ── Canon UUID ────────────────────────────────────────────────────────────────
 
@@ -368,34 +369,40 @@ impl<R: Read + Seek> Cr3File<R> {
 
         for b in cmt_boxes {
             if b.box_type == BOX_CMT1 && b.payload_size > 0 {
-                // CMT1 contains a standard TIFF/IFD structure
+                // CMT1 contains a standard TIFF/IFD structure (a standalone
+                // stream whose offsets are relative to the block start), read
+                // lazily through gamut-ifd so only the values we ask for are
+                // fetched.
                 let size = b.payload_size.min(65536) as usize;
                 self.reader.seek(SeekFrom::Start(b.payload_offset))?;
                 let mut buf = vec![0u8; size];
                 self.reader.read_exact(&mut buf)?;
 
-                if let Ok(mut parser) = TiffParser::new(Cursor::new(&buf))
-                    && let Ok(ifd0) = parser.parse_ifd0()
-                {
-                    // Make
-                    if let Some(entry) = ifd0.get(TiffTag::Make)
-                        && let Ok(val) = parser.read_value(entry)
-                    {
-                        make = val.as_str().unwrap_or("").trim().to_string();
-                    }
-                    // Model
-                    if let Some(entry) = ifd0.get(TiffTag::Model)
-                        && let Ok(val) = parser.read_value(entry)
-                    {
-                        model = val.as_str().unwrap_or("").trim().to_string();
-                    }
-                    // CFA pattern (if present)
-                    if let Some(entry) = ifd0.get(TiffTag::CFAPattern)
-                        && let Ok(TiffValue::Bytes(bytes)) = parser.read_value(entry)
-                        && bytes.len() >= 4
-                    {
-                        let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
-                        cfa_pattern = CfaPattern::from_array(arr);
+                if let Ok(mut ifd_reader) = IfdReader::open(&buf[..]) {
+                    let first = ifd_reader.first_ifd_offset();
+                    if let Ok(ifd0) = ifd_reader.read_ifd(first) {
+                        // Make
+                        if let Some(entry) = ifd0.entry(tags::MAKE)
+                            && let Ok(val) = ifd_reader.value(entry)
+                            && let Some(s) = val.as_str()
+                        {
+                            make = ifd::clean_ascii(s);
+                        }
+                        // Model
+                        if let Some(entry) = ifd0.entry(tags::MODEL)
+                            && let Ok(val) = ifd_reader.value(entry)
+                            && let Some(s) = val.as_str()
+                        {
+                            model = ifd::clean_ascii(s);
+                        }
+                        // CFA pattern (if present)
+                        if let Some(entry) = ifd0.entry(tags::CFA_PATTERN)
+                            && let Ok(Value::Byte(bytes)) = ifd_reader.value(entry)
+                            && bytes.len() >= 4
+                        {
+                            let arr = [bytes[0], bytes[1], bytes[2], bytes[3]];
+                            cfa_pattern = CfaPattern::from_array(arr);
+                        }
                     }
                 }
             }
