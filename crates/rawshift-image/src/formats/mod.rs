@@ -47,7 +47,8 @@ use crate::tiff::{TiffParser, TiffTag};
 
 #[cfg(any_raw)]
 use {
-    crate::core::image::{RawImage, RgbImage},
+    crate::core::RgbImage,
+    crate::core::image::RawImage,
     crate::error::{RawError, RawResult},
     crate::processing::ProcessingOptions,
     crate::transforms::{
@@ -218,7 +219,7 @@ impl<R: Read + Seek> RawFile<R> {
     ///
     /// This provides format-agnostic access to all available metadata.
     pub fn metadata(&self) -> crate::core::ImageMetadata {
-        use crate::core::MetadataExtractor;
+        use crate::core::ExtractMetadata;
         raw_format_dispatch!(self, inner => inner.extract_metadata())
     }
 
@@ -288,7 +289,7 @@ impl<R: Read + Seek> RawFile<R> {
                         bit_depth,
                         shift
                     );
-                    for pixel in &mut image.data {
+                    for pixel in image.data_mut() {
                         let val = (*pixel as u32) << shift;
                         *pixel = val.min(65535) as u16;
                     }
@@ -473,7 +474,7 @@ impl<R: Read + Seek> RawFile<R> {
         }
 
         // The pipeline emits display-referred sRGB after tone reproduction.
-        rgb_image.set_color_space(crate::core::ColorSpace::Srgb);
+        rgb_image.set_color(crate::core::ColorDescription::SRGB);
 
         Ok(rgb_image)
     }
@@ -860,8 +861,8 @@ mod tests {
     // Tests for orientation transforms (via transforms::orientation module)
     // -------------------------------------------------------------------------
 
-    fn make_test_rgb(width: u32, height: u32, data: Vec<u16>) -> crate::core::image::RgbImage {
-        crate::core::image::RgbImage::new(width, height, data)
+    fn make_test_rgb(width: u32, height: u32, data: Vec<u16>) -> crate::core::RgbImage {
+        crate::core::RgbImage::new(width, height, data).expect("valid RGB buffer")
     }
 
     #[test]
@@ -869,7 +870,7 @@ mod tests {
         use crate::transforms::orientation::flip_horizontal;
         let mut img = make_test_rgb(2, 1, vec![10, 11, 12, 20, 21, 22]);
         flip_horizontal(&mut img);
-        assert_eq!(img.data, vec![20, 21, 22, 10, 11, 12]);
+        assert_eq!(img.data(), vec![20, 21, 22, 10, 11, 12]);
     }
 
     #[test]
@@ -877,7 +878,7 @@ mod tests {
         use crate::transforms::orientation::rotate_180;
         let mut img = make_test_rgb(2, 1, vec![1, 2, 3, 4, 5, 6]);
         rotate_180(&mut img);
-        assert_eq!(img.data, vec![4, 5, 6, 1, 2, 3]);
+        assert_eq!(img.data(), vec![4, 5, 6, 1, 2, 3]);
     }
 
     #[test]
@@ -887,7 +888,7 @@ mod tests {
         rotate_90_cw(&mut img);
         assert_eq!(img.width(), 2);
         assert_eq!(img.height(), 1);
-        assert_eq!(img.data, vec![4, 5, 6, 1, 2, 3]);
+        assert_eq!(img.data(), vec![4, 5, 6, 1, 2, 3]);
     }
 
     #[test]
@@ -897,16 +898,16 @@ mod tests {
         rotate_90_ccw(&mut img);
         assert_eq!(img.width(), 1);
         assert_eq!(img.height(), 2);
-        assert_eq!(img.data, vec![4, 5, 6, 1, 2, 3]);
+        assert_eq!(img.data(), vec![4, 5, 6, 1, 2, 3]);
     }
 
     #[test]
     fn test_orientation_identity() {
         use crate::transforms::orientation::apply_orientation;
         let mut img = make_test_rgb(2, 2, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-        let original = img.data.clone();
+        let original = img.data().to_vec();
         apply_orientation(&mut img, 1);
-        assert_eq!(img.data, original);
+        assert_eq!(img.data(), original);
     }
 
     #[test]
@@ -919,14 +920,14 @@ mod tests {
                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
             ],
         );
-        let original_data = img.data.clone();
+        let original_data = img.data().to_vec();
         let original_w = img.width();
         let original_h = img.height();
         apply_orientation(&mut img, 6); // 90° CW
         apply_orientation(&mut img, 8); // 90° CCW (should undo it)
         assert_eq!(img.width(), original_w);
         assert_eq!(img.height(), original_h);
-        assert_eq!(img.data, original_data);
+        assert_eq!(img.data(), original_data);
     }
 
     #[cfg(any_raw)]

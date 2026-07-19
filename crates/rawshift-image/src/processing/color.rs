@@ -7,7 +7,8 @@
 //!
 //! All functions operate on 16-bit RGB data in the range [0, 65535].
 
-use crate::core::image::{RawImage, RgbImage};
+use crate::core::RgbImage;
+use crate::core::image::RawImage;
 
 /// Apply white balance to a raw Bayer CFA image.
 ///
@@ -66,7 +67,7 @@ pub fn apply_white_balance(image: &mut RgbImage, coeffs: (f32, f32, f32)) {
     let (r_scale, g_scale, b_scale) = coeffs;
 
     // Process pixel triplets
-    for chunk in image.data.chunks_exact_mut(3) {
+    for chunk in image.data_mut().chunks_exact_mut(3) {
         // Red
         let r = chunk[0] as f32 * r_scale;
         chunk[0] = clamp_u16(r);
@@ -96,7 +97,7 @@ pub fn apply_white_balance(image: &mut RgbImage, coeffs: (f32, f32, f32)) {
 /// * `image` - The image to modify in place
 /// * `matrix` - 3x3 row-major color transformation matrix
 pub fn apply_color_matrix(image: &mut RgbImage, matrix: &[f32; 9]) {
-    for chunk in image.data.chunks_exact_mut(3) {
+    for chunk in image.data_mut().chunks_exact_mut(3) {
         let r = chunk[0] as f32;
         let g = chunk[1] as f32;
         let b = chunk[2] as f32;
@@ -154,7 +155,7 @@ impl GammaLut {
 
     /// Apply gamma correction using the cached lookup table.
     pub fn apply(&self, image: &mut RgbImage) {
-        for pixel in &mut image.data {
+        for pixel in image.data_mut() {
             *pixel = self.table[*pixel as usize];
         }
     }
@@ -196,10 +197,10 @@ pub fn clamp_u16(val: f32) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::image::{CfaPattern, Rect, Size};
+    use crate::core::image::{CfaPattern, Dimensions, Rect};
 
     fn create_test_raw_image(width: u32, height: u32, pattern: CfaPattern) -> RawImage {
-        let size = Size::new(width, height);
+        let size = Dimensions { width, height };
         let active = Rect::from_coords(0, 0, width, height);
         RawImage::new(size, active, 14, pattern)
     }
@@ -308,7 +309,7 @@ mod tests {
             data.push(g);
             data.push(b);
         }
-        RgbImage::new(width, height, data)
+        RgbImage::new(width, height, data).expect("valid RGB buffer")
     }
 
     #[test]
@@ -327,9 +328,9 @@ mod tests {
 
         // Identity transform should leave values unchanged
         for i in 0..4 {
-            assert_eq!(image.data[i * 3], 1000);
-            assert_eq!(image.data[i * 3 + 1], 2000);
-            assert_eq!(image.data[i * 3 + 2], 3000);
+            assert_eq!(image.data()[i * 3], 1000);
+            assert_eq!(image.data()[i * 3 + 1], 2000);
+            assert_eq!(image.data()[i * 3 + 2], 3000);
         }
     }
 
@@ -339,9 +340,9 @@ mod tests {
         apply_white_balance(&mut image, (2.0, 1.0, 0.5));
 
         for i in 0..4 {
-            assert_eq!(image.data[i * 3], 2000); // R * 2.0
-            assert_eq!(image.data[i * 3 + 1], 2000); // G * 1.0
-            assert_eq!(image.data[i * 3 + 2], 1500); // B * 0.5
+            assert_eq!(image.data()[i * 3], 2000); // R * 2.0
+            assert_eq!(image.data()[i * 3 + 1], 2000); // G * 1.0
+            assert_eq!(image.data()[i * 3 + 2], 1500); // B * 0.5
         }
     }
 
@@ -350,9 +351,9 @@ mod tests {
         let mut image = create_test_image(1, 1, 60000, 30000, 1000);
         apply_white_balance(&mut image, (2.0, 2.0, 0.0));
 
-        assert_eq!(image.data[0], 65535); // Clipped to max
-        assert_eq!(image.data[1], 60000); // 30000 * 2
-        assert_eq!(image.data[2], 0); // Clipped to 0
+        assert_eq!(image.data()[0], 65535); // Clipped to max
+        assert_eq!(image.data()[1], 60000); // 30000 * 2
+        assert_eq!(image.data()[2], 0); // Clipped to 0
     }
 
     #[test]
@@ -363,9 +364,9 @@ mod tests {
 
         // Identity matrix should leave values unchanged
         for i in 0..4 {
-            assert_eq!(image.data[i * 3], 1000);
-            assert_eq!(image.data[i * 3 + 1], 2000);
-            assert_eq!(image.data[i * 3 + 2], 3000);
+            assert_eq!(image.data()[i * 3], 1000);
+            assert_eq!(image.data()[i * 3 + 1], 2000);
+            assert_eq!(image.data()[i * 3 + 2], 3000);
         }
     }
 
@@ -376,19 +377,19 @@ mod tests {
         let mut image = create_test_image(1, 1, 1000, 2000, 3000);
         apply_color_matrix(&mut image, &swap_matrix);
 
-        assert_eq!(image.data[0], 3000); // R_out = B_in
-        assert_eq!(image.data[1], 2000); // G_out = G_in
-        assert_eq!(image.data[2], 1000); // B_out = R_in
+        assert_eq!(image.data()[0], 3000); // R_out = B_in
+        assert_eq!(image.data()[1], 2000); // G_out = G_in
+        assert_eq!(image.data()[2], 1000); // B_out = R_in
     }
 
     #[test]
     fn test_gamma_identity() {
         let mut image = create_test_image(2, 2, 1000, 2000, 3000);
-        let original = image.data.clone();
+        let original = image.data().to_vec();
         apply_gamma(&mut image, 1.0);
 
         // Gamma 1.0 should be identity (fast path)
-        assert_eq!(image.data, original);
+        assert_eq!(image.data(), original);
     }
 
     #[test]
@@ -397,14 +398,14 @@ mod tests {
         apply_gamma(&mut image, 2.2);
 
         // Black should stay black
-        assert_eq!(image.data[0], 0);
+        assert_eq!(image.data()[0], 0);
         // White should stay white
-        assert_eq!(image.data[2], 65535);
+        assert_eq!(image.data()[2], 65535);
         // Mid-tone should be brighter (gamma correction raises values)
         assert!(
-            image.data[1] > 32768,
+            image.data()[1] > 32768,
             "Mid-tone {} should be > 32768",
-            image.data[1]
+            image.data()[1]
         );
     }
 
@@ -420,10 +421,10 @@ mod tests {
         let mut image = create_test_image(1, 1, 0, 32768, 65535);
         lut.apply(&mut image);
 
-        assert_eq!(image.data[0], 0);
-        assert_eq!(image.data[2], 65535);
+        assert_eq!(image.data()[0], 0);
+        assert_eq!(image.data()[2], 65535);
         assert!(
-            image.data[1] > 32768,
+            image.data()[1] > 32768,
             "Mid-tone should be brighter after gamma"
         );
     }
@@ -439,6 +440,6 @@ mod tests {
         lut.apply(&mut image1);
         lut.apply(&mut image2);
 
-        assert_eq!(image1.data, image2.data);
+        assert_eq!(image1.data(), image2.data());
     }
 }

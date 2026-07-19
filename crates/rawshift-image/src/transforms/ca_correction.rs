@@ -6,7 +6,7 @@
 //! independently rescaling the R and B channels relative to the image centre,
 //! using bilinear interpolation to sample the shifted source positions.
 
-use crate::core::image::RgbImage;
+use crate::core::RgbImage;
 
 /// Apply lateral chromatic aberration correction by rescaling colour channels.
 ///
@@ -40,7 +40,8 @@ pub fn apply_ca_correction(image: &mut RgbImage, red_scale: f32, blue_scale: f32
     let cx = (width as f32 - 1.0) * 0.5;
     let cy = (height as f32 - 1.0) * 0.5;
 
-    let input = image.data.clone();
+    let input = image.data().to_vec();
+    let data = image.data_mut();
 
     let scales = [(0usize, red_scale), (2usize, blue_scale)];
 
@@ -57,7 +58,7 @@ pub fn apply_ca_correction(image: &mut RgbImage, red_scale: f32, blue_scale: f32
                 let sy = cy + (y as f32 - cy) * inv_scale;
 
                 let value = bilinear_sample(&input, width, height, channel, sx, sy);
-                image.data[(y * width + x) * 3 + channel] = value;
+                data[(y * width + x) * 3 + channel] = value;
             }
         }
     }
@@ -106,7 +107,7 @@ mod tests {
 
     fn make_rgb(width: u32, height: u32, fill: u16) -> RgbImage {
         let n = (width as usize) * (height as usize) * 3;
-        RgbImage::new(width, height, vec![fill; n])
+        RgbImage::new(width, height, vec![fill; n]).expect("valid RGB buffer")
     }
 
     #[test]
@@ -117,9 +118,9 @@ mod tests {
         let n = (w as usize) * (h as usize) * 3;
         // Use a non-trivial pattern so any change would be visible.
         let data: Vec<u16> = (0..n).map(|i| (i as u16).wrapping_mul(7)).collect();
-        let mut img = RgbImage::new(w, h, data.clone());
+        let mut img = RgbImage::new(w, h, data.clone()).expect("valid RGB buffer");
         apply_ca_correction(&mut img, 1.0, 1.0);
-        assert_eq!(img.data, data, "scale 1.0 should leave image unchanged");
+        assert_eq!(img.data(), data, "scale 1.0 should leave image unchanged");
     }
 
     #[test]
@@ -140,7 +141,7 @@ mod tests {
         apply_ca_correction(&mut img, 1.002, 0.998);
         assert_eq!(img.width(), w, "width must not change");
         assert_eq!(img.height(), h, "height must not change");
-        assert_eq!(img.data.len(), (w as usize) * (h as usize) * 3);
+        assert_eq!(img.data().len(), (w as usize) * (h as usize) * 3);
     }
 
     #[test]
@@ -148,7 +149,7 @@ mod tests {
         // A flat image should remain flat regardless of scale.
         let mut img = make_rgb(12, 12, 8000);
         apply_ca_correction(&mut img, 1.005, 0.995);
-        assert!(img.data.iter().all(|&v| v == 8000));
+        assert!(img.data().iter().all(|&v| v == 8000));
     }
 
     #[test]
@@ -159,9 +160,9 @@ mod tests {
         let n = (w as usize) * (h as usize) * 3;
         let data: Vec<u16> = (0..n).map(|i| i as u16).collect();
         let original_green: Vec<u16> = data.chunks_exact(3).map(|px| px[1]).collect();
-        let mut img = RgbImage::new(w, h, data);
+        let mut img = RgbImage::new(w, h, data).expect("valid RGB buffer");
         apply_ca_correction(&mut img, 1.005, 0.995);
-        let corrected_green: Vec<u16> = img.data.chunks_exact(3).map(|px| px[1]).collect();
+        let corrected_green: Vec<u16> = img.data().chunks_exact(3).map(|px| px[1]).collect();
         assert_eq!(
             original_green, corrected_green,
             "G channel must not be modified"
@@ -173,7 +174,7 @@ mod tests {
         let mut img = make_rgb(1, 1, 1234);
         apply_ca_correction(&mut img, 1.01, 0.99);
         // Only one pixel; it should remain at the clamped bilinear sample of itself.
-        assert_eq!(img.data[0], 1234);
-        assert_eq!(img.data[2], 1234);
+        assert_eq!(img.data()[0], 1234);
+        assert_eq!(img.data()[2], 1234);
     }
 }

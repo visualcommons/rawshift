@@ -439,7 +439,7 @@ impl Demosaic for XTransFast {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::image::{CfaPattern, Point, Rect, Size};
+    use crate::core::image::{CfaPattern, Dimensions, Point, Rect};
 
     /// Create a minimal X-Trans RawImage for testing.
     ///
@@ -447,7 +447,7 @@ mod tests {
     /// standard Fujifilm pattern so the Markesteijn algorithm can identify
     /// which colour each sensor site carries.
     fn create_xtrans_raw(width: u32, height: u32, value: u16) -> RawImage {
-        let size = Size::new(width, height);
+        let size = Dimensions { width, height };
         let active_area = Rect::new(Point::ORIGIN, size);
         let pixel_count = (width * height) as usize;
         RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
@@ -577,7 +577,10 @@ mod tests {
     fn markesteijn_uses_default_pattern_when_xtrans_is_none() {
         // When xtrans_pattern is None the algorithm must still succeed
         // (falling back to XTransPattern::standard()).
-        let size = Size::new(12, 12);
+        let size = Dimensions {
+            width: 12,
+            height: 12,
+        };
         let active_area = Rect::new(Point::ORIGIN, size);
         // xtrans_pattern deliberately absent — algorithm should fall back to standard()
         let raw = RawImage::builder(size, active_area, 14, CfaPattern::Rggb)

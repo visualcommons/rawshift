@@ -23,7 +23,7 @@ use std::io::{Cursor, Read, Seek, SeekFrom};
 
 use tracing::instrument;
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
+use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
 use crate::error::{FormatError, RawError, RawResult};
 use crate::tiff::{TiffParser, TiffTag, TiffValue};
 
@@ -62,7 +62,7 @@ pub struct Cr3Metadata {
     /// Camera model (e.g., "Canon EOS R5")
     pub model: String,
     /// Full sensor dimensions
-    pub sensor_size: Size,
+    pub sensor_size: Dimensions,
     /// Active/crop area (full sensor size if unavailable)
     pub active_area: Rect,
     /// Bits per sample (typically 14)
@@ -297,7 +297,10 @@ impl<R: Read + Seek> Cr3File<R> {
         let bit_depth: u8 = 14;
         let white_level = white_level_from_bit_depth(bit_depth);
 
-        let sensor_size = sensor_size_opt.unwrap_or(Size::new(0, 0));
+        let sensor_size = sensor_size_opt.unwrap_or(Dimensions {
+            width: 0,
+            height: 0,
+        });
         let active_area = Rect::from_coords(0, 0, sensor_size.width, sensor_size.height);
         let cfa_pattern = cfa_pattern_opt.unwrap_or(CfaPattern::Rggb);
 
@@ -410,10 +413,10 @@ impl<R: Read + Seek> Cr3File<R> {
     fn parse_trak_boxes(
         &mut self,
         moov_boxes: &[IsobmffBox],
-    ) -> RawResult<(u64, u64, Option<Size>)> {
+    ) -> RawResult<(u64, u64, Option<Dimensions>)> {
         let mut best_offset: u64 = 0;
         let mut best_size: u64 = 0;
-        let mut best_sensor_size: Option<Size> = None;
+        let mut best_sensor_size: Option<Dimensions> = None;
 
         for b in moov_boxes {
             if b.box_type != BOX_TRAK {
@@ -433,7 +436,10 @@ impl<R: Read + Seek> Cr3File<R> {
     }
 
     /// Parse a single `trak` box and extract raw data location.
-    fn parse_single_trak(&mut self, trak: &IsobmffBox) -> RawResult<(u64, u64, Option<Size>)> {
+    fn parse_single_trak(
+        &mut self,
+        trak: &IsobmffBox,
+    ) -> RawResult<(u64, u64, Option<Dimensions>)> {
         self.reader.seek(SeekFrom::Start(trak.payload_offset))?;
         let trak_boxes = read_boxes(&mut self.reader, trak.payload_size)?;
 
@@ -487,7 +493,7 @@ impl<R: Read + Seek> Cr3File<R> {
     }
 
     /// Try to extract image dimensions from the `stsd` (sample description) box.
-    fn parse_stsd_for_size(&mut self, stbl_boxes: &[IsobmffBox]) -> Option<Size> {
+    fn parse_stsd_for_size(&mut self, stbl_boxes: &[IsobmffBox]) -> Option<Dimensions> {
         let stsd = stbl_boxes.iter().find(|b| b.box_type == BOX_STSD)?;
 
         // stsd layout: version(1) + flags(3) + entry_count(4) + entries…
@@ -544,7 +550,7 @@ impl<R: Read + Seek> Cr3File<R> {
             .seek(SeekFrom::Start(entry_start + entry_size as u64));
 
         if width > 0 && height > 0 {
-            Some(Size::new(width, height))
+            Some(Dimensions { width, height })
         } else {
             None
         }
@@ -616,9 +622,9 @@ impl<R: Read + Seek> Cr3File<R> {
     }
 }
 
-// ── MetadataExtractor trait ───────────────────────────────────────────────────
+// ── ExtractMetadata trait ─────────────────────────────────────────────────────
 
-impl<R: Read + Seek> crate::core::MetadataExtractor for Cr3File<R> {
+impl<R: Read + Seek> crate::core::ExtractMetadata for Cr3File<R> {
     fn extract_metadata(&self) -> crate::core::ImageMetadata {
         use crate::core::metadata::*;
 
@@ -749,7 +755,10 @@ mod tests {
         let meta = Cr3Metadata {
             make: "Canon".to_string(),
             model: "Canon EOS R5".to_string(),
-            sensor_size: Size::new(8192, 5464),
+            sensor_size: Dimensions {
+                width: 8192,
+                height: 5464,
+            },
             active_area: Rect::from_coords(0, 0, 8192, 5464),
             bit_depth: 14,
             cfa_pattern: CfaPattern::Rggb,

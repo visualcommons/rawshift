@@ -4,7 +4,8 @@
 //! defined in [`crate::processing::demosaic`]. It handles the selection of the appropriate
 //! algorithm and manages the conversion from raw sensor data to RGB image buffers.
 
-use crate::core::image::{RawImage, RgbImage};
+use crate::core::RgbImage;
+use crate::core::image::RawImage;
 use crate::error::RawResult;
 use crate::processing::demosaic::DemosaicMethod;
 

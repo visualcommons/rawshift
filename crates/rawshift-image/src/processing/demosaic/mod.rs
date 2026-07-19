@@ -1,4 +1,5 @@
-use crate::core::image::{RawImage, RgbImage};
+use crate::core::RgbImage;
+use crate::core::image::RawImage;
 
 /// Error type for demosaicing operations.
 #[derive(Debug, Clone)]
@@ -205,7 +206,7 @@ pub trait Demosaic {
         let mut data = vec![0u16; (width as usize) * (height as usize) * 3];
         self.demosaic_into(raw, &mut data)
             .expect("demosaic_into failed with correctly sized buffer");
-        RgbImage::new(width, height, data)
+        RgbImage::new(width, height, data).expect("width*height*3 buffer allocated above")
     }
 }
 

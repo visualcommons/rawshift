@@ -13,7 +13,7 @@ use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use rawshift_image::core::image::RgbImage;
+use rawshift_image::core::RgbImage;
 use rawshift_image::core::metadata::{
     CameraInfo, DateTimeInfo, ExifInfo, GpsInfo, ImageInfo, ImageMetadata, SRational, URational,
 };
@@ -203,7 +203,7 @@ fn generate_jpeg(data_dir: &Path, fixture_dir: &Path) {
 
     let (w, h, pixels_u8) = reference_pixels_u8();
     let pixels_u16 = pixels_u8_to_u16(&pixels_u8);
-    let img = RgbImage::new(w, h, pixels_u16);
+    let img = RgbImage::new(w, h, pixels_u16).expect("valid RGB buffer");
 
     let name = "test_8x8.jpg";
     encode_rgb_image(
@@ -226,7 +226,7 @@ fn generate_png(data_dir: &Path, fixture_dir: &Path) {
 
     let (w, h, pixels_u8) = reference_pixels_u8();
     let pixels_u16 = pixels_u8_to_u16(&pixels_u8);
-    let img = RgbImage::new(w, h, pixels_u16);
+    let img = RgbImage::new(w, h, pixels_u16).expect("valid RGB buffer");
 
     let name = "test_8x8.png";
     encode_rgb_image(
@@ -309,7 +309,7 @@ fn generate_webp(data_dir: &Path, fixture_dir: &Path) {
 
     let (w, h, pixels_u8) = reference_pixels_u8();
     let pixels_u16 = pixels_u8_to_u16(&pixels_u8);
-    let img = RgbImage::new(w, h, pixels_u16);
+    let img = RgbImage::new(w, h, pixels_u16).expect("valid RGB buffer");
 
     let name = "test_8x8.webp";
     encode_rgb_image(
@@ -352,7 +352,7 @@ fn generate_avif(data_dir: &Path, fixture_dir: &Path) {
 
     let (w, h, pixels_u8) = reference_pixels_u8();
     let pixels_u16 = pixels_u8_to_u16(&pixels_u8);
-    let img = RgbImage::new(w, h, pixels_u16);
+    let img = RgbImage::new(w, h, pixels_u16).expect("valid RGB buffer");
 
     let name = "test_8x8.avif";
     encode_rgb_image(
@@ -376,7 +376,7 @@ fn generate_avif_libaom(data_dir: &Path, fixture_dir: &Path) {
 
     let (w, h, pixels_u8) = reference_pixels_u8();
     let pixels_u16 = pixels_u8_to_u16(&pixels_u8);
-    let img = RgbImage::new(w, h, pixels_u16);
+    let img = RgbImage::new(w, h, pixels_u16).expect("valid RGB buffer");
 
     // Default libaom config: 10-bit, 4:4:4.
     let name = "test_8x8.avif";
@@ -401,7 +401,7 @@ fn generate_jxl(data_dir: &Path, fixture_dir: &Path) {
 
     let (w, h, pixels_u8) = reference_pixels_u8();
     let pixels_u16 = pixels_u8_to_u16(&pixels_u8);
-    let img = RgbImage::new(w, h, pixels_u16);
+    let img = RgbImage::new(w, h, pixels_u16).expect("valid RGB buffer");
 
     let name = "test_8x8.jxl";
     encode_rgb_image(

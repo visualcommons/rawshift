@@ -1,9 +1,17 @@
 //! Core image structures and types.
 //!
-//! This module defines the fundamental structures for representing
-//! image dimensions, coordinates, and raw image data.
+//! This module defines the fundamental structures for representing image
+//! dimensions, coordinates, and raw sensor data. Pixel dimensions are gamut's
+//! [`Dimensions`]; the sensor-specific vocabulary ([`RawImage`],
+//! [`CfaPattern`], [`XTransPattern`]) is rawshift's own — a Bayer/X-Trans
+//! mosaic has no gamut equivalent.
 
-use crate::color::ColorSpace;
+/// Image dimensions in pixels (re-exported from `gamut-core`).
+///
+/// Fields are public `u32`s; [`Dimensions::new`] is fallible and rejects
+/// zero-sized images, while struct-literal construction is unvalidated for
+/// call sites that permit zero (e.g. probes of degenerate headers).
+pub use gamut_core::Dimensions;
 
 /// Compute the maximum pixel value (white level) for a given bit depth, clamped to `u16`.
 ///
@@ -19,31 +27,15 @@ pub fn white_level_from_bit_depth(bit_depth: u8) -> u16 {
     }
 }
 
-/// Image dimensions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Size {
-    /// Width in pixels
-    pub width: u32,
-    /// Height in pixels
-    pub height: u32,
-}
-
-impl Size {
-    /// Create a new Size.
-    pub fn new(width: u32, height: u32) -> Self {
-        Self { width, height }
-    }
-
-    /// Check if dimensions are valid (non-zero).
-    pub fn is_valid(&self) -> bool {
-        self.width > 0 && self.height > 0
-    }
-
-    /// Total number of pixels.
-    pub fn pixel_count(&self) -> u64 {
-        self.width as u64 * self.height as u64
-    }
+/// Number of pixels in `dims` as a `usize`, for buffer allocation.
+///
+/// Zero-sized dimensions yield 0. Panics if the product overflows `usize`
+/// (impossible on 64-bit targets; on 32-bit it means an allocation that could
+/// never succeed anyway).
+#[inline]
+pub(crate) fn pixel_count(dims: Dimensions) -> usize {
+    dims.num_pixels()
+        .expect("pixel count overflows usize on this target")
 }
 
 /// A point in image coordinates.
@@ -66,19 +58,18 @@ impl Point {
     pub const ORIGIN: Point = Point { x: 0, y: 0 };
 }
 
-/// A rectangular region.
+/// A rectangular region: an origin plus [`Dimensions`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rect {
     /// Origin (top-left corner)
     pub origin: Point,
     /// Size of the rectangle
-    pub size: Size,
+    pub size: Dimensions,
 }
 
 impl Rect {
     /// Create a new Rect.
-    pub fn new(origin: Point, size: Size) -> Self {
+    pub fn new(origin: Point, size: Dimensions) -> Self {
         Self { origin, size }
     }
 
@@ -86,7 +77,7 @@ impl Rect {
     pub fn from_coords(x: u32, y: u32, width: u32, height: u32) -> Self {
         Self {
             origin: Point::new(x, y),
-            size: Size::new(width, height),
+            size: Dimensions { width, height },
         }
     }
 
@@ -98,6 +89,72 @@ impl Rect {
     /// Bottom edge (y + height).
     pub fn bottom(&self) -> u32 {
         self.origin.y.saturating_add(self.size.height)
+    }
+}
+
+// Manual serde: `Dimensions` is a gamut type without serde derives
+// (justin13888/gamut#257), so `Rect` flattens to four integers on the wire —
+// which is also the more natural stable form.
+#[cfg(feature = "serde")]
+impl serde::Serialize for Rect {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("Rect", 4)?;
+        s.serialize_field("x", &self.origin.x)?;
+        s.serialize_field("y", &self.origin.y)?;
+        s.serialize_field("width", &self.size.width)?;
+        s.serialize_field("height", &self.size.height)?;
+        s.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Rect {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            x: u32,
+            y: u32,
+            width: u32,
+            height: u32,
+        }
+        let w = Wire::deserialize(deserializer)?;
+        Ok(Rect::from_coords(w.x, w.y, w.width, w.height))
+    }
+}
+
+/// Serde adapter for the re-exported [`Dimensions`], which carries no serde
+/// derives upstream (justin13888/gamut#257).
+///
+/// Use on struct fields:
+/// `#[cfg_attr(feature = "serde", serde(with = "rawshift_core::image::dimensions_serde"))]`
+#[cfg(feature = "serde")]
+pub mod dimensions_serde {
+    use super::Dimensions;
+    use serde::Deserialize;
+
+    /// Serialize as `{ "width": u32, "height": u32 }`.
+    pub fn serialize<S: serde::Serializer>(v: &Dimensions, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut st = s.serialize_struct("Dimensions", 2)?;
+        st.serialize_field("width", &v.width)?;
+        st.serialize_field("height", &v.height)?;
+        st.end()
+    }
+
+    /// Deserialize from `{ "width": u32, "height": u32 }` (zero permitted, as
+    /// with struct-literal construction).
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Dimensions, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            width: u32,
+            height: u32,
+        }
+        let w = Wire::deserialize(d)?;
+        Ok(Dimensions {
+            width: w.width,
+            height: w.height,
+        })
     }
 }
 
@@ -193,7 +250,7 @@ impl XTransPattern {
 /// Use [`RawImageBuilder`] to construct new instances.
 #[derive(Debug, Clone)]
 pub struct RawImage {
-    size: Size,
+    size: Dimensions,
     active_area: Rect,
     bit_depth: u8,
     cfa_pattern: CfaPattern,
@@ -209,8 +266,12 @@ pub struct RawImage {
 
 impl RawImage {
     /// Create a new empty RawImage with the given parameters.
-    pub fn new(size: Size, active_area: Rect, bit_depth: u8, cfa_pattern: CfaPattern) -> Self {
-        let pixel_count = size.pixel_count() as usize;
+    pub fn new(
+        size: Dimensions,
+        active_area: Rect,
+        bit_depth: u8,
+        cfa_pattern: CfaPattern,
+    ) -> Self {
         Self {
             size,
             active_area,
@@ -219,7 +280,7 @@ impl RawImage {
             xtrans_pattern: None,
             black_levels: [0; 4],
             white_level: white_level_from_bit_depth(bit_depth),
-            data: vec![0u16; pixel_count],
+            data: vec![0u16; pixel_count(size)],
             baseline_exposure: None,
             default_crop: None,
         }
@@ -227,7 +288,7 @@ impl RawImage {
 
     /// Create a builder for constructing a RawImage.
     pub fn builder(
-        size: Size,
+        size: Dimensions,
         active_area: Rect,
         bit_depth: u8,
         cfa_pattern: CfaPattern,
@@ -249,7 +310,7 @@ impl RawImage {
     // ── Read accessors ───────────────────────────────────────────────────
 
     /// Full sensor dimensions.
-    pub fn size(&self) -> Size {
+    pub fn size(&self) -> Dimensions {
         self.size
     }
 
@@ -358,7 +419,7 @@ impl RawImage {
 
 /// Builder for constructing [`RawImage`] instances.
 pub struct RawImageBuilder {
-    size: Size,
+    size: Dimensions,
     active_area: Rect,
     bit_depth: u8,
     cfa_pattern: CfaPattern,
@@ -411,7 +472,7 @@ impl RawImageBuilder {
     pub fn build(self) -> RawImage {
         let data = self
             .data
-            .unwrap_or_else(|| vec![0u16; self.size.pixel_count() as usize]);
+            .unwrap_or_else(|| vec![0u16; pixel_count(self.size)]);
         RawImage {
             size: self.size,
             active_area: self.active_area,
@@ -424,103 +485,6 @@ impl RawImageBuilder {
             baseline_exposure: self.baseline_exposure,
             default_crop: self.default_crop,
         }
-    }
-}
-
-/// A simple container for RGB image data.
-#[derive(Debug, Clone)]
-pub struct RgbImage {
-    size: Size,
-    /// Interleaved RGB data (R, G, B, R, G, B...)
-    pub data: Vec<u16>,
-    baseline_exposure: Option<f32>,
-    default_crop: Option<Rect>,
-    color_space: ColorSpace,
-}
-
-impl RgbImage {
-    /// Create a new RgbImage with an unknown color space.
-    ///
-    /// Use [`with_color_space`](Self::with_color_space) or
-    /// [`set_color_space`](Self::set_color_space) when the space is known.
-    pub fn new(width: u32, height: u32, data: Vec<u16>) -> Self {
-        Self {
-            size: Size::new(width, height),
-            data,
-            baseline_exposure: None,
-            default_crop: None,
-            color_space: ColorSpace::Unknown,
-        }
-    }
-
-    /// Create a new RgbImage tagged with a known color space.
-    pub fn with_color_space(
-        width: u32,
-        height: u32,
-        data: Vec<u16>,
-        color_space: ColorSpace,
-    ) -> Self {
-        Self {
-            size: Size::new(width, height),
-            data,
-            baseline_exposure: None,
-            default_crop: None,
-            color_space,
-        }
-    }
-
-    // ── Read accessors ───────────────────────────────────────────────────
-
-    /// Image dimensions.
-    pub fn size(&self) -> Size {
-        self.size
-    }
-
-    /// Image width in pixels.
-    pub fn width(&self) -> u32 {
-        self.size.width
-    }
-
-    /// Image height in pixels.
-    pub fn height(&self) -> u32 {
-        self.size.height
-    }
-
-    /// Baseline exposure offset in EV.
-    pub fn baseline_exposure(&self) -> Option<f32> {
-        self.baseline_exposure
-    }
-
-    /// Default crop rectangle.
-    pub fn default_crop(&self) -> Option<Rect> {
-        self.default_crop
-    }
-
-    /// The color space the RGB samples are in.
-    pub fn color_space(&self) -> ColorSpace {
-        self.color_space
-    }
-
-    // ── Write accessors ──────────────────────────────────────────────────
-
-    /// Set baseline exposure offset.
-    pub fn set_baseline_exposure(&mut self, ev: Option<f32>) {
-        self.baseline_exposure = ev;
-    }
-
-    /// Set the color space tag for the RGB samples.
-    pub fn set_color_space(&mut self, color_space: ColorSpace) {
-        self.color_space = color_space;
-    }
-
-    /// Set default crop rectangle.
-    pub fn set_default_crop(&mut self, crop: Option<Rect>) {
-        self.default_crop = crop;
-    }
-
-    /// Set image dimensions (used by orientation transforms).
-    pub fn set_size(&mut self, size: Size) {
-        self.size = size;
     }
 }
 
@@ -543,13 +507,24 @@ mod tests {
     }
 
     #[test]
-    fn test_size() {
-        let size = Size::new(100, 200);
-        assert_eq!(size.pixel_count(), 20000);
-        assert!(size.is_valid());
+    fn test_dimensions() {
+        let size = Dimensions {
+            width: 100,
+            height: 200,
+        };
+        assert_eq!(pixel_count(size), 20000);
+        assert!(!size.is_empty());
 
-        let empty = Size::new(0, 100);
-        assert!(!empty.is_valid());
+        let empty = Dimensions {
+            width: 0,
+            height: 100,
+        };
+        assert!(empty.is_empty());
+        assert_eq!(pixel_count(empty), 0);
+
+        // The validating constructor rejects zero sizes.
+        assert!(Dimensions::new(0, 100).is_err());
+        assert!(Dimensions::new(100, 200).is_ok());
     }
 
     #[test]
@@ -561,7 +536,10 @@ mod tests {
 
     #[test]
     fn test_raw_image() {
-        let size = Size::new(10, 10);
+        let size = Dimensions {
+            width: 10,
+            height: 10,
+        };
         let active = Rect::from_coords(0, 0, 10, 10);
         let mut img = RawImage::new(size, active, 14, CfaPattern::Rggb);
 
@@ -572,7 +550,10 @@ mod tests {
 
     #[test]
     fn test_raw_image_pixel_access() {
-        let size = Size::new(4, 4);
+        let size = Dimensions {
+            width: 4,
+            height: 4,
+        };
         let active = Rect::from_coords(0, 0, 4, 4);
         let mut img = RawImage::new(size, active, 14, CfaPattern::Rggb);
 
@@ -596,41 +577,6 @@ mod tests {
     }
 
     #[test]
-    fn test_rgb_image_indexing() {
-        // RgbImage stores interleaved RGB: R G B R G B ...
-        let data = vec![
-            100u16, 200, 300, // pixel 0: R=100, G=200, B=300
-            400, 500, 600, // pixel 1: R=400, G=500, B=600
-        ];
-        let img = RgbImage::new(2, 1, data.clone());
-
-        assert_eq!(img.data[0], 100, "pixel 0 R");
-        assert_eq!(img.data[1], 200, "pixel 0 G");
-        assert_eq!(img.data[2], 300, "pixel 0 B");
-        assert_eq!(img.data[3], 400, "pixel 1 R");
-        assert_eq!(img.data[4], 500, "pixel 1 G");
-        assert_eq!(img.data[5], 600, "pixel 1 B");
-
-        assert_eq!(img.width(), 2);
-        assert_eq!(img.height(), 1);
-        assert_eq!(img.data.len(), 6);
-    }
-
-    #[test]
-    fn test_size_pixel_count() {
-        let s = Size::new(1920, 1080);
-        assert_eq!(s.pixel_count(), 1920 * 1080);
-
-        // Zero dimension
-        let s = Size::new(0, 100);
-        assert_eq!(s.pixel_count(), 0);
-
-        // Large dimensions (check u64 doesn't overflow)
-        let s = Size::new(10000, 10000);
-        assert_eq!(s.pixel_count(), 100_000_000u64);
-    }
-
-    #[test]
     fn test_rect_dimensions() {
         let r = Rect::from_coords(10, 20, 100, 200);
         assert_eq!(r.origin.x, 10);
@@ -643,7 +589,10 @@ mod tests {
 
     #[test]
     fn test_raw_image_builder() {
-        let size = Size::new(10, 10);
+        let size = Dimensions {
+            width: 10,
+            height: 10,
+        };
         let active = Rect::from_coords(0, 0, 10, 10);
         let img = RawImage::builder(size, active, 14, CfaPattern::Rggb)
             .black_levels([100, 100, 100, 100])
@@ -661,7 +610,10 @@ mod tests {
 
     #[test]
     fn test_raw_image_builder_with_data() {
-        let size = Size::new(2, 2);
+        let size = Dimensions {
+            width: 2,
+            height: 2,
+        };
         let active = Rect::from_coords(0, 0, 2, 2);
         let img = RawImage::builder(size, active, 14, CfaPattern::Rggb)
             .data(vec![1000, 2000, 3000, 4000])
@@ -671,18 +623,11 @@ mod tests {
     }
 
     #[test]
-    fn test_rgb_image_accessors() {
-        let img = RgbImage::new(100, 200, vec![0u16; 100 * 200 * 3]);
-        assert_eq!(img.width(), 100);
-        assert_eq!(img.height(), 200);
-        assert_eq!(img.size(), Size::new(100, 200));
-        assert_eq!(img.baseline_exposure(), None);
-        assert_eq!(img.default_crop(), None);
-    }
-
-    #[test]
     fn test_raw_image_setters() {
-        let size = Size::new(4, 4);
+        let size = Dimensions {
+            width: 4,
+            height: 4,
+        };
         let active = Rect::from_coords(0, 0, 4, 4);
         let mut img = RawImage::new(size, active, 14, CfaPattern::Rggb);
 
@@ -701,5 +646,15 @@ mod tests {
 
         img.set_xtrans_pattern(Some(XTransPattern::standard()));
         assert!(img.xtrans_pattern().is_some());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn rect_serde_round_trip() {
+        let r = Rect::from_coords(10, 20, 100, 200);
+        let json = serde_json::to_string(&r).unwrap();
+        assert_eq!(json, r#"{"x":10,"y":20,"width":100,"height":200}"#);
+        let back: Rect = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, r);
     }
 }

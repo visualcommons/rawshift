@@ -18,7 +18,7 @@
 
 use std::io::{Read, Seek};
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
+use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
 use crate::error::{FormatError, RawError, RawResult};
 
 // ── CIFF signature ────────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ pub struct CrwMetadata {
     /// Camera model string (e.g. "Canon PowerShot G2").
     pub model: String,
     /// Full sensor dimensions.
-    pub sensor_size: Size,
+    pub sensor_size: Dimensions,
     /// Active / crop area.
     pub active_area: Rect,
     /// Bits per sample (typically 12 for CRW).
@@ -127,7 +127,10 @@ impl<R: Read + Seek> CrwFile<R> {
 
         // Full CIFF heap parsing is not yet implemented.
         // Provide default metadata: Canon, typical 20 MP 5D-era sensor, 12-bit, RGGB.
-        let sensor_size = Size::new(5616, 3744);
+        let sensor_size = Dimensions {
+            width: 5616,
+            height: 3744,
+        };
         let active_area = Rect::from_coords(0, 0, 5616, 3744);
         let bit_depth: u8 = 12;
         let white_level: u16 = white_level_from_bit_depth(bit_depth);
@@ -212,9 +215,9 @@ pub fn is_crw(data: &[u8]) -> bool {
     &data[6..14] == CIFF_SIGNATURE
 }
 
-// ── MetadataExtractor impl ────────────────────────────────────────────────────
+// ── ExtractMetadata impl ──────────────────────────────────────────────────────
 
-impl<R: Read + Seek> crate::core::MetadataExtractor for CrwFile<R> {
+impl<R: Read + Seek> crate::core::ExtractMetadata for CrwFile<R> {
     fn extract_metadata(&self) -> crate::core::ImageMetadata {
         use crate::core::metadata::*;
 
@@ -348,7 +351,10 @@ mod tests {
         let meta = CrwMetadata {
             make: "Canon".to_string(),
             model: "Canon PowerShot G2".to_string(),
-            sensor_size: Size::new(2272, 1704),
+            sensor_size: Dimensions {
+                width: 2272,
+                height: 1704,
+            },
             active_area: Rect::from_coords(0, 0, 2272, 1704),
             bit_depth: 12,
             cfa_pattern: CfaPattern::Rggb,

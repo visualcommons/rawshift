@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             data.extend_from_slice(&[r, g, 32768]);
         }
     }
-    let image = RgbImage::new(width, height, data);
+    let image = RgbImage::new(width, height, data).expect("valid RGB buffer");
     let metadata = ImageMetadata::default();
 
     println!("Encoders compiled into this build:");

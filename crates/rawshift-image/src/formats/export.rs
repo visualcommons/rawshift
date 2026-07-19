@@ -75,7 +75,7 @@ impl OutputFormat {
 /// Embedded as the `common` field of each per-implementation config struct so
 /// that metadata-embedding and output bit-depth are configured uniformly,
 /// independent of the chosen backend.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CommonEncodeOptions {
     /// Which metadata blocks to embed in the output container.
@@ -85,7 +85,22 @@ pub struct CommonEncodeOptions {
     /// Encoders that cannot honour the request return
     /// [`EncodeError::UnsupportedBitDepth`](crate::error::EncodeError::UnsupportedBitDepth)
     /// rather than silently degrading.
+    #[cfg_attr(
+        feature = "serde",
+        serde(with = "rawshift_core::color::bit_depth_serde")
+    )]
     pub bit_depth: BitDepth,
+}
+
+impl Default for CommonEncodeOptions {
+    /// Defaults to 16-bit output ([`BitDepth::Sixteen`]) with default metadata
+    /// embedding options.
+    fn default() -> Self {
+        Self {
+            metadata: MetadataEmbedOptions::default(),
+            bit_depth: BitDepth::Sixteen,
+        }
+    }
 }
 
 /// WebP encoding mode.

@@ -11,7 +11,7 @@ use std::path::Path;
 
 #[cfg(any_standard_encode)]
 use crate::core::BitDepth;
-use crate::core::image::RgbImage;
+use crate::core::RgbImage;
 use crate::core::metadata::ImageMetadata;
 #[cfg(any_standard_encode)]
 use crate::error::EncodeError;
@@ -98,7 +98,7 @@ pub fn encode_rgb_image(
 #[cfg(any_standard_encode)]
 #[allow(dead_code)] // unused when only `dng-encode` is enabled
 fn pack_rgb8(image: &RgbImage) -> Vec<u8> {
-    image.data.iter().map(|&p| (p >> 8) as u8).collect()
+    image.data().iter().map(|&p| (p >> 8) as u8).collect()
 }
 
 /// Validate a bit-depth request for a backend that only emits 8-bit output.
@@ -133,8 +133,8 @@ fn encode_png(
     let (data_bytes, depth) = match cfg.common.bit_depth {
         BitDepth::Eight => (pack_rgb8(image), zune_core::bit_depth::BitDepth::Eight),
         BitDepth::Sixteen => {
-            let mut bytes = Vec::with_capacity(image.data.len() * 2);
-            for &pixel in &image.data {
+            let mut bytes = Vec::with_capacity(image.data().len() * 2);
+            for &pixel in image.data() {
                 bytes.extend_from_slice(&pixel.to_be_bytes());
             }
             (bytes, zune_core::bit_depth::BitDepth::Sixteen)
@@ -284,8 +284,8 @@ fn encode_jpeg_jpegli(
     let (samples, bits_per_sample) = match cfg.common.bit_depth {
         BitDepth::Eight => (pack_rgb8(image), 8u32),
         BitDepth::Sixteen => {
-            let mut bytes = Vec::with_capacity(image.data.len() * 2);
-            for &sample in &image.data {
+            let mut bytes = Vec::with_capacity(image.data().len() * 2);
+            for &sample in image.data() {
                 bytes.extend_from_slice(&sample.to_ne_bytes());
             }
             (bytes, 16u32)
@@ -417,7 +417,7 @@ fn encode_avif(
     check_8bit_backend(cfg.common.bit_depth, "AVIF")?;
 
     let rgba_data: Vec<RGBA8> = image
-        .data
+        .data()
         .chunks_exact(3)
         .map(|rgb| {
             RGBA8::new(
@@ -512,7 +512,7 @@ fn encode_avif_libaom(
     };
 
     let mut avif_bytes =
-        avif_libaom::encode(&image.data, image.width(), image.height(), depth, &params).map_err(
+        avif_libaom::encode(image.data(), image.width(), image.height(), depth, &params).map_err(
             |e| {
                 RawError::Encode(EncodeError::Encoding {
                     format: "AVIF",
@@ -630,8 +630,8 @@ fn encode_jxl_libjxl(
     let (samples, bits_per_sample) = match cfg.common.bit_depth {
         BitDepth::Eight => (pack_rgb8(image), 8u32),
         BitDepth::Sixteen => {
-            let mut bytes = Vec::with_capacity(image.data.len() * 2);
-            for &sample in &image.data {
+            let mut bytes = Vec::with_capacity(image.data().len() * 2);
+            for &sample in image.data() {
                 bytes.extend_from_slice(&sample.to_ne_bytes());
             }
             (bytes, 16u32)

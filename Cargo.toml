@@ -24,7 +24,8 @@ homepage = "https://github.com/justin13888/rawshift"
 #
 # Bumping this pin is a deliberate, reviewed change — see README "Bumping the
 # gamut pin" for the required procedure.
-gamut-core = { git = "https://github.com/justin13888/gamut", rev = "b08a1a223db3f010997d4918ddb41723b7266a4c" }
+gamut-core = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
+gamut-color = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
 
 # Shared infrastructure dependencies (used across multiple workspace crates).
 thiserror = "2.0"

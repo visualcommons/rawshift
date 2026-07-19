@@ -5,7 +5,7 @@
 //! that the decode-side color/probe APIs behave as documented. They use a tiny
 //! synthetic RGB image to avoid the expensive full RAW decode pipeline.
 
-use rawshift_image::core::image::RgbImage;
+use rawshift_image::core::RgbImage;
 use rawshift_image::core::metadata::ImageMetadata;
 use rawshift_image::formats::export::{
     BitDepth, CommonEncodeOptions, EncodeOptions, JpegEncEncodeConfig, LibwebpEncodeConfig,
@@ -17,7 +17,7 @@ use std::path::PathBuf;
 
 /// 4×4 grey synthetic RGB image (16-bit, tone-mapped already).
 fn synthetic_image() -> RgbImage {
-    RgbImage::new(4, 4, vec![32768u16; 4 * 4 * 3])
+    RgbImage::new(4, 4, vec![32768u16; 4 * 4 * 3]).expect("valid RGB buffer")
 }
 
 /// Get a temporary file path for test output.
@@ -197,7 +197,7 @@ mod jpeg_tests {
         let data: Vec<u16> = (0..64 * 64 * 3)
             .map(|i| ((i * 997) % 65536) as u16)
             .collect();
-        let img = RgbImage::new(64, 64, data);
+        let img = RgbImage::new(64, 64, data).expect("valid RGB buffer");
 
         let low = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &jpeg(30, false, false))
             .expect("Export low quality");
@@ -338,7 +338,7 @@ mod webp_tests {
         let data: Vec<u16> = (0..64 * 64 * 3)
             .map(|i| ((i * 997) % 65536) as u16)
             .collect();
-        let img = RgbImage::new(64, 64, data);
+        let img = RgbImage::new(64, 64, data).expect("valid RGB buffer");
 
         let mut low = webp(false, false, false);
         low.quality = 10.0;
@@ -656,7 +656,7 @@ mod libjxl_tests {
         let data: Vec<u16> = (0..4 * 4 * 3)
             .map(|i| ((i as u32 * 4099) % 65536) as u16)
             .collect();
-        RgbImage::new(4, 4, data)
+        RgbImage::new(4, 4, data).expect("valid RGB buffer")
     }
 
     #[test]
@@ -690,7 +690,7 @@ mod libjxl_tests {
     #[test]
     fn libjxl_lossless_16bit_is_exact() {
         let img = distinct_16bit();
-        let want = img.data.clone();
+        let want = img.data().to_vec();
         let opts = EncodeOptions::JxlLibjxl(LibjxlEncodeConfig {
             common: common(false, false, false),
             distance: 0.0,
@@ -701,7 +701,8 @@ mod libjxl_tests {
             .expect("encode lossless JXL");
         let decoded = decode_standard_image(&bytes, StandardFormat::Jxl).expect("decode JXL");
         assert_eq!(
-            decoded.data, want,
+            decoded.data(),
+            want,
             "lossless 16-bit libjxl round-trip must be exact"
         );
     }
@@ -984,7 +985,7 @@ mod in_memory_tests {
 
     #[test]
     fn decoded_png_is_tagged_srgb() {
-        use rawshift_image::core::ColorSpace;
+        use rawshift_image::core::ColorDescription;
         let bytes = encode_rgb_image_to_vec(
             &synthetic_image(),
             &ImageMetadata::default(),
@@ -992,7 +993,7 @@ mod in_memory_tests {
         )
         .expect("encode PNG");
         let decoded = decode_standard_image(&bytes, StandardFormat::Png).expect("decode PNG");
-        assert_eq!(decoded.color_space(), ColorSpace::Srgb);
+        assert_eq!(decoded.color(), ColorDescription::SRGB);
     }
 
     #[test]

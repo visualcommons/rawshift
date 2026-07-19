@@ -1,7 +1,7 @@
 //! Benchmarks for RAW image data structure creation and basic operations.
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use rawshift_image::core::image::{CfaPattern, Point, RawImage, Rect, Size};
+use rawshift_image::core::image::{CfaPattern, Dimensions, Point, RawImage, Rect};
 
 /// Benchmark creating a RawImage (allocation + init).
 fn bench_raw_image_creation(c: &mut Criterion) {
@@ -10,7 +10,10 @@ fn bench_raw_image_creation(c: &mut Criterion) {
     for &(w, h) in &[(1000, 1000), (4000, 3000), (8000, 6000)] {
         group.bench_function(format!("{}x{}", w, h), |b| {
             b.iter(|| {
-                let size = Size::new(w, h);
+                let size = Dimensions {
+                    width: w,
+                    height: h,
+                };
                 let area = Rect::new(Point::ORIGIN, size);
                 RawImage::new(size, area, 14, CfaPattern::Rggb)
             });
@@ -22,7 +25,10 @@ fn bench_raw_image_creation(c: &mut Criterion) {
 
 /// Benchmark pixel access patterns.
 fn bench_pixel_access(c: &mut Criterion) {
-    let size = Size::new(4000, 3000);
+    let size = Dimensions {
+        width: 4000,
+        height: 3000,
+    };
     let area = Rect::new(Point::ORIGIN, size);
     let raw = RawImage::new(size, area, 14, CfaPattern::Rggb);
 

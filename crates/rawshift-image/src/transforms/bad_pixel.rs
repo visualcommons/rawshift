@@ -193,11 +193,11 @@ pub fn apply_bad_pixel_correction(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::image::{Rect, Size};
+    use crate::core::image::{Dimensions, Rect};
 
     /// Build a minimal RawImage filled with a uniform value.
     fn make_raw(width: u32, height: u32, fill: u16) -> RawImage {
-        let size = Size::new(width, height);
+        let size = Dimensions { width, height };
         let active = Rect::from_coords(0, 0, width, height);
         let mut img = RawImage::new(size, active, 14, CfaPattern::Rggb);
         for v in img.data.iter_mut() {

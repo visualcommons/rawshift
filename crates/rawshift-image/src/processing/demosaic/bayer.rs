@@ -1044,10 +1044,10 @@ impl Demosaic for Rcd {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::image::{Point, Rect, Size};
+    use crate::core::image::{Dimensions, Point, Rect};
 
     fn create_test_raw(width: u32, height: u32, pattern: CfaPattern, value: u16) -> RawImage {
-        let size = Size::new(width, height);
+        let size = Dimensions { width, height };
         let active_area = Rect::new(Point::ORIGIN, size);
         RawImage::builder(size, active_area, 14, pattern)
             .white_level(16383)
@@ -1056,7 +1056,7 @@ mod tests {
     }
 
     fn create_gradient_raw(width: u32, height: u32, pattern: CfaPattern) -> RawImage {
-        let size = Size::new(width, height);
+        let size = Dimensions { width, height };
         let active_area = Rect::new(Point::ORIGIN, size);
         let mut data = vec![0u16; (width * height) as usize];
         for y in 0..height {
@@ -1110,7 +1110,7 @@ mod tests {
             for x in 4..16 {
                 let idx = (y * 20 + x) * 3;
                 for c in 0..3 {
-                    let val = rgb.data[idx + c];
+                    let val = rgb.data()[idx + c];
                     assert!(
                         (val as i32 - 5000).abs() < 500,
                         "pixel ({},{}) ch {} = {}, expected ~5000",
@@ -1136,10 +1136,10 @@ mod tests {
             let rgb = Amaze.demosaic(&raw);
             assert_eq!(rgb.width(), 20);
             assert_eq!(rgb.height(), 20);
-            assert_eq!(rgb.data.len(), 20 * 20 * 3);
+            assert_eq!(rgb.data().len(), 20 * 20 * 3);
 
             // All values should be non-negative and bounded
-            for val in &rgb.data {
+            for val in rgb.data() {
                 assert!(
                     *val <= 16383,
                     "pattern {:?}: value {} too high",
@@ -1163,8 +1163,10 @@ mod tests {
                 let idx_down = ((y + 1) * 40 + x) * 3;
 
                 for c in 0..3 {
-                    let diff_h = (rgb.data[idx + c] as i32 - rgb.data[idx_right + c] as i32).abs();
-                    let diff_v = (rgb.data[idx + c] as i32 - rgb.data[idx_down + c] as i32).abs();
+                    let diff_h =
+                        (rgb.data()[idx + c] as i32 - rgb.data()[idx_right + c] as i32).abs();
+                    let diff_v =
+                        (rgb.data()[idx + c] as i32 - rgb.data()[idx_down + c] as i32).abs();
                     assert!(
                         diff_h < 1000,
                         "horizontal jump at ({},{}) ch {}: {}",
@@ -1195,7 +1197,7 @@ mod tests {
         let rgb = Amaze.demosaic(&raw);
         // Green channel at (1,0) should be exactly 7000
         // pixel (1, 0): row=0, col=1, so index = 1 * 3 + 1 = 4
-        let g = rgb.data[3 + 1];
+        let g = rgb.data()[3 + 1];
         assert_eq!(
             g, 7000,
             "green pixel should be preserved exactly, got {}",
@@ -1205,7 +1207,10 @@ mod tests {
 
     #[test]
     fn test_amaze_with_active_area() {
-        let size = Size::new(30, 30);
+        let size = Dimensions {
+            width: 30,
+            height: 30,
+        };
         let active_area = Rect::from_coords(5, 5, 20, 20);
         let raw = RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
             .white_level(16383)
@@ -1214,7 +1219,7 @@ mod tests {
         let rgb = Amaze.demosaic(&raw);
         assert_eq!(rgb.width(), 20);
         assert_eq!(rgb.height(), 20);
-        assert_eq!(rgb.data.len(), 20 * 20 * 3);
+        assert_eq!(rgb.data().len(), 20 * 20 * 3);
     }
 
     #[test]
@@ -1273,7 +1278,7 @@ mod tests {
             for x in 4..16 {
                 let idx = (y * 20 + x) * 3;
                 for c in 0..3 {
-                    let val = rgb.data[idx + c];
+                    let val = rgb.data()[idx + c];
                     assert!(
                         (val as i32 - 5000).abs() < 500,
                         "LMMSE pixel ({},{}) ch {} = {}, expected ~5000",
@@ -1299,9 +1304,9 @@ mod tests {
             let rgb = Lmmse.demosaic(&raw);
             assert_eq!(rgb.width(), 20);
             assert_eq!(rgb.height(), 20);
-            assert_eq!(rgb.data.len(), 20 * 20 * 3);
+            assert_eq!(rgb.data().len(), 20 * 20 * 3);
 
-            for val in &rgb.data {
+            for val in rgb.data() {
                 assert!(
                     *val <= 16383,
                     "LMMSE pattern {:?}: value {} too high",
@@ -1324,8 +1329,10 @@ mod tests {
                 let idx_down = ((y + 1) * 40 + x) * 3;
 
                 for c in 0..3 {
-                    let diff_h = (rgb.data[idx + c] as i32 - rgb.data[idx_right + c] as i32).abs();
-                    let diff_v = (rgb.data[idx + c] as i32 - rgb.data[idx_down + c] as i32).abs();
+                    let diff_h =
+                        (rgb.data()[idx + c] as i32 - rgb.data()[idx_right + c] as i32).abs();
+                    let diff_v =
+                        (rgb.data()[idx + c] as i32 - rgb.data()[idx_down + c] as i32).abs();
                     assert!(
                         diff_h < 1000,
                         "LMMSE horizontal jump at ({},{}) ch {}: {}",
@@ -1349,7 +1356,10 @@ mod tests {
 
     #[test]
     fn test_lmmse_with_active_area() {
-        let size = Size::new(30, 30);
+        let size = Dimensions {
+            width: 30,
+            height: 30,
+        };
         let active_area = Rect::from_coords(5, 5, 20, 20);
         let raw = RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
             .white_level(16383)
@@ -1358,7 +1368,7 @@ mod tests {
         let rgb = Lmmse.demosaic(&raw);
         assert_eq!(rgb.width(), 20);
         assert_eq!(rgb.height(), 20);
-        assert_eq!(rgb.data.len(), 20 * 20 * 3);
+        assert_eq!(rgb.data().len(), 20 * 20 * 3);
     }
 
     // ── RCD tests ─────────────────────────────────────────────────────────────
@@ -1399,7 +1409,7 @@ mod tests {
             for x in 4..16 {
                 let idx = (y * 20 + x) * 3;
                 for c in 0..3 {
-                    let val = rgb.data[idx + c];
+                    let val = rgb.data()[idx + c];
                     assert!(
                         (val as i32 - 5000).abs() < 500,
                         "RCD pixel ({},{}) ch {} = {}, expected ~5000",
@@ -1425,9 +1435,9 @@ mod tests {
             let rgb = Rcd.demosaic(&raw);
             assert_eq!(rgb.width(), 20);
             assert_eq!(rgb.height(), 20);
-            assert_eq!(rgb.data.len(), 20 * 20 * 3);
+            assert_eq!(rgb.data().len(), 20 * 20 * 3);
 
-            for val in &rgb.data {
+            for val in rgb.data() {
                 assert!(
                     *val <= 16383,
                     "RCD pattern {:?}: value {} too high",
@@ -1450,8 +1460,10 @@ mod tests {
                 let idx_down = ((y + 1) * 40 + x) * 3;
 
                 for c in 0..3 {
-                    let diff_h = (rgb.data[idx + c] as i32 - rgb.data[idx_right + c] as i32).abs();
-                    let diff_v = (rgb.data[idx + c] as i32 - rgb.data[idx_down + c] as i32).abs();
+                    let diff_h =
+                        (rgb.data()[idx + c] as i32 - rgb.data()[idx_right + c] as i32).abs();
+                    let diff_v =
+                        (rgb.data()[idx + c] as i32 - rgb.data()[idx_down + c] as i32).abs();
                     assert!(
                         diff_h < 1000,
                         "RCD horizontal jump at ({},{}) ch {}: {}",
@@ -1475,7 +1487,10 @@ mod tests {
 
     #[test]
     fn test_rcd_with_active_area() {
-        let size = Size::new(30, 30);
+        let size = Dimensions {
+            width: 30,
+            height: 30,
+        };
         let active_area = Rect::from_coords(5, 5, 20, 20);
         let raw = RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
             .white_level(16383)
@@ -1484,6 +1499,6 @@ mod tests {
         let rgb = Rcd.demosaic(&raw);
         assert_eq!(rgb.width(), 20);
         assert_eq!(rgb.height(), 20);
-        assert_eq!(rgb.data.len(), 20 * 20 * 3);
+        assert_eq!(rgb.data().len(), 20 * 20 * 3);
     }
 }

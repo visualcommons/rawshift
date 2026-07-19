@@ -19,7 +19,7 @@
 //! 2. `FixBadPixelsList` (ID 5) — replace specific known bad pixels
 //! 3. `GainMap` (ID 9) — spatially-varying lens-shading correction (critical for ProRAW)
 
-use crate::core::image::RgbImage;
+use crate::core::RgbImage;
 
 // ============================================================================
 // Opcode data structures
@@ -90,6 +90,8 @@ impl GainMap {
         // (1 = shared gain applied to all `planes` output channels).
         let planes_count = (self.planes as usize).min(3);
 
+        let data = image.data_mut();
+
         for y in 0..img_h {
             // Normalised image coordinate in [0, 1]
             let norm_v = if img_h > 1 {
@@ -138,9 +140,8 @@ impl GainMap {
                         + g10 * dr * (1.0 - dc)
                         + g11 * dr * dc;
 
-                    let val = image.data[pixel_base + channel];
-                    image.data[pixel_base + channel] =
-                        (val as f64 * gain).clamp(0.0, 65535.0) as u16;
+                    let val = data[pixel_base + channel];
+                    data[pixel_base + channel] = (val as f64 * gain).clamp(0.0, 65535.0) as u16;
                 }
             }
         }
@@ -511,11 +512,11 @@ mod tests {
         let data = build_gain_map_opcode_list(2.0);
         let list = OpcodeList::parse(&data);
 
-        let mut img = RgbImage::new(2, 2, vec![1000u16; 12]);
+        let mut img = RgbImage::new(2, 2, vec![1000u16; 12]).expect("valid RGB buffer");
         list.apply_to_rgb(&mut img);
 
         // Uniform gain of 2.0 should double all pixels
-        for &v in &img.data {
+        for &v in img.data() {
             assert_eq!(v, 2000, "Expected pixel value 2000, got {v}");
         }
     }

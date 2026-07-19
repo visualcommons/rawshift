@@ -232,11 +232,11 @@ fn avg4(a: u16, b: u16, c: u16, d: u16) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::image::{Point, Rect, Size};
+    use crate::core::image::{Dimensions, Point, Rect};
 
     /// Create a test raw image with given dimensions and CFA pattern.
     fn create_test_raw(width: u32, height: u32, pattern: CfaPattern, value: u16) -> RawImage {
-        let size = Size::new(width, height);
+        let size = Dimensions { width, height };
         let active_area = Rect::new(Point::ORIGIN, size);
         let pixel_count = (width * height) as usize;
         RawImage::builder(size, active_area, 14, pattern)
@@ -287,7 +287,7 @@ mod tests {
 
         assert_eq!(rgb.width(), 10);
         assert_eq!(rgb.height(), 10);
-        assert_eq!(rgb.data.len(), 10 * 10 * 3);
+        assert_eq!(rgb.data().len(), 10 * 10 * 3);
 
         // Interior pixels (not on edge) should be close to input value
         // Edge pixels may have lower values due to boundary handling
@@ -295,7 +295,7 @@ mod tests {
             for x in 1..9 {
                 let idx = ((y * 10 + x) * 3) as usize;
                 for c in 0..3 {
-                    let pixel = rgb.data[idx + c];
+                    let pixel = rgb.data()[idx + c];
                     assert!(
                         (4000..=5500).contains(&pixel),
                         "Interior pixel at ({},{}) channel {} value {} out of range",
@@ -324,10 +324,10 @@ mod tests {
 
             assert_eq!(rgb.width(), 8);
             assert_eq!(rgb.height(), 8);
-            assert_eq!(rgb.data.len(), 8 * 8 * 3);
+            assert_eq!(rgb.data().len(), 8 * 8 * 3);
 
             // Verify all pixels have reasonable values
-            for pixel in &rgb.data {
+            for pixel in rgb.data() {
                 assert!(
                     *pixel <= 3000,
                     "Pattern {:?}: pixel value {} too high",
@@ -350,9 +350,9 @@ mod tests {
         assert_eq!(rgb.height(), 2);
 
         // First pixel (0,0) - this is a Red position in RGGB
-        let r = rgb.data[0];
-        let g = rgb.data[1];
-        let _b = rgb.data[2];
+        let r = rgb.data()[0];
+        let g = rgb.data()[1];
+        let _b = rgb.data()[2];
 
         // Red should be the original value (1000)
         assert_eq!(r, 1000, "Red at RGGB position (0,0) should be 1000");
@@ -366,7 +366,10 @@ mod tests {
     fn test_demosaic_with_active_area() {
         // Test that active_area is respected
         let raw = {
-            let size = Size::new(10, 10);
+            let size = Dimensions {
+                width: 10,
+                height: 10,
+            };
             let active_area = Rect::from_coords(3, 3, 4, 4);
             RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
                 .white_level(16383)
@@ -379,7 +382,7 @@ mod tests {
         // Output dimensions should match active area
         assert_eq!(rgb.width(), 4);
         assert_eq!(rgb.height(), 4);
-        assert_eq!(rgb.data.len(), 4 * 4 * 3);
+        assert_eq!(rgb.data().len(), 4 * 4 * 3);
     }
 
     #[test]
@@ -414,11 +417,11 @@ mod tests {
 
             assert_eq!(rgb.width(), 6, "width for {:?}", pattern);
             assert_eq!(rgb.height(), 6, "height for {:?}", pattern);
-            assert_eq!(rgb.data.len(), 6 * 6 * 3, "data length for {:?}", pattern);
+            assert_eq!(rgb.data().len(), 6 * 6 * 3, "data length for {:?}", pattern);
 
             // All output pixels must be in valid u16 range (which they always are,
             // but also check that at least some pixels are non-zero for a non-zero input)
-            let non_zero = rgb.data.iter().any(|&v| v > 0);
+            let non_zero = rgb.data().iter().any(|&v| v > 0);
             assert!(
                 non_zero,
                 "Output for {:?} should have non-zero pixels",
@@ -431,7 +434,10 @@ mod tests {
     fn test_bilinear_with_active_area() {
         // Test various active area offsets
         let raw = {
-            let size = Size::new(12, 12);
+            let size = Dimensions {
+                width: 12,
+                height: 12,
+            };
             let active_area = Rect::from_coords(2, 4, 6, 6);
             RawImage::builder(size, active_area, 14, CfaPattern::Rggb)
                 .white_level(16383)
@@ -452,13 +458,13 @@ mod tests {
             "output height should match active area height"
         );
         assert_eq!(
-            rgb.data.len(),
+            rgb.data().len(),
             6 * 6 * 3,
             "output should have correct data length"
         );
 
         // Output values are u16, so always in [0, 65535] by definition
-        assert!(!rgb.data.is_empty(), "output should have pixel data");
+        assert!(!rgb.data().is_empty(), "output should have pixel data");
     }
 
     #[test]
@@ -467,7 +473,7 @@ mod tests {
         // green channel in the output, since bilinear averages neighbors.
         let width = 8u32;
         let height = 4u32;
-        let size = Size::new(width, height);
+        let size = Dimensions { width, height };
         let active_area = Rect::new(Point::ORIGIN, size);
 
         // Fill with a horizontal gradient: pixel value increases with x
@@ -493,8 +499,8 @@ mod tests {
         // Compare interior pixels: pixel at x+1 should have green >= pixel at x
         // (with tolerance for boundary effects)
         for x in 1..(width as usize - 2) {
-            let g_left = rgb.data[row_start + (x - 1) * 3 + 1];
-            let g_right = rgb.data[row_start + (x + 1) * 3 + 1];
+            let g_left = rgb.data()[row_start + (x - 1) * 3 + 1];
+            let g_right = rgb.data()[row_start + (x + 1) * 3 + 1];
             assert!(
                 g_right >= g_left || (g_right as i32 - g_left as i32).abs() < 2000,
                 "gradient smoothness: g[{}]={} should not greatly exceed g[{}]={} in row {}",

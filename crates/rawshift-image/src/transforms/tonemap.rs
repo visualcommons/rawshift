@@ -12,7 +12,7 @@
 //! Output is comparable to dcraw/libraw defaults and correctly handles both
 //! negative BaselineExposure (e.g. iPhone ProRAW at -0.83 EV) and positive values.
 
-use crate::core::image::RgbImage;
+use crate::core::RgbImage;
 use crate::processing::color::apply_gamma;
 
 /// Apply tone reproduction to an RGB image.
@@ -43,7 +43,7 @@ pub fn apply_tone_reproduction(image: &mut RgbImage, custom_gamma: Option<f32>) 
 pub fn apply_tonemap(image: &mut RgbImage, baseline_exposure: Option<f32>) {
     let gain = baseline_exposure.map(|ev| 2.0f32.powf(ev)).unwrap_or(1.0);
     let lut = build_lut(gain);
-    for pixel in &mut image.data {
+    for pixel in image.data_mut() {
         *pixel = lut[*pixel as usize];
     }
 }
@@ -101,20 +101,20 @@ pub(crate) fn srgb_encode(linear: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::image::RgbImage;
+    use crate::core::RgbImage;
 
     fn make_image(values: &[u16]) -> RgbImage {
         let n = values.len() as u32 / 3;
-        RgbImage::new(n, 1, values.to_vec())
+        RgbImage::new(n, 1, values.to_vec()).expect("valid RGB buffer")
     }
 
     #[test]
     fn black_stays_black() {
         let mut img = make_image(&[0, 0, 0]);
         apply_tonemap(&mut img, None);
-        assert_eq!(img.data[0], 0);
-        assert_eq!(img.data[1], 0);
-        assert_eq!(img.data[2], 0);
+        assert_eq!(img.data()[0], 0);
+        assert_eq!(img.data()[1], 0);
+        assert_eq!(img.data()[2], 0);
     }
 
     #[test]
@@ -122,7 +122,7 @@ mod tests {
         // Sensor max (65535) with no baseline exposure should map to display white.
         let mut img = make_image(&[65535, 65535, 65535]);
         apply_tonemap(&mut img, None);
-        assert_eq!(img.data[0], 65535);
+        assert_eq!(img.data()[0], 65535);
     }
 
     #[test]
@@ -131,7 +131,7 @@ mod tests {
         // Sensor max should still map to display white (the curve remaps the range).
         let mut img = make_image(&[65535, 65535, 65535]);
         apply_tonemap(&mut img, Some(-0.83));
-        assert_eq!(img.data[0], 65535);
+        assert_eq!(img.data()[0], 65535);
     }
 
     #[test]
@@ -143,10 +143,10 @@ mod tests {
         apply_tonemap(&mut img_no_exp, None);
         apply_tonemap(&mut img_neg_exp, Some(-0.83));
         assert!(
-            img_neg_exp.data[0] < img_no_exp.data[0],
+            img_neg_exp.data()[0] < img_no_exp.data()[0],
             "negative EV {} should darken mid-grey {}",
-            img_neg_exp.data[0],
-            img_no_exp.data[0]
+            img_neg_exp.data()[0],
+            img_no_exp.data()[0]
         );
     }
 
@@ -157,10 +157,10 @@ mod tests {
         apply_tonemap(&mut img_no_exp, None);
         apply_tonemap(&mut img_pos_exp, Some(0.5));
         assert!(
-            img_pos_exp.data[0] > img_no_exp.data[0],
+            img_pos_exp.data()[0] > img_no_exp.data()[0],
             "positive EV {} should brighten {}",
-            img_pos_exp.data[0],
-            img_no_exp.data[0]
+            img_pos_exp.data()[0],
+            img_no_exp.data()[0]
         );
     }
 
@@ -177,7 +177,7 @@ mod tests {
         apply_tone_reproduction(&mut img_gamma, Some(2.2));
         apply_tone_reproduction(&mut img_filmic, None);
         // They should produce different results
-        assert_ne!(img_gamma.data[0], img_filmic.data[0]);
+        assert_ne!(img_gamma.data()[0], img_filmic.data()[0]);
     }
 
     #[test]
@@ -186,7 +186,7 @@ mod tests {
         let mut img_filmic = make_image(&[32768, 32768, 32768]);
         apply_tone_reproduction(&mut img_repro, None);
         apply_tonemap(&mut img_filmic, None);
-        assert_eq!(img_repro.data[0], img_filmic.data[0]);
+        assert_eq!(img_repro.data()[0], img_filmic.data()[0]);
     }
 
     #[test]
@@ -194,9 +194,13 @@ mod tests {
         // Values at white_level (65535) should map to display white (65535)
         let mut img = make_image(&[65535, 65535, 65535]);
         apply_tone_reproduction(&mut img, None);
-        assert_eq!(img.data[0], 65535, "white should stay at max after tonemap");
-        assert_eq!(img.data[1], 65535);
-        assert_eq!(img.data[2], 65535);
+        assert_eq!(
+            img.data()[0],
+            65535,
+            "white should stay at max after tonemap"
+        );
+        assert_eq!(img.data()[1], 65535);
+        assert_eq!(img.data()[2], 65535);
     }
 
     #[test]
@@ -207,9 +211,9 @@ mod tests {
         let mut img = make_image(&values);
         apply_tone_reproduction(&mut img, Some(1.0));
         // gamma=1.0 is identity - values should be unchanged
-        assert_eq!(img.data[0], values[0]);
-        assert_eq!(img.data[1], values[1]);
-        assert_eq!(img.data[2], values[2]);
+        assert_eq!(img.data()[0], values[0]);
+        assert_eq!(img.data()[1], values[1]);
+        assert_eq!(img.data()[2], values[2]);
     }
 
     #[test]
@@ -221,7 +225,7 @@ mod tests {
                 apply_tonemap(&mut img, Some(ev));
                 // u16 is always in range [0, 65535] by definition
                 assert!(
-                    !img.data.is_empty(),
+                    !img.data().is_empty(),
                     "EV={}, input={}: output should not be empty",
                     ev,
                     val

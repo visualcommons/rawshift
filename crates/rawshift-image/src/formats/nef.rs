@@ -5,7 +5,7 @@
 
 use std::io::{Read, Seek};
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
+use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
 use crate::error::{FormatError, ParseError, RawError, RawResult};
 use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
@@ -17,7 +17,7 @@ pub struct NefMetadata {
     /// Camera model (e.g., "NIKON Z8")
     pub model: String,
     /// Full sensor dimensions
-    pub sensor_size: Size,
+    pub sensor_size: Dimensions,
     /// Active/crop area
     pub active_area: Rect,
     /// Bits per sample (typically 12 or 14)
@@ -186,7 +186,7 @@ impl<R: Read + Seek> NefFile<R> {
                 TiffTag::ImageLength,
             )))?;
 
-        let sensor_size = Size::new(width, height);
+        let sensor_size = Dimensions { width, height };
 
         // Extract bit depth
         let bit_depth = if let Some(entry) = raw_ifd.get(TiffTag::BitsPerSample) {
@@ -406,7 +406,10 @@ impl<R: Read + Seek> NefFile<R> {
                 decoder.set_dimensions(metadata.sensor_size.width, metadata.sensor_size.height);
                 let output = decoder.decode(&data)?;
 
-                let expected_pixels = metadata.sensor_size.pixel_count() as usize;
+                let expected_pixels = metadata
+                    .sensor_size
+                    .num_pixels()
+                    .expect("sensor pixel count overflows usize");
                 if output.len() != expected_pixels {
                     return Err(RawError::Format(FormatError::Decompression(format!(
                         "LJPEG decoded {} pixels, expected {}",
@@ -435,7 +438,7 @@ impl<R: Read + Seek> NefFile<R> {
     }
 }
 
-impl<R: Read + Seek> crate::core::MetadataExtractor for NefFile<R> {
+impl<R: Read + Seek> crate::core::ExtractMetadata for NefFile<R> {
     fn extract_metadata(&self) -> crate::core::ImageMetadata {
         use crate::core::metadata::*;
 
@@ -531,7 +534,10 @@ mod tests {
         let meta = NefMetadata {
             make: "NIKON CORPORATION".to_string(),
             model: "NIKON Z8".to_string(),
-            sensor_size: Size::new(8256, 5504),
+            sensor_size: Dimensions {
+                width: 8256,
+                height: 5504,
+            },
             active_area: Rect::from_coords(0, 0, 8256, 5504),
             bit_depth: 14,
             cfa_pattern: CfaPattern::Rggb,

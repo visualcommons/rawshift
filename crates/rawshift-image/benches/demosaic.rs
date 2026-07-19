@@ -1,11 +1,11 @@
 //! Benchmarks for demosaicing algorithms.
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use rawshift_image::core::image::{CfaPattern, Point, RawImage, Rect, Size};
+use rawshift_image::core::image::{CfaPattern, Dimensions, Point, RawImage, Rect};
 use rawshift_image::processing::demosaic::{Bilinear, Demosaic, bayer::Amaze};
 
 fn create_test_raw(width: u32, height: u32) -> RawImage {
-    let size = Size::new(width, height);
+    let size = Dimensions { width, height };
     let area = Rect::new(Point::ORIGIN, size);
     let pixel_count = (width * height) as usize;
     let mut data = vec![0u16; pixel_count];

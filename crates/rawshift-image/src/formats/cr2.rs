@@ -18,7 +18,7 @@
 
 use std::io::{Read, Seek};
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
+use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
 use crate::error::{FormatError, ParseError, RawError, RawResult};
 use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
@@ -42,7 +42,7 @@ pub struct Cr2Metadata {
     /// Camera model (e.g., "Canon EOS 5D Mark III")
     pub model: String,
     /// Full sensor dimensions
-    pub sensor_size: Size,
+    pub sensor_size: Dimensions,
     /// Active/crop area (full sensor size if no ActiveArea tag)
     pub active_area: Rect,
     /// Bits per sample (typically 14)
@@ -223,7 +223,7 @@ impl<R: Read + Seek> Cr2File<R> {
                 TiffTag::ImageLength,
             )))?;
 
-        let sensor_size = Size::new(width, height);
+        let sensor_size = Dimensions { width, height };
 
         // Extract bit depth
         let bit_depth = if let Some(entry) = raw_ifd.get(TiffTag::BitsPerSample) {
@@ -367,7 +367,10 @@ impl<R: Read + Seek> Cr2File<R> {
 
         let pixels = decoder.decode(&data)?;
 
-        let expected = metadata.sensor_size.pixel_count() as usize;
+        let expected = metadata
+            .sensor_size
+            .num_pixels()
+            .expect("sensor pixel count overflows usize");
         if pixels.len() != expected {
             return Err(RawError::Format(FormatError::Cr2(format!(
                 "Decoded {} pixels, expected {} ({}x{})",
@@ -414,7 +417,7 @@ pub fn is_cr2(data: &[u8]) -> bool {
         && data[CR2_MAGIC_OFFSET + 2] == CR2_MAGIC[2]
 }
 
-impl<R: Read + Seek> crate::core::MetadataExtractor for Cr2File<R> {
+impl<R: Read + Seek> crate::core::ExtractMetadata for Cr2File<R> {
     fn extract_metadata(&self) -> crate::core::ImageMetadata {
         use crate::core::metadata::*;
 
@@ -544,7 +547,10 @@ mod tests {
         let meta = Cr2Metadata {
             make: "Canon".to_string(),
             model: "Canon EOS 5D Mark III".to_string(),
-            sensor_size: Size::new(5760, 3840),
+            sensor_size: Dimensions {
+                width: 5760,
+                height: 3840,
+            },
             active_area: Rect::from_coords(0, 0, 5760, 3840),
             bit_depth: 14,
             cfa_pattern: CfaPattern::Rggb,

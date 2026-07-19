@@ -6,7 +6,7 @@
 //! output pixel, the corresponding distorted source position and sampling it
 //! with bilinear interpolation.
 
-use crate::core::image::RgbImage;
+use crate::core::RgbImage;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -73,7 +73,8 @@ pub fn apply_warp_rectilinear_tangential(
     let cy_px = cy * height as f64;
 
     // Snapshot the source data before modifying in-place.
-    let src = image.data.clone();
+    let src = image.data().to_vec();
+    let data = image.data_mut();
 
     for y in 0..height {
         for x in 0..width {
@@ -100,7 +101,7 @@ pub fn apply_warp_rectilinear_tangential(
             // Write bilinear sample for each of R, G, B.
             let dst = (y * width + x) * 3;
             for ch in 0..3usize {
-                image.data[dst + ch] =
+                data[dst + ch] =
                     bilinear_sample(&src, width, height, ch, src_x as f32, src_y as f32);
             }
         }
@@ -153,13 +154,13 @@ mod tests {
 
     fn make_rgb(width: u32, height: u32, fill: u16) -> RgbImage {
         let n = (width as usize) * (height as usize) * 3;
-        RgbImage::new(width, height, vec![fill; n])
+        RgbImage::new(width, height, vec![fill; n]).expect("valid RGB buffer")
     }
 
     fn make_gradient(width: u32, height: u32) -> RgbImage {
         let n = (width as usize) * (height as usize) * 3;
         let data: Vec<u16> = (0..n).map(|i| (i as u16).wrapping_mul(7)).collect();
-        RgbImage::new(width, height, data)
+        RgbImage::new(width, height, data).expect("valid RGB buffer")
     }
 
     // ── apply_warp_rectilinear ────────────────────────────────────────────
@@ -176,7 +177,8 @@ mod tests {
         apply_warp_rectilinear(&mut img, [0.0; 4], 0.5, 0.5);
 
         assert_eq!(
-            img.data, original.data,
+            img.data(),
+            original.data(),
             "zero coefficients must leave image unchanged"
         );
     }
@@ -191,7 +193,7 @@ mod tests {
 
         assert_eq!(img.width(), w, "width must not change after warp");
         assert_eq!(img.height(), h, "height must not change after warp");
-        assert_eq!(img.data.len(), (w as usize) * (h as usize) * 3);
+        assert_eq!(img.data().len(), (w as usize) * (h as usize) * 3);
     }
 
     #[test]
@@ -209,9 +211,9 @@ mod tests {
         apply_warp_rectilinear(&mut img, [-0.05, 0.002, 0.0, 0.0], 0.5, 0.5);
 
         // The centre pixel of a uniform image is always 32768 regardless of distortion.
-        assert_eq!(img.data[cx_idx * 3], 32768, "R of centre pixel");
-        assert_eq!(img.data[cx_idx * 3 + 1], 32768, "G of centre pixel");
-        assert_eq!(img.data[cx_idx * 3 + 2], 32768, "B of centre pixel");
+        assert_eq!(img.data()[cx_idx * 3], 32768, "R of centre pixel");
+        assert_eq!(img.data()[cx_idx * 3 + 1], 32768, "G of centre pixel");
+        assert_eq!(img.data()[cx_idx * 3 + 2], 32768, "B of centre pixel");
     }
 
     #[test]
@@ -227,7 +229,7 @@ mod tests {
     fn test_warp_no_crash_1x1_image() {
         let mut img = make_rgb(1, 1, 5000);
         apply_warp_rectilinear(&mut img, [-0.1, 0.0, 0.0, 0.0], 0.5, 0.5);
-        assert_eq!(img.data[0], 5000);
+        assert_eq!(img.data()[0], 5000);
     }
 
     // ── apply_warp_rectilinear_tangential ─────────────────────────────────
@@ -240,7 +242,8 @@ mod tests {
         apply_warp_rectilinear_tangential(&mut img, [0.0; 4], [0.0; 2], 0.5, 0.5);
 
         assert_eq!(
-            img.data, original.data,
+            img.data(),
+            original.data(),
             "all-zero tangential coefficients must leave image unchanged"
         );
     }
@@ -270,7 +273,7 @@ mod tests {
         let mut img = make_rgb(10, 10, 8000);
         apply_warp_rectilinear(&mut img, [-0.05, 0.02, -0.005, 0.001], 0.5, 0.5);
         assert!(
-            img.data.iter().all(|&v| v == 8000),
+            img.data().iter().all(|&v| v == 8000),
             "uniform image must remain uniform"
         );
     }

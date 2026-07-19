@@ -376,7 +376,7 @@ impl ImageMetadata {
 ///
 /// Implementors MUST provide metadata extraction for their format.
 /// The compiler enforces implementation; incomplete data is handled via Option.
-pub trait MetadataExtractor {
+pub trait ExtractMetadata {
     /// Extract unified metadata from the format-specific representation.
     fn extract_metadata(&self) -> ImageMetadata;
 }

@@ -814,9 +814,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "795cbfc56d419a7ce47ccbb7504dd9a5b7c484c083c356e797de08bd988d9629"
 
 [[package]]
+name = "gamut-color"
+version = "1.1.0"
+source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+dependencies = [
+ "gamut-core",
+]
+
+[[package]]
 name = "gamut-core"
 version = "2.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=b08a1a223db3f010997d4918ddb41723b7266a4c#b08a1a223db3f010997d4918ddb41723b7266a4c"
+source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
 dependencies = [
  "thiserror",
 ]
@@ -1827,6 +1835,7 @@ dependencies = [
 name = "rawshift-core"
 version = "0.1.1"
 dependencies = [
+ "gamut-color",
  "gamut-core",
  "serde",
  "serde_json",
@@ -1844,6 +1853,7 @@ dependencies = [
  "cmake",
  "criterion",
  "eyre",
+ "gamut-core",
  "gif",
  "image",
  "img-parts",

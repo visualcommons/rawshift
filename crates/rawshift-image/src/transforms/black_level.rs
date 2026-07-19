@@ -29,10 +29,10 @@ pub fn apply_black_level(raw: &mut RawImage) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::image::{CfaPattern, Rect, Size};
+    use crate::core::image::{CfaPattern, Dimensions, Rect};
 
     fn make_raw(width: u32, height: u32, data: Vec<u16>, black_levels: [u16; 4]) -> RawImage {
-        let size = Size::new(width, height);
+        let size = Dimensions { width, height };
         let active = Rect::from_coords(0, 0, width, height);
         let mut raw = RawImage::new(size, active, 14, CfaPattern::Rggb);
         raw.data = data;

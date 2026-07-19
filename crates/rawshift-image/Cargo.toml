@@ -22,6 +22,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rawshift-core  = { workspace = true }
+gamut-core     = { workspace = true }
 binrw          = { version = "0.15",   optional = true }
 libheif-rs     = { version = "2.7",    optional = true }
 libwebp-sys    = { version = "0.14",   optional = true }

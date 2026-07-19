@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::{BufWriter, Seek, Write};
 use std::path::Path;
 
-use crate::core::image::RgbImage;
+use crate::core::RgbImage;
 use crate::core::metadata::ImageMetadata;
 use crate::error::RawResult;
 use crate::tiff::writer::{IfdEntry, TiffWriter};
@@ -58,7 +58,7 @@ pub fn export_dng_to_writer<W: Write + Seek>(
     writer.write_header()?;
 
     // Write image data first to get offset
-    let (strip_offset, strip_bytes) = writer.write_image_strip_rgb16(&image.data)?;
+    let (strip_offset, strip_bytes) = writer.write_image_strip_rgb16(image.data())?;
 
     // Build IFD entries
     let mut entries = build_dng_ifd(image, metadata, config, strip_offset, strip_bytes);
@@ -246,11 +246,11 @@ fn build_dng_ifd(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::image::RgbImage;
+    use crate::core::RgbImage;
 
     #[test]
     fn test_build_dng_ifd() {
-        let image = RgbImage::new(100, 50, vec![0u16; 100 * 50 * 3]);
+        let image = RgbImage::new(100, 50, vec![0u16; 100 * 50 * 3]).expect("valid RGB buffer");
         let metadata = ImageMetadata::default();
         let config = DngExportConfig::archival();
 

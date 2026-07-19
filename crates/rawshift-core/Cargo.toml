@@ -13,10 +13,8 @@ categories = ["multimedia::images"]
 readme = "README.md"
 
 [dependencies]
-# First lazily-added gamut crate. rawshift-core's primitives migrate onto it in
-# the core-primitives issue; it is declared here now so the pinned dependency is
-# resolved, fetched, and compiled by CI.
 gamut-core = { workspace = true }
+gamut-color = { workspace = true }
 serde = { workspace = true, optional = true }
 
 [dev-dependencies]

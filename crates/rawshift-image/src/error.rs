@@ -43,6 +43,28 @@ pub enum RawError {
     /// Feature not yet implemented.
     #[error("Unsupported: {0}")]
     Unsupported(String),
+
+    /// Error surfaced by a gamut primitive (buffer/dimension validation,
+    /// codec-independent invariants).
+    ///
+    /// `context` names the rawshift operation that invoked gamut, since the
+    /// upstream error alone rarely identifies the call site (structured
+    /// diagnostic context upstream is justin13888/gamut#254).
+    #[error("{context}: {source}")]
+    Gamut {
+        /// The rawshift operation that invoked gamut.
+        context: &'static str,
+        /// The underlying gamut error.
+        #[source]
+        source: gamut_core::Error,
+    },
+}
+
+impl RawError {
+    /// Wrap a gamut error with the rawshift operation it occurred in.
+    pub fn gamut(context: &'static str, source: gamut_core::Error) -> Self {
+        RawError::Gamut { context, source }
+    }
 }
 
 /// TIFF and binary parse errors.

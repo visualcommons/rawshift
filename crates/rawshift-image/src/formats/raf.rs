@@ -14,7 +14,7 @@
 
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size, XTransPattern};
+use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, XTransPattern};
 use crate::error::{FormatError, RawError, RawResult};
 use tracing::instrument;
 
@@ -53,7 +53,7 @@ pub struct RafMetadata {
     /// Camera model (e.g., "X-T5")
     pub model: String,
     /// Full sensor dimensions
-    pub sensor_size: Size,
+    pub sensor_size: Dimensions,
     /// Active/crop area (full sensor size as RAF does not provide a sub-area)
     pub active_area: Rect,
     /// Bits per sample (12 or 14)
@@ -139,7 +139,7 @@ impl<R: Read + Seek> RafFile<R> {
             (DEFAULT_WIDTH, DEFAULT_HEIGHT)
         };
 
-        let sensor_size = Size::new(width, height);
+        let sensor_size = Dimensions { width, height };
         let active_area = Rect::from_coords(0, 0, width, height);
 
         // Fujifilm default calibration values
@@ -238,7 +238,10 @@ impl<R: Read + Seek> RafFile<R> {
         // Unpack big-endian 16-bit pixel values
         let pixels = unpack_raw_16bit(pixel_bytes);
 
-        let expected = metadata.sensor_size.pixel_count() as usize;
+        let expected = metadata
+            .sensor_size
+            .num_pixels()
+            .expect("sensor pixel count overflows usize");
         if pixels.len() != expected {
             return Err(RawError::Format(FormatError::Raf(format!(
                 "Pixel count mismatch: got {} pixels, expected {} ({}×{})",
@@ -267,7 +270,7 @@ impl<R: Read + Seek> RafFile<R> {
     }
 }
 
-impl<R: Read + Seek> crate::core::MetadataExtractor for RafFile<R> {
+impl<R: Read + Seek> crate::core::ExtractMetadata for RafFile<R> {
     fn extract_metadata(&self) -> crate::core::ImageMetadata {
         use crate::core::metadata::*;
 
@@ -595,7 +598,10 @@ mod tests {
         let meta = RafMetadata {
             make: "FUJIFILM".to_string(),
             model: "X-T5".to_string(),
-            sensor_size: Size::new(6240, 4168),
+            sensor_size: Dimensions {
+                width: 6240,
+                height: 4168,
+            },
             active_area: Rect::from_coords(0, 0, 6240, 4168),
             bit_depth: 14,
             cfa_pattern: CfaPattern::Rggb,

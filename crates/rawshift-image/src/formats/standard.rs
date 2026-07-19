@@ -16,7 +16,7 @@ use zune_core::options::DecoderOptions;
 use zune_core::result::DecodingResult;
 
 use crate::core::CodecId;
-use crate::core::image::{RgbImage, Size};
+use crate::core::{Dimensions, RgbImage};
 use crate::error::{FormatError, RawError, RawResult};
 
 /// Supported standard (non-RAW) image formats.
@@ -340,7 +340,7 @@ fn decode_gif(data: &[u8]) -> RawResult<RgbImage> {
         }
     }
 
-    Ok(RgbImage::new(canvas_width, canvas_height, out))
+    RgbImage::new(canvas_width, canvas_height, out)
 }
 
 // ── JPEG ─────────────────────────────────────────────────────────────────────
@@ -379,7 +379,7 @@ fn decode_jpeg(data: &[u8], cfg: &ZuneJpegDecodeConfig) -> RawResult<RgbImage> {
     // pixels is Vec<u8>, RGB interleaved — scale to u16
     let data_u16: Vec<u16> = pixels.iter().map(|&v| u8_to_u16(v)).collect();
 
-    Ok(RgbImage::new(w, h, data_u16))
+    RgbImage::new(w, h, data_u16)
 }
 
 // ── PNG ──────────────────────────────────────────────────────────────────────
@@ -463,7 +463,7 @@ fn decode_png(data: &[u8], cfg: &ZunePngDecodeConfig) -> RawResult<RgbImage> {
         }
     };
 
-    Ok(RgbImage::new(w, h, data_u16))
+    RgbImage::new(w, h, data_u16)
 }
 
 // ── WebP ─────────────────────────────────────────────────────────────────────
@@ -479,7 +479,7 @@ fn decode_webp(data: &[u8]) -> RawResult<RgbImage> {
 
     let data_u16: Vec<u16> = rgb.iter().map(|&v| u8_to_u16(v)).collect();
 
-    Ok(RgbImage::new(w, h, data_u16))
+    RgbImage::new(w, h, data_u16)
 }
 
 // ── JXL ──────────────────────────────────────────────────────────────────────
@@ -559,7 +559,7 @@ fn jxl_render_to_rgb(
         }
     };
 
-    Ok(RgbImage::new(w, h, data_u16))
+    RgbImage::new(w, h, data_u16)
 }
 
 /// Decode a JPEG XL stream that may be **truncated**, returning the best
@@ -570,7 +570,7 @@ fn jxl_render_to_rgb(
 /// mid-frame — renders the partially-decoded frame. The returned `bool` is
 /// `true` when a complete keyframe was decoded and `false` for a partial render.
 ///
-/// The returned image is tagged [`ColorSpace::Srgb`](crate::core::ColorSpace).
+/// The returned image is tagged [`ColorDescription::SRGB`](crate::core::ColorDescription).
 ///
 /// # Errors
 /// Returns an error only when the stream is too short to even parse the image
@@ -724,7 +724,7 @@ fn decode_tiff(data: &[u8]) -> RawResult<RgbImage> {
         }
     };
 
-    Ok(RgbImage::new(w, h, data_u16))
+    RgbImage::new(w, h, data_u16)
 }
 
 // ── AVIF ─────────────────────────────────────────────────────────────────────
@@ -751,7 +751,7 @@ fn decode_avif(data: &[u8]) -> RawResult<RgbImage> {
     let rgb = img.into_rgb16();
     let w = rgb.width();
     let h = rgb.height();
-    Ok(RgbImage::new(w, h, rgb.into_raw()))
+    RgbImage::new(w, h, rgb.into_raw())
 }
 
 #[cfg(not(feature = "avif-decode"))]
@@ -772,7 +772,7 @@ fn decode_heic(data: &[u8]) -> RawResult<RgbImage> {
             message,
         })
     })?;
-    Ok(RgbImage::new(decoded.width, decoded.height, decoded.rgb))
+    RgbImage::new(decoded.width, decoded.height, decoded.rgb)
 }
 
 #[cfg(not(feature = "heic-decode"))]
@@ -826,7 +826,7 @@ fn decode_svg(data: &[u8], cfg: &ResvgDecodeConfig) -> RawResult<RgbImage> {
         })
         .collect();
 
-    Ok(RgbImage::new(width, height, data_u16))
+    RgbImage::new(width, height, data_u16)
 }
 
 #[cfg(not(feature = "svg-decode"))]
@@ -913,7 +913,7 @@ fn decode_ppm(data: &[u8], _cfg: &ZunePpmDecodeConfig) -> RawResult<RgbImage> {
         }
     };
 
-    Ok(RgbImage::new(w, h, data_u16))
+    RgbImage::new(w, h, data_u16)
 }
 
 // ── Decoder implementation selection ──────────────────────────────────────────
@@ -1218,17 +1218,17 @@ pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawRe
     decoded.map(tag_srgb)
 }
 
-/// Tag a freshly-decoded standard image with its color space.
+/// Tag a freshly-decoded standard image with its color description.
 ///
 /// Every standard decoder produces display-referred, sRGB-encoded RGB, so the
-/// result is tagged [`ColorSpace::Srgb`](crate::core::ColorSpace::Srgb). When
-/// the source carried a non-sRGB ICC profile the pixels are *not* converted —
-/// the precise profile is preserved in
+/// result is tagged [`ColorDescription::SRGB`](crate::core::ColorDescription::SRGB).
+/// When the source carried a non-sRGB ICC profile the pixels are *not*
+/// converted — the precise profile is preserved in
 /// [`ImageMetadata::icc_profile`](crate::core::ImageMetadata) by
 /// [`read_standard_image_metadata`], and a caller wanting true sRGB pixels can
 /// apply [`convert_to_srgb`](crate::transforms::convert_to_srgb).
 fn tag_srgb(mut image: RgbImage) -> RgbImage {
-    image.set_color_space(crate::core::ColorSpace::Srgb);
+    image.set_color(crate::core::ColorDescription::SRGB);
     image
 }
 
@@ -1245,11 +1245,15 @@ pub struct ImageProbe {
     /// The detected image format.
     pub format: StandardFormat,
     /// Pixel dimensions read from the format header.
-    pub size: Size,
+    #[cfg_attr(
+        feature = "serde",
+        serde(with = "rawshift_core::image::dimensions_serde")
+    )]
+    pub size: Dimensions,
     /// Bits per channel, when the header exposes it cheaply (`None` otherwise).
     pub bit_depth: Option<u8>,
-    /// Best-effort color space — see [`decode_standard_image`] for the caveats.
-    pub color_space: crate::core::ColorSpace,
+    /// Best-effort color description — see [`decode_standard_image`] for the caveats.
+    pub color_space: crate::core::ColorDescription,
 }
 
 fn probe_err(format: &'static str, msg: impl Into<String>) -> RawError {
@@ -1306,22 +1310,22 @@ pub fn probe_standard_image(data: &[u8]) -> RawResult<ImageProbe> {
         format,
         size,
         bit_depth,
-        color_space: crate::core::ColorSpace::Srgb,
+        color_space: crate::core::ColorDescription::SRGB,
     })
 }
 
 /// PNG: dimensions and bit depth live in the fixed-offset IHDR chunk.
-fn probe_png(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
+fn probe_png(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
     if data.len() < 26 || &data[12..16] != b"IHDR" {
         return Err(probe_err("PNG", "missing IHDR chunk"));
     }
     let width = u32::from_be_bytes([data[16], data[17], data[18], data[19]]);
     let height = u32::from_be_bytes([data[20], data[21], data[22], data[23]]);
-    Ok((Size::new(width, height), Some(data[24])))
+    Ok((Dimensions { width, height }, Some(data[24])))
 }
 
 /// JPEG: scan marker segments for a Start-Of-Frame (SOFn) marker.
-fn probe_jpeg(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
+fn probe_jpeg(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
     let mut i = 2; // skip the SOI marker
     while i + 1 < data.len() {
         if data[i] != 0xFF {
@@ -1346,7 +1350,7 @@ fn probe_jpeg(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
             let precision = data[i + 4];
             let height = u16::from_be_bytes([data[i + 5], data[i + 6]]) as u32;
             let width = u16::from_be_bytes([data[i + 7], data[i + 8]]) as u32;
-            return Ok((Size::new(width, height), Some(precision)));
+            return Ok((Dimensions { width, height }, Some(precision)));
         }
         // Any other marker carries a big-endian u16 length (incl. the 2 length
         // bytes) — skip past it.
@@ -1360,17 +1364,17 @@ fn probe_jpeg(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
 }
 
 /// GIF: the Logical Screen Descriptor follows the 6-byte signature.
-fn probe_gif(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
+fn probe_gif(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
     if data.len() < 10 {
         return Err(probe_err("GIF", "truncated header"));
     }
     let width = u16::from_le_bytes([data[6], data[7]]) as u32;
     let height = u16::from_le_bytes([data[8], data[9]]) as u32;
-    Ok((Size::new(width, height), Some(8)))
+    Ok((Dimensions { width, height }, Some(8)))
 }
 
 /// WebP: dimensions live in the first RIFF chunk (`VP8X`, `VP8 ` or `VP8L`).
-fn probe_webp(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
+fn probe_webp(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
     if data.len() < 30 || &data[8..12] != b"WEBP" {
         return Err(probe_err("WebP", "not a RIFF/WEBP container"));
     }
@@ -1379,27 +1383,27 @@ fn probe_webp(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
         b"VP8X" => {
             let width = 1 + u32::from_le_bytes([data[24], data[25], data[26], 0]);
             let height = 1 + u32::from_le_bytes([data[27], data[28], data[29], 0]);
-            Ok((Size::new(width, height), Some(8)))
+            Ok((Dimensions { width, height }, Some(8)))
         }
         b"VP8 " => {
             // Lossy: 3-byte frame tag, 3-byte start code, then 14-bit w/h.
             let width = u16::from_le_bytes([data[26], data[27]]) as u32 & 0x3FFF;
             let height = u16::from_le_bytes([data[28], data[29]]) as u32 & 0x3FFF;
-            Ok((Size::new(width, height), Some(8)))
+            Ok((Dimensions { width, height }, Some(8)))
         }
         b"VP8L" => {
             // Lossless: 1 signature byte, then 14-bit (w-1) and 14-bit (h-1).
             let bits = u32::from_le_bytes([data[21], data[22], data[23], data[24]]);
             let width = (bits & 0x3FFF) + 1;
             let height = ((bits >> 14) & 0x3FFF) + 1;
-            Ok((Size::new(width, height), Some(8)))
+            Ok((Dimensions { width, height }, Some(8)))
         }
         _ => Err(probe_err("WebP", "unrecognized WebP chunk")),
     }
 }
 
 /// TIFF: read `ImageWidth`/`ImageLength` from the first IFD.
-fn probe_tiff(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
+fn probe_tiff(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
     if data.len() < 8 {
         return Err(probe_err("TIFF", "truncated header"));
     }
@@ -1449,14 +1453,20 @@ fn probe_tiff(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
         }
     }
     match (width, height) {
-        (Some(w), Some(h)) => Ok((Size::new(w, h), None)),
+        (Some(w), Some(h)) => Ok((
+            Dimensions {
+                width: w,
+                height: h,
+            },
+            None,
+        )),
         _ => Err(probe_err("TIFF", "ImageWidth/ImageLength not found")),
     }
 }
 
 /// AVIF / HEIC: locate the ISOBMFF `ispe` (image spatial extents) box. Several
 /// may exist (thumbnails, alpha planes) — the largest is taken as the primary.
-fn probe_isobmff(data: &[u8], format: &'static str) -> RawResult<(Size, Option<u8>)> {
+fn probe_isobmff(data: &[u8], format: &'static str) -> RawResult<(Dimensions, Option<u8>)> {
     let mut best: Option<(u32, u32)> = None;
     let mut i = 0;
     while i + 16 <= data.len() {
@@ -1473,13 +1483,19 @@ fn probe_isobmff(data: &[u8], format: &'static str) -> RawResult<(Size, Option<u
         i += 1;
     }
     match best {
-        Some((w, h)) => Ok((Size::new(w, h), None)),
+        Some((w, h)) => Ok((
+            Dimensions {
+                width: w,
+                height: h,
+            },
+            None,
+        )),
         None => Err(probe_err(format, "no `ispe` box found")),
     }
 }
 
 /// PPM / PGM / PBM (Netpbm): a whitespace-separated ASCII header.
-fn probe_ppm(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
+fn probe_ppm(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
     // After the 2-byte magic ("P1".."P6"), read ASCII tokens separated by
     // whitespace: width, height, and (except for bitmaps) maxval. A '#' starts
     // a comment that runs to end-of-line.
@@ -1513,7 +1529,13 @@ fn probe_ppm(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
                 .get(2)
                 .and_then(|&t| parse(t))
                 .map(|maxval| if maxval > 255 { 16u8 } else { 8 });
-            Ok((Size::new(w, h), bits))
+            Ok((
+                Dimensions {
+                    width: w,
+                    height: h,
+                },
+                bits,
+            ))
         }
         _ => Err(probe_err("PPM", "could not read width/height")),
     }
@@ -1521,7 +1543,7 @@ fn probe_ppm(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
 
 /// JXL: parse just enough of the codestream to read the image header.
 #[cfg(feature = "jxl-decode")]
-fn probe_jxl(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
+fn probe_jxl(data: &[u8]) -> RawResult<(Dimensions, Option<u8>)> {
     use jxl_oxide::{InitializeResult, JxlImage};
 
     let mut uninit = JxlImage::builder().build_uninit();
@@ -1532,7 +1554,13 @@ fn probe_jxl(data: &[u8]) -> RawResult<(Size, Option<u8>)> {
         .try_init()
         .map_err(|e| probe_err("JXL", e.to_string()))?
     {
-        InitializeResult::Initialized(img) => Ok((Size::new(img.width(), img.height()), None)),
+        InitializeResult::Initialized(img) => Ok((
+            Dimensions {
+                width: img.width(),
+                height: img.height(),
+            },
+            None,
+        )),
         InitializeResult::NeedMoreData(_) => Err(probe_err(
             "JXL",
             "stream too short to read the image header",
@@ -1555,7 +1583,13 @@ mod probe_tests {
         png.extend_from_slice(&[8, 2, 0, 0, 0]); // bit depth 8, color type 2 (RGB)
         let probe = probe_standard_image(&png).expect("probe PNG");
         assert_eq!(probe.format, StandardFormat::Png);
-        assert_eq!(probe.size, Size::new(640, 480));
+        assert_eq!(
+            probe.size,
+            Dimensions {
+                width: 640,
+                height: 480
+            }
+        );
         assert_eq!(probe.bit_depth, Some(8));
     }
 
@@ -1566,7 +1600,13 @@ mod probe_tests {
         gif.extend_from_slice(&200u16.to_le_bytes());
         gif.extend_from_slice(&[0, 0, 0]);
         let probe = probe_standard_image(&gif).expect("probe GIF");
-        assert_eq!(probe.size, Size::new(320, 200));
+        assert_eq!(
+            probe.size,
+            Dimensions {
+                width: 320,
+                height: 200
+            }
+        );
     }
 
     #[test]
@@ -1797,7 +1837,7 @@ mod tests {
 
         assert_eq!(decoded.width(), W as u32);
         assert_eq!(decoded.height(), H as u32);
-        assert_eq!(decoded.data.len(), W as usize * H as usize * 3);
+        assert_eq!(decoded.data().len(), W as usize * H as usize * 3);
     }
 
     // ── PNG roundtrip ─────────────────────────────────────────────────────
@@ -1823,9 +1863,9 @@ mod tests {
 
         assert_eq!(decoded.width(), W as u32);
         assert_eq!(decoded.height(), H as u32);
-        assert_eq!(decoded.data.len(), W * H * 3);
+        assert_eq!(decoded.data().len(), W * H * 3);
         // Each u8 value should have been scaled to u16
-        assert_eq!(decoded.data[0], u8_to_u16(pixels_u8[0]));
+        assert_eq!(decoded.data()[0], u8_to_u16(pixels_u8[0]));
     }
 
     // ── DecodeOptions / decode_standard_image_with ────────────────────────
@@ -1872,7 +1912,7 @@ mod tests {
 
         assert_eq!(via_with.width(), W as u32);
         assert_eq!(via_with.height(), H as u32);
-        assert_eq!(via_with.data, via_default.data);
+        assert_eq!(via_with.data(), via_default.data());
     }
 
     // ── detect + decode consistency ───────────────────────────────────────
@@ -1932,10 +1972,10 @@ mod tests {
         let decoded = decode_standard_image(&file, StandardFormat::Ppm).expect("PPM decode failed");
         assert_eq!(decoded.width(), 2);
         assert_eq!(decoded.height(), 2);
-        assert_eq!(decoded.data.len(), 2 * 2 * 3);
+        assert_eq!(decoded.data().len(), 2 * 2 * 3);
         // 8-bit samples must have been scaled to 16-bit.
-        assert_eq!(decoded.data[0], u8_to_u16(pixels[0]));
-        assert_eq!(decoded.data[11], u8_to_u16(pixels[11]));
+        assert_eq!(decoded.data()[0], u8_to_u16(pixels[0]));
+        assert_eq!(decoded.data()[11], u8_to_u16(pixels[11]));
     }
 
     // ── GIF decode ────────────────────────────────────────────────────────
@@ -1987,7 +2027,7 @@ mod tests {
         assert_eq!(img.width(), 2, "decoded width must be 2");
         assert_eq!(img.height(), 2, "decoded height must be 2");
         assert_eq!(
-            img.data.len(),
+            img.data().len(),
             2 * 2 * 3,
             "must have 12 u16 samples (2×2×3)"
         );
@@ -2012,9 +2052,9 @@ mod tests {
         let gif_data = make_minimal_gif();
         let img = decode_standard_image(&gif_data, StandardFormat::Gif).unwrap();
         // Index 0 → red (255, 0, 0) → scaled to u16: (255*257, 0, 0)
-        assert_eq!(img.data[0], u8_to_u16(255), "R of top-left pixel");
-        assert_eq!(img.data[1], u8_to_u16(0), "G of top-left pixel");
-        assert_eq!(img.data[2], u8_to_u16(0), "B of top-left pixel");
+        assert_eq!(img.data()[0], u8_to_u16(255), "R of top-left pixel");
+        assert_eq!(img.data()[1], u8_to_u16(0), "G of top-left pixel");
+        assert_eq!(img.data()[2], u8_to_u16(0), "B of top-left pixel");
     }
 
     #[test]
@@ -2059,16 +2099,16 @@ mod tests {
             .expect("TIFF decode must succeed");
         assert_eq!(img.width(), 2);
         assert_eq!(img.height(), 2);
-        assert_eq!(img.data.len(), 2 * 2 * 3);
+        assert_eq!(img.data().len(), 2 * 2 * 3);
     }
 
     #[test]
     fn tiff_decode_first_pixel_is_red() {
         let tiff_data = make_minimal_tiff_rgb8();
         let img = decode_standard_image(&tiff_data, StandardFormat::Tiff).unwrap();
-        assert_eq!(img.data[0], u8_to_u16(255), "R of top-left pixel");
-        assert_eq!(img.data[1], u8_to_u16(0), "G of top-left pixel");
-        assert_eq!(img.data[2], u8_to_u16(0), "B of top-left pixel");
+        assert_eq!(img.data()[0], u8_to_u16(255), "R of top-left pixel");
+        assert_eq!(img.data()[1], u8_to_u16(0), "G of top-left pixel");
+        assert_eq!(img.data()[2], u8_to_u16(0), "B of top-left pixel");
     }
 
     #[test]
@@ -2100,9 +2140,9 @@ mod tests {
         let img = decode_standard_image(&tiff_data, StandardFormat::Tiff).unwrap();
         assert_eq!(img.width(), 4);
         assert_eq!(img.height(), 4);
-        assert_eq!(img.data.len(), 4 * 4 * 3);
+        assert_eq!(img.data().len(), 4 * 4 * 3);
         // Grayscale: R == G == B for each pixel
-        for px in img.data.chunks_exact(3) {
+        for px in img.data().chunks_exact(3) {
             assert_eq!(px[0], px[1]);
             assert_eq!(px[1], px[2]);
         }
@@ -2133,11 +2173,11 @@ mod tests {
         assert_eq!(img.width(), 2);
         assert_eq!(img.height(), 2);
         // Should be RGB only (alpha dropped)
-        assert_eq!(img.data.len(), 2 * 2 * 3);
+        assert_eq!(img.data().len(), 2 * 2 * 3);
         // First pixel should be red
-        assert_eq!(img.data[0], u8_to_u16(255));
-        assert_eq!(img.data[1], u8_to_u16(0));
-        assert_eq!(img.data[2], u8_to_u16(0));
+        assert_eq!(img.data()[0], u8_to_u16(255));
+        assert_eq!(img.data()[1], u8_to_u16(0));
+        assert_eq!(img.data()[2], u8_to_u16(0));
     }
 
     /// Build a 16-bit RGB TIFF (2×2) in memory.
@@ -2165,9 +2205,9 @@ mod tests {
         assert_eq!(img.width(), 2);
         assert_eq!(img.height(), 2);
         // 16-bit values should be preserved exactly
-        assert_eq!(img.data[0], 65535); // R of red pixel
-        assert_eq!(img.data[1], 0); // G of red pixel
-        assert_eq!(img.data[2], 0); // B of red pixel
+        assert_eq!(img.data()[0], 65535); // R of red pixel
+        assert_eq!(img.data()[1], 0); // G of red pixel
+        assert_eq!(img.data()[2], 0); // B of red pixel
     }
 
     #[cfg(not(feature = "avif-decode"))]
@@ -2493,7 +2533,7 @@ mod tests {
         let img = result.unwrap();
         assert_eq!(img.width(), 4);
         assert_eq!(img.height(), 4);
-        assert_eq!(img.data.len(), 4 * 4 * 3);
+        assert_eq!(img.data().len(), 4 * 4 * 3);
     }
 
     // ── read_standard_image_metadata ─────────────────────────────────────
@@ -2526,7 +2566,7 @@ mod tests {
 
         // Build a 2×2 synthetic image (solid red).
         let data: Vec<u16> = vec![65535, 0, 0, 65535, 0, 0, 65535, 0, 0, 65535, 0, 0];
-        let rgb = RgbImage::new(2, 2, data);
+        let rgb = RgbImage::new(2, 2, data).expect("valid RGB buffer");
 
         // Build metadata with known EXIF values.
         let md = ImageMetadata {

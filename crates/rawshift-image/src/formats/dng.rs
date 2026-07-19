@@ -6,7 +6,8 @@
 use std::io::{Read, Seek};
 
 use crate::codecs::jxl::JxlDecoder;
-use crate::core::image::{CfaPattern, RawImage, Rect, RgbImage, Size};
+use crate::core::RgbImage;
+use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect};
 use crate::error::{ParseError, RawError, RawResult};
 use crate::tiff::{ByteOrder, Ifd, TiffParser, TiffTag, TiffValue};
 
@@ -22,7 +23,7 @@ pub struct DngMetadata {
     /// Unique camera model identifier
     pub unique_camera_model: String,
     /// Full sensor dimensions
-    pub sensor_size: Size,
+    pub sensor_size: Dimensions,
     /// Active/crop area (if different from sensor size)
     pub active_area: Option<Rect>,
     /// Default crop origin
@@ -306,7 +307,7 @@ impl<R: Read + Seek> DngFile<R> {
                 TiffTag::ImageLength,
             )))?;
 
-        let sensor_size = Size::new(width, height);
+        let sensor_size = Dimensions { width, height };
 
         // Extract bit depth (BitsPerSample may be array for LinearRaw)
         let bit_depth = if let Some(entry) = raw_ifd.get(TiffTag::BitsPerSample) {
@@ -1279,7 +1280,7 @@ impl<R: Read + Seek> DngFile<R> {
             }
         }
 
-        let mut image = RgbImage::new(out_width as u32, out_height as u32, output);
+        let mut image = RgbImage::new(out_width as u32, out_height as u32, output)?;
         image.set_baseline_exposure(metadata.baseline_exposure);
         image.set_default_crop(
             if let (Some(origin), Some(size)) =
@@ -1302,7 +1303,7 @@ impl<R: Read + Seek> DngFile<R> {
     }
 }
 
-impl<R: Read + Seek> crate::core::MetadataExtractor for DngFile<R> {
+impl<R: Read + Seek> crate::core::ExtractMetadata for DngFile<R> {
     fn extract_metadata(&self) -> crate::core::ImageMetadata {
         use crate::core::metadata::*;
 
@@ -1620,10 +1621,10 @@ mod tests {
 
         // Validate data size (width * height * 3 channels)
         let expected_size = 8064 * 6048 * 3;
-        assert_eq!(rgb_image.data.len(), expected_size);
+        assert_eq!(rgb_image.data().len(), expected_size);
 
         // Check that we got some non-zero pixel data
-        let non_zero_count = rgb_image.data.iter().filter(|&&v| v > 0).count();
+        let non_zero_count = rgb_image.data().iter().filter(|&&v| v > 0).count();
         assert!(non_zero_count > 0, "Should have non-zero pixel values");
     }
 }

@@ -7,7 +7,7 @@
 //! It re-exports the optimized primitives from [`crate::processing::color`] and
 //! provides the [`ColorSpaceTransform`] struct for bundled pipeline steps.
 
-use crate::core::image::RgbImage;
+use crate::core::RgbImage;
 use crate::error::{RawError, RawResult};
 
 // Re-export processing primitives as canonical transform entry points.
@@ -188,67 +188,73 @@ pub fn estimate_cct_from_as_shot_neutral(as_shot_neutral: [f64; 3]) -> ColorTemp
 
 /// Convert an [`RgbImage`] into sRGB-encoded color space, in place.
 ///
-/// Behaviour depends on the image's current [`ColorSpace`](crate::core::ColorSpace):
-/// - `Srgb` / `Unknown` — no-op (`Unknown` is assumed to be sRGB already).
-/// - `LinearSrgb` — applies the sRGB transfer function (OETF).
-/// - `DisplayP3` / `Rec2020` / `AdobeRgb` / `ProPhotoRgb` — not yet supported;
+/// Behaviour depends on the image's current [`ColorDescription`](crate::core::ColorDescription):
+/// - `SRGB` / `UNSPECIFIED` — no-op (`UNSPECIFIED` is assumed to be sRGB already).
+/// - `LINEAR_SRGB` — applies the sRGB transfer function (OETF).
+/// - `DISPLAY_P3` / `REC2020` and other descriptions — not yet supported;
 ///   returns [`RawError::Unsupported`]. Wide-gamut conversion needs a
 ///   color-management engine, which is planned follow-up work.
 ///
-/// On success the image's color-space tag is updated to `Srgb`.
+/// On success the image's color description is updated to `SRGB`.
 pub fn convert_to_srgb(image: &mut RgbImage) -> RawResult<()> {
-    use crate::core::ColorSpace;
+    use crate::core::ColorDescription;
     use crate::transforms::tonemap::srgb_encode;
 
-    match image.color_space() {
-        ColorSpace::Srgb | ColorSpace::Unknown => {}
-        ColorSpace::LinearSrgb => {
-            for sample in &mut image.data {
-                let linear = *sample as f32 / 65535.0;
-                *sample = (srgb_encode(linear) * 65535.0 + 0.5) as u16;
-            }
+    let color = image.color();
+    if color == ColorDescription::SRGB || color == ColorDescription::UNSPECIFIED {
+        // Already sRGB (or assumed to be) — nothing to do.
+    } else if color == ColorDescription::LINEAR_SRGB {
+        for sample in image.data_mut() {
+            let linear = *sample as f32 / 65535.0;
+            *sample = (srgb_encode(linear) * 65535.0 + 0.5) as u16;
         }
-        other => {
-            return Err(RawError::Unsupported(format!(
-                "conversion from {} to sRGB requires a color-management engine \
-                 (not yet implemented)",
-                other.name()
-            )));
-        }
+    } else {
+        return Err(RawError::Unsupported(format!(
+            "conversion from {} to sRGB requires a color-management engine \
+             (not yet implemented)",
+            color.name()
+        )));
     }
-    image.set_color_space(ColorSpace::Srgb);
+    image.set_color(ColorDescription::SRGB);
     Ok(())
 }
 
 #[cfg(test)]
 mod convert_srgb_tests {
     use super::*;
-    use crate::core::ColorSpace;
+    use crate::core::ColorDescription;
 
     #[test]
     fn linear_srgb_is_oetf_encoded() {
         // The sRGB OETF lifts linear mid-grey above 0.5.
-        let mut img =
-            RgbImage::with_color_space(1, 1, vec![32768, 32768, 32768], ColorSpace::LinearSrgb);
+        let mut img = RgbImage::with_color(
+            1,
+            1,
+            vec![32768, 32768, 32768],
+            ColorDescription::LINEAR_SRGB,
+        )
+        .expect("valid RGB buffer");
         convert_to_srgb(&mut img).expect("LinearSrgb conversion");
-        assert_eq!(img.color_space(), ColorSpace::Srgb);
-        assert!(img.data.iter().all(|&v| v > 32768));
+        assert_eq!(img.color(), ColorDescription::SRGB);
+        assert!(img.data().iter().all(|&v| v > 32768));
     }
 
     #[test]
     fn srgb_and_unknown_are_noops() {
-        for cs in [ColorSpace::Srgb, ColorSpace::Unknown] {
+        for cs in [ColorDescription::SRGB, ColorDescription::UNSPECIFIED] {
             let original = vec![100u16, 200, 300];
-            let mut img = RgbImage::with_color_space(1, 1, original.clone(), cs);
+            let mut img =
+                RgbImage::with_color(1, 1, original.clone(), cs).expect("valid RGB buffer");
             convert_to_srgb(&mut img).expect("no-op conversion");
-            assert_eq!(img.data, original);
-            assert_eq!(img.color_space(), ColorSpace::Srgb);
+            assert_eq!(img.data(), original);
+            assert_eq!(img.color(), ColorDescription::SRGB);
         }
     }
 
     #[test]
     fn wide_gamut_is_rejected() {
-        let mut img = RgbImage::with_color_space(1, 1, vec![0, 0, 0], ColorSpace::DisplayP3);
+        let mut img = RgbImage::with_color(1, 1, vec![0, 0, 0], ColorDescription::DISPLAY_P3)
+            .expect("valid RGB buffer");
         assert!(convert_to_srgb(&mut img).is_err());
     }
 }
@@ -359,15 +365,15 @@ mod tests {
 
     #[test]
     fn test_apply_white_balance_clamps_at_white_level() {
-        use crate::core::image::RgbImage;
+        use crate::core::RgbImage;
         use crate::processing::color::apply_white_balance;
 
         // Pixel near max with a large gain should clamp at 65535
-        let mut img = RgbImage::new(1, 1, vec![60000u16, 60000, 60000]);
+        let mut img = RgbImage::new(1, 1, vec![60000u16, 60000, 60000]).expect("valid RGB buffer");
         apply_white_balance(&mut img, (3.0, 3.0, 3.0));
-        assert_eq!(img.data[0], 65535, "R should clamp at 65535");
-        assert_eq!(img.data[1], 65535, "G should clamp at 65535");
-        assert_eq!(img.data[2], 65535, "B should clamp at 65535");
+        assert_eq!(img.data()[0], 65535, "R should clamp at 65535");
+        assert_eq!(img.data()[1], 65535, "G should clamp at 65535");
+        assert_eq!(img.data()[2], 65535, "B should clamp at 65535");
     }
 
     #[test]
@@ -391,20 +397,20 @@ mod tests {
 
     #[test]
     fn test_apply_color_matrix_zero_input() {
-        use crate::core::image::RgbImage;
+        use crate::core::RgbImage;
         use crate::processing::color::apply_color_matrix;
 
         let any_matrix: [f32; 9] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let mut img = RgbImage::new(2, 1, vec![0u16; 6]);
+        let mut img = RgbImage::new(2, 1, vec![0u16; 6]).expect("valid RGB buffer");
         apply_color_matrix(&mut img, &any_matrix);
-        for v in &img.data {
+        for v in img.data() {
             assert_eq!(*v, 0, "Zero input should produce zero output");
         }
     }
 
     #[test]
     fn test_apply_color_matrix_roundtrip() {
-        use crate::core::image::RgbImage;
+        use crate::core::RgbImage;
         use crate::processing::color::apply_color_matrix;
 
         // Use a known camera matrix and its inverse for a round-trip test.
@@ -417,13 +423,13 @@ mod tests {
         let inv: [f32; 9] = inv_f64.map(|v| v as f32);
 
         let original = vec![10000u16, 20000, 30000];
-        let mut img = RgbImage::new(1, 1, original.clone());
+        let mut img = RgbImage::new(1, 1, original.clone()).expect("valid RGB buffer");
 
         apply_color_matrix(&mut img, &cm);
         apply_color_matrix(&mut img, &inv);
 
         // After applying matrix then its inverse, values should be close to original
-        for (i, (&got, &expected)) in img.data.iter().zip(original.iter()).enumerate() {
+        for (i, (&got, &expected)) in img.data().iter().zip(original.iter()).enumerate() {
             let diff = (got as i32 - expected as i32).abs();
             assert!(
                 diff < 500,
@@ -442,12 +448,12 @@ mod tests {
 
         let lut = GammaLut::new(2.2);
         // Create a minimal RgbImage with 0 and 65535
-        use crate::core::image::RgbImage;
-        let mut img = RgbImage::new(1, 1, vec![0u16, 0, 65535]);
+        use crate::core::RgbImage;
+        let mut img = RgbImage::new(1, 1, vec![0u16, 0, 65535]).expect("valid RGB buffer");
         lut.apply(&mut img);
-        assert_eq!(img.data[0], 0, "0 should map to 0");
-        assert_eq!(img.data[1], 0, "0 should map to 0");
-        assert_eq!(img.data[2], 65535, "65535 should map to 65535");
+        assert_eq!(img.data()[0], 0, "0 should map to 0");
+        assert_eq!(img.data()[1], 0, "0 should map to 0");
+        assert_eq!(img.data()[2], 65535, "65535 should map to 65535");
     }
 
     // -------------------------------------------------------------------------

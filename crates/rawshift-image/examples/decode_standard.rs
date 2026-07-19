@@ -72,11 +72,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         image.height(),
         image.width() as u64 * image.height() as u64
     );
-    println!("Pixel data length: {} u16 values", image.data.len());
+    println!("Pixel data length: {} u16 values", image.data().len());
 
     if let Some(out_path) = save_raw {
         // Convert u16 to u8 bytes (little-endian) and write
-        let bytes: Vec<u8> = image.data.iter().flat_map(|&v| v.to_le_bytes()).collect();
+        let bytes: Vec<u8> = image.data().iter().flat_map(|&v| v.to_le_bytes()).collect();
         std::fs::write(&out_path, &bytes)?;
         println!(
             "Saved {} bytes of raw pixel data to {:?}",

@@ -211,7 +211,7 @@ fn assert_decode_dimensions(format_dir: &str, expected_format: StandardFormat) {
         img.height()
     );
     assert_eq!(
-        img.data.len(),
+        img.data().len(),
         (gt.width * gt.height * gt.channels) as usize,
         "{} pixel data length mismatch",
         gt.format
@@ -351,9 +351,9 @@ fn decode_png_pixel_values_from_file() {
 
     // PNG is lossless, so first pixel (red: 255,0,0) should be exact after u8->u16 scaling.
     // u8 255 -> u16 65535 (255 * 257)
-    assert_eq!(img.data[0], 65535, "PNG first pixel R should be 65535");
-    assert_eq!(img.data[1], 0, "PNG first pixel G should be 0");
-    assert_eq!(img.data[2], 0, "PNG first pixel B should be 0");
+    assert_eq!(img.data()[0], 65535, "PNG first pixel R should be 65535");
+    assert_eq!(img.data()[1], 0, "PNG first pixel G should be 0");
+    assert_eq!(img.data()[2], 0, "PNG first pixel B should be 0");
 }
 
 #[test]
@@ -369,9 +369,9 @@ fn decode_tiff_pixel_values_from_file() {
     let img = decode_standard_image(&data, StandardFormat::Tiff).unwrap();
 
     // TIFF is lossless, first pixel (red: 255,0,0) should be exact.
-    assert_eq!(img.data[0], 65535, "TIFF first pixel R should be 65535");
-    assert_eq!(img.data[1], 0, "TIFF first pixel G should be 0");
-    assert_eq!(img.data[2], 0, "TIFF first pixel B should be 0");
+    assert_eq!(img.data()[0], 65535, "TIFF first pixel R should be 65535");
+    assert_eq!(img.data()[1], 0, "TIFF first pixel G should be 0");
+    assert_eq!(img.data()[2], 0, "TIFF first pixel B should be 0");
 }
 
 #[test]
@@ -387,9 +387,9 @@ fn decode_gif_first_pixel_from_file() {
     let img = decode_standard_image(&data, StandardFormat::Gif).unwrap();
 
     // GIF palette index 0 = red (255, 0, 0) -> u16: (65535, 0, 0)
-    assert_eq!(img.data[0], 65535, "GIF first pixel R should be 65535");
-    assert_eq!(img.data[1], 0, "GIF first pixel G should be 0");
-    assert_eq!(img.data[2], 0, "GIF first pixel B should be 0");
+    assert_eq!(img.data()[0], 65535, "GIF first pixel R should be 65535");
+    assert_eq!(img.data()[1], 0, "GIF first pixel G should be 0");
+    assert_eq!(img.data()[2], 0, "GIF first pixel B should be 0");
 }
 
 // ============================================================================

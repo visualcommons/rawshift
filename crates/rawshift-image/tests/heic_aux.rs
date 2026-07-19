@@ -62,7 +62,7 @@ fn heic_primary_decodes() {
     let img = file.decode_primary().expect("decode primary");
     assert!(img.width() > 0 && img.height() > 0);
     assert_eq!(
-        img.data.len(),
+        img.data().len(),
         img.width() as usize * img.height() as usize * 3,
         "primary RGB buffer must be width*height*3"
     );

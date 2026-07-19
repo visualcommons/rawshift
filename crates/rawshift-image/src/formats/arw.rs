@@ -5,7 +5,7 @@
 
 use std::io::{Read, Seek};
 
-use crate::core::image::{CfaPattern, RawImage, Rect, Size, white_level_from_bit_depth};
+use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
 use crate::error::{FormatError, ParseError, RawError, RawResult};
 use crate::tiff::{Ifd, TiffParser, TiffTag, TiffValue};
 
@@ -17,7 +17,7 @@ pub struct ArwMetadata {
     /// Camera model (e.g., "ILCE-6700")
     pub model: String,
     /// Full sensor dimensions
-    pub sensor_size: Size,
+    pub sensor_size: Dimensions,
     /// Active/crop area
     pub active_area: Rect,
     /// Bits per sample (typically 12 or 14)
@@ -203,7 +203,7 @@ impl<R: Read + Seek> ArwFile<R> {
                 TiffTag::ImageLength,
             )))?;
 
-        let sensor_size = Size::new(width, height);
+        let sensor_size = Dimensions { width, height };
 
         // Extract bit depth
         let bit_depth = if let Some(entry) = raw_ifd.get(TiffTag::BitsPerSample) {
@@ -809,7 +809,10 @@ impl<R: Read + Seek> ArwFile<R> {
                 output = decoder.decode(&data)?;
             }
 
-            let expected_pixels = metadata.sensor_size.pixel_count() as usize;
+            let expected_pixels = metadata
+                .sensor_size
+                .num_pixels()
+                .expect("sensor pixel count overflows usize");
             if output.len() != expected_pixels {
                 return Err(RawError::Format(FormatError::Decompression(format!(
                     "Decoded {} pixels, expected {}",
@@ -843,7 +846,7 @@ impl<R: Read + Seek> ArwFile<R> {
     }
 }
 
-impl<R: Read + Seek> crate::core::MetadataExtractor for ArwFile<R> {
+impl<R: Read + Seek> crate::core::ExtractMetadata for ArwFile<R> {
     fn extract_metadata(&self) -> crate::core::ImageMetadata {
         use crate::core::metadata::*;
 

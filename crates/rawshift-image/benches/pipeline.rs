@@ -1,14 +1,15 @@
 //! Benchmarks for the processing pipeline stages.
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use rawshift_image::core::image::{CfaPattern, Point, RawImage, Rect, RgbImage, Size};
+use rawshift_image::core::RgbImage;
+use rawshift_image::core::image::{CfaPattern, Dimensions, Point, RawImage, Rect};
 use rawshift_image::processing::color::{apply_color_matrix, apply_white_balance};
 use rawshift_image::transforms::black_level::apply_black_level;
 use rawshift_image::transforms::color::compute_camera_to_srgb;
 use rawshift_image::transforms::tonemap::apply_tone_reproduction;
 
 fn create_test_raw(width: u32, height: u32) -> RawImage {
-    let size = Size::new(width, height);
+    let size = Dimensions { width, height };
     let area = Rect::new(Point::ORIGIN, size);
     let pixel_count = (width * height) as usize;
     let data = vec![5000u16; pixel_count];
@@ -22,7 +23,7 @@ fn create_test_raw(width: u32, height: u32) -> RawImage {
 
 fn create_test_rgb(width: u32, height: u32) -> RgbImage {
     let data = vec![5000u16; (width * height * 3) as usize];
-    RgbImage::new(width, height, data)
+    RgbImage::new(width, height, data).expect("valid RGB buffer")
 }
 
 fn bench_black_level(c: &mut Criterion) {

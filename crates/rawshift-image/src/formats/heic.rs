@@ -9,7 +9,7 @@
 //! [`HeicFile`] when you need the auxiliary images or richer metadata.
 
 use crate::codecs::heic;
-use crate::core::image::RgbImage;
+use crate::core::RgbImage;
 use crate::core::metadata::{ImageMetadata, MetadataKey, MetadataNamespace, MetadataValue};
 use crate::error::{FormatError, RawError, RawResult};
 use crate::metadata::exif::ExifParser;
@@ -91,7 +91,7 @@ impl HeicFile {
     /// range.
     pub fn decode_primary(&self) -> RawResult<RgbImage> {
         let decoded = heic::decode_primary(&self.data).map_err(heic_err)?;
-        Ok(RgbImage::new(decoded.width, decoded.height, decoded.rgb))
+        RgbImage::new(decoded.width, decoded.height, decoded.rgb)
     }
 
     /// Extract embedded EXIF/XMP/ICC and full typed metadata.
@@ -110,7 +110,7 @@ impl HeicFile {
     /// grayscale-expanded RGB.
     pub fn decode_aux(&self, aux: &HeicAuxImage) -> RawResult<RgbImage> {
         let decoded = heic::decode_aux(&self.data, aux.item_id).map_err(heic_err)?;
-        Ok(RgbImage::new(decoded.width, decoded.height, decoded.rgb))
+        RgbImage::new(decoded.width, decoded.height, decoded.rgb)
     }
 
     /// Decode the embedded thumbnail, if the file carries one.
@@ -207,7 +207,7 @@ mod tests {
         let primary = file.decode_primary().expect("decode primary");
         assert!(primary.width() > 0 && primary.height() > 0);
         assert_eq!(
-            primary.data.len(),
+            primary.data().len(),
             primary.width() as usize * primary.height() as usize * 3
         );
 

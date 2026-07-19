@@ -4,10 +4,10 @@
 //!
 //! # Contents
 //!
-//! - **`core`** — `RawImage`, `RgbImage`, `Size`, `Rect`, `Point`, `CfaPattern`,
-//!   `ImageMetadata`, `ColorSpace`, `BitDepth`, `CodecInfo`, the generic metadata
-//!   model (`MetadataValue`, `MetadataKey`, `MetadataNamespace`, `MetadataEntry`),
-//!   and related structs.
+//! - **`core`** — `RawImage`, `RgbImage`, `Dimensions`, `Rect`, `Point`,
+//!   `CfaPattern`, `ImageMetadata`, `ColorDescription`, `BitDepth`, `CodecInfo`,
+//!   the generic metadata model (`MetadataValue`, `MetadataKey`,
+//!   `MetadataNamespace`, `MetadataEntry`), and related structs.
 //! - **`data`** — Camera color-calibration database (`CameraCalibration`,
 //!   `get_camera_calibration`, `all_cameras`).
 //! - **`error`** — `RawError`, `ParseError`, `FormatError`, `ProcessingError`,
@@ -23,16 +23,16 @@
 //!   `apply_tonemap`, `compute_camera_to_srgb`, `ColorSpaceTransform`, and more.
 
 // core
-pub use crate::core::image::{CfaPattern, RawImage, Rect, RgbImage, Size, XTransPattern};
+pub use crate::core::image::{CfaPattern, RawImage, Rect, XTransPattern};
 pub use crate::core::metadata::{
-    CameraInfo, DateTimeInfo, DngCalibrationInfo, DngColorInfo, DngProfileInfo, ExifInfo, GpsInfo,
-    ImageInfo, ImageMetadata, MetadataEntry, MetadataExtractor, MetadataKey, MetadataNamespace,
-    MetadataValue,
+    CameraInfo, DateTimeInfo, DngCalibrationInfo, DngColorInfo, DngProfileInfo, ExifInfo,
+    ExtractMetadata, GpsInfo, ImageInfo, ImageMetadata, MetadataEntry, MetadataKey,
+    MetadataNamespace, MetadataValue,
 };
-pub use crate::core::pixel::{
-    FromF32, Rgb, Rgb8, Rgb16, RgbF32, Rgba, Rgba8, Rgba16, RgbaF32, Sample,
+pub use crate::core::{
+    CodecDirection, CodecId, CodecInfo, ColorDescription, Dimensions, IccProfile, RgbImage,
 };
-pub use crate::core::{CodecDirection, CodecId, CodecInfo, ColorSpace, IccProfile};
+pub use crate::core::{Pixel, Rgb8, Rgb16, Rgba8, Rgba16, Sample};
 
 // data
 pub use crate::data::cameras::find_camera_calibration;
