@@ -38,9 +38,7 @@ pub fn encode_rgb_image_to_vec(
         #[cfg(feature = "png-encode")]
         EncodeOptions::PngGamut(cfg) => encode_png(image, metadata, cfg),
         #[cfg(feature = "jpeg-encode")]
-        EncodeOptions::JpegJpegEnc(cfg) => encode_jpeg(image, metadata, cfg),
-        #[cfg(feature = "jpeg-encode-jpegli")]
-        EncodeOptions::JpegJpegli(cfg) => encode_jpeg_jpegli(image, metadata, cfg),
+        EncodeOptions::Jpeg(cfg) => encode_jpeg(image, metadata, cfg),
         #[cfg(feature = "webp-encode")]
         EncodeOptions::WebpLibwebp(cfg) => encode_webp(image, metadata, cfg),
         #[cfg(feature = "avif-encode")]
@@ -216,132 +214,75 @@ fn encode_png(
 fn encode_jpeg(
     image: &RgbImage,
     metadata: &ImageMetadata,
-    cfg: &super::export::JpegEncEncodeConfig,
+    cfg: &super::export::JpegEncodeConfig,
 ) -> RawResult<Vec<u8>> {
+    use super::export::{JpegDensityUnit, JpegSubsampling};
     use crate::metadata::exif::ExifBuilder;
     use crate::metadata::icc::IccProfile;
-    use jpeg_encoder::{ColorType, Encoder};
+    use gamut_core::{Dimensions, EncodeImage, ImageRef, Rgb8};
+    use gamut_jpeg::{ChromaSubsampling, DensityUnit, JpegEncoder};
+
+    let encoding_error = |e: gamut_core::Error| {
+        RawError::Encode(EncodeError::Encoding {
+            format: "JPEG",
+            message: format!("JPEG encoding error: {e}"),
+        })
+    };
 
     check_8bit_backend(cfg.common.bit_depth, "JPEG")?;
     let data_8bit = pack_rgb8(image);
 
-    let quality = if cfg.quality == 0 { 90 } else { cfg.quality };
+    let dims = Dimensions::new(image.width(), image.height()).map_err(encoding_error)?;
+    let img = ImageRef::<Rgb8>::new(&data_8bit, dims).map_err(encoding_error)?;
+
+    let mut encoder = JpegEncoder::new()
+        .with_quality(cfg.quality)
+        .with_subsampling(match cfg.subsampling {
+            JpegSubsampling::Yuv420 => ChromaSubsampling::Ycbcr420,
+            JpegSubsampling::Yuv422 => ChromaSubsampling::Ycbcr422,
+            JpegSubsampling::Yuv444 => ChromaSubsampling::Ycbcr444,
+        })
+        .with_progressive(cfg.progressive)
+        .with_restart_interval(cfg.restart_interval)
+        .with_density(
+            match cfg.density.unit {
+                JpegDensityUnit::AspectRatio => DensityUnit::AspectRatio,
+                JpegDensityUnit::Dpi => DensityUnit::Dpi,
+                JpegDensityUnit::Dpcm => DensityUnit::Dpcm,
+            },
+            cfg.density.x,
+            cfg.density.y,
+        );
+
+    // Metadata is embedded by the encoder itself (APP1 EXIF, APP1 XMP, APP2
+    // ICC_PROFILE segments), so it is configured up front — no post-hoc
+    // segment muxing.
+    let m = &cfg.common.metadata;
+    if m.embed_exif {
+        match ExifBuilder::new(metadata).build_bytes() {
+            Ok(bytes) => encoder = encoder.with_exif(&bytes),
+            Err(e) => tracing::warn!("Failed to embed EXIF in JPEG: {e}"),
+        }
+    }
+    if m.embed_icc {
+        encoder = encoder.with_icc_profile(IccProfile::srgb().as_bytes());
+    }
+    if m.embed_xmp
+        && let Some(xmp_data) = &metadata.xmp
+    {
+        // Validate the packet with gamut-xmp before embedding, so a malformed
+        // payload is skipped (with a warning) instead of spliced into the
+        // output — the same contract the previous muxer enforced.
+        match gamut_xmp::XmpMeta::from_packet(xmp_data) {
+            Ok(_) => encoder = encoder.with_xmp(xmp_data),
+            Err(e) => tracing::warn!("Failed to embed XMP in JPEG (invalid packet): {e}"),
+        }
+    }
+
     let mut jpeg_buf = Vec::new();
-    let encoder = Encoder::new(&mut jpeg_buf, quality);
-    encoder.encode(
-        &data_8bit,
-        image.width() as u16,
-        image.height() as u16,
-        ColorType::Rgb,
-    )?;
-
-    let m = &cfg.common.metadata;
-    if m.embed_exif {
-        let exif_builder = ExifBuilder::new(metadata);
-        match exif_builder.append_to_jpeg(jpeg_buf.clone()) {
-            Ok(data) => jpeg_buf = data,
-            Err(e) => tracing::warn!("Failed to embed EXIF in JPEG: {e}"),
-        }
-    }
-    if m.embed_icc {
-        match IccProfile::srgb().append_to_jpeg(jpeg_buf.clone()) {
-            Ok(data) => jpeg_buf = data,
-            Err(e) => tracing::warn!("Failed to embed ICC in JPEG: {e}"),
-        }
-    }
-    if m.embed_xmp
-        && let Some(xmp_data) = &metadata.xmp
-    {
-        use crate::metadata::xmp::append_xmp_to_jpeg;
-        match append_xmp_to_jpeg(xmp_data, jpeg_buf.clone()) {
-            Ok(data) => jpeg_buf = data,
-            Err(e) => tracing::warn!("Failed to embed XMP in JPEG: {e}"),
-        }
-    }
-
-    Ok(jpeg_buf)
-}
-
-// ── JPEG (jpegli) ───────────────────────────────────────────────────────────────
-
-#[cfg(feature = "jpeg-encode-jpegli")]
-fn encode_jpeg_jpegli(
-    image: &RgbImage,
-    metadata: &ImageMetadata,
-    cfg: &super::export::JpegliEncodeConfig,
-) -> RawResult<Vec<u8>> {
-    use super::export::JpegSubsampling;
-    use crate::codecs::jpegli::{self, JpegliEncodeParams, Subsampling};
-    use crate::metadata::exif::ExifBuilder;
-    use crate::metadata::icc::IccProfile;
-
-    // jpegli output is always an 8-bit JPEG, but it can quantise from 16-bit
-    // input to reduce banding. `Eight` is packed; `Sixteen` is passed through
-    // native-endian (matching the wrapper's `bits_per_sample == 16` contract);
-    // deeper requests are unsupported.
-    let (samples, bits_per_sample) = match cfg.common.bit_depth {
-        BitDepth::Eight => (pack_rgb8(image), 8u32),
-        BitDepth::Sixteen => {
-            let mut bytes = Vec::with_capacity(image.data().len() * 2);
-            for &sample in image.data() {
-                bytes.extend_from_slice(&sample.to_ne_bytes());
-            }
-            (bytes, 16u32)
-        }
-        other => {
-            return Err(RawError::Encode(EncodeError::UnsupportedBitDepth {
-                format: "JPEG",
-                requested: other,
-            }));
-        }
-    };
-
-    let params = JpegliEncodeParams {
-        quality: cfg.quality,
-        distance: cfg.distance,
-        progressive: cfg.progressive,
-        xyb: cfg.xyb,
-        subsampling: match cfg.subsampling {
-            JpegSubsampling::Yuv420 => Subsampling::Yuv420,
-            JpegSubsampling::Yuv422 => Subsampling::Yuv422,
-            JpegSubsampling::Yuv444 => Subsampling::Yuv444,
-        },
-    };
-
-    let mut jpeg_buf = jpegli::encode(
-        &samples,
-        image.width(),
-        image.height(),
-        bits_per_sample,
-        &params,
-    )
-    .map_err(|e| RawError::Encode(EncodeError::Jpegli(e)))?;
-
-    // Metadata embedding mirrors the `encode_jpeg` path exactly.
-    let m = &cfg.common.metadata;
-    if m.embed_exif {
-        let exif_builder = ExifBuilder::new(metadata);
-        match exif_builder.append_to_jpeg(jpeg_buf.clone()) {
-            Ok(data) => jpeg_buf = data,
-            Err(e) => tracing::warn!("Failed to embed EXIF in JPEG: {e}"),
-        }
-    }
-    if m.embed_icc {
-        match IccProfile::srgb().append_to_jpeg(jpeg_buf.clone()) {
-            Ok(data) => jpeg_buf = data,
-            Err(e) => tracing::warn!("Failed to embed ICC in JPEG: {e}"),
-        }
-    }
-    if m.embed_xmp
-        && let Some(xmp_data) = &metadata.xmp
-    {
-        use crate::metadata::xmp::append_xmp_to_jpeg;
-        match append_xmp_to_jpeg(xmp_data, jpeg_buf.clone()) {
-            Ok(data) => jpeg_buf = data,
-            Err(e) => tracing::warn!("Failed to embed XMP in JPEG: {e}"),
-        }
-    }
-
+    encoder
+        .encode_image(img, &mut jpeg_buf)
+        .map_err(encoding_error)?;
     Ok(jpeg_buf)
 }
 

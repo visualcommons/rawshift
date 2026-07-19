@@ -21,7 +21,7 @@ or an explicit hardware-decode backend pin (`hw-*`).
 | Adobe DNG    | [gamut-dng](https://github.com/justin13888/gamut) (Stabilizing)                          | Custom TIFF writer (Stabilizing)                                                                 | Includes Apple ProRAW (DNG 1.7 + JXL).    |
 | Nikon NEF    | Custom TIFF parser (Incomplete)                                                          | N/A                                                                                              | No test fixtures.                         |
 | Fujifilm RAF | Custom RAF parser (Incomplete)                                                           | N/A                                                                                              | No test fixtures.                         |
-| JPEG         | [zune-jpeg](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg) (Stable) | [jpeg-encoder](https://github.com/vstroebel/jpeg-encoder) (Stable, default) · [jpegli](https://github.com/google/jpegli) (distance/XYB + 16-bit input, opt-in) | jpegli via `jpeg-encode-jpegli` (system) / `jpeg-encode-jpegli-vendored` (from source). |
+| JPEG         | [gamut-jpeg](https://github.com/justin13888/gamut) (Stable)                             | [gamut-jpeg](https://github.com/justin13888/gamut) (Stable)                                      | Pure Rust. Decode: baseline + progressive, grayscale/YCbCr/RGB/CMYK/YCCK. Encode: baseline or progressive 8-bit DCT (quality/subsampling/restart/density); APP1/APP2 EXIF/XMP/ICC both ways. |
 | PNG          | [zune-png](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-png) (Stable)   | [gamut-png](https://github.com/justin13888/gamut) (Stable)                                       | Encode via gamut (8/16-bit RGB, eXIf/iCCP/XMP chunks). |
 | WebP         | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                              | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                                      | C FFI bindings to libwebp.                |
 | GIF          | [gif](https://github.com/image-rs/image-gif) (Stable)                                    | Not planned                                                                                      |                                           |
@@ -46,8 +46,8 @@ implementations are named and selected.
 Cargo features are organised in five tiers, from high-level bundles down to
 individual library bindings. Each tier is defined purely in terms of the tier
 below it; only tier-4 features (plus RAW tier-3 features and the gamut-backed
-`png-encode` / `jxl-decode` / `jxl-encode` / `avif-encode`) pull in an
-external crate.
+`jpeg-decode` / `jpeg-encode` / `png-encode` / `jxl-decode` / `jxl-encode` /
+`avif-encode`) pull in an external crate.
 
 1. **Bundle features** — coarse, ready-made groupings.
    - `default` — `jpeg`, `png`, `webp`, `jxl-decode`, `gif-decode`, `tiff-decode`, `ppm-decode`.
@@ -66,10 +66,11 @@ external crate.
      `tiff-decode`, `avif-decode`, `avif-encode`, `heic-decode`, `svg-decode`,
      `ppm-decode` — each is an **alias for that format+direction's default
      implementation**.
-     This is where the per-format default is defined. Exception: `png-encode`,
-     `jxl-decode`, `jxl-encode`, `avif-encode`, and `heic-decode` each have a
-     single gamut-backed implementation (`gamut-png` / `gamut-jxl` /
-     `gamut-avif` / `gamut-heic`) and pull it directly, with no tier-4 layer
+     This is where the per-format default is defined. Exception: `jpeg-decode`,
+     `jpeg-encode`, `png-encode`, `jxl-decode`, `jxl-encode`, `avif-encode`,
+     and `heic-decode` each have a single gamut-backed implementation
+     (`gamut-jpeg` / `gamut-png` / `gamut-jxl` / `gamut-avif` / `gamut-heic`)
+     and pull it directly, with no tier-4 layer
      below them. (`jxl-encode` wraps the
      reference libjxl, which `gamut-jxl-sys` cmake-builds and links statically
      — it needs cmake and a C++ toolchain. `avif-encode` is pure Rust: 8-bit
@@ -84,7 +85,6 @@ external crate.
    only tier that pulls an external crate. Multiple implementations of the same
    format+direction may be enabled simultaneously; the active backend is chosen
    at the API level via `DecodeOptions` / `EncodeOptions`.
-   - `jpeg-decode-zune`, `jpeg-encode-jpeg-enc`, `jpeg-encode-jpegli`
    - `png-decode-zune`
    - `webp-decode-libwebp`, `webp-encode-libwebp`
    - `gif-decode-gif`, `tiff-decode-tiff`
@@ -97,8 +97,6 @@ external crate.
    - `zune-runtime` — `zune-core` codec primitives; pulled by zune-backed impls.
    - `exif` — typed EXIF read/write via the gamut metadata stack (`gamut-exif`,
      `gamut-metadata`, `gamut-xmp`); pulled by impls that touch EXIF.
-   - `container-embed` — container segment muxing (`img-parts`) plus XMP packet
-     validation (`gamut-xmp`); pulled by encode impls that embed EXIF/ICC/XMP.
    - `hw` — hardware still-frame decode via `rawshift-hwdec`, selecting the
      **native** backend for the compile target (VideoToolbox on Apple, VAAPI on
      linux-gnu, MediaCodec on Android — the permanent matrix in
@@ -108,16 +106,10 @@ external crate.
      backend; **`compile_error!` on any other target** (verified feature
      flags). Without any `hw` flag, `heic` is a valid container/metadata-only
      build whose pixel decode returns `RawError::HwDecoderUnavailable`.
-   - `jpeg-encode-jpegli-vendored` — build the vendored `google/jpegli` submodule
-     from source via cmake and link it statically, instead of linking a system
-     libjpegli (`jpeg-encode-jpegli`). Requires a C/C++ toolchain, cmake, and
-     `libclang`; init the submodule with
-     `git submodule update --init --recursive crates/rawshift-image/third_party/jpegli`.
 
-   The `zune-runtime` / `exif` / `container-embed` features are pulled in
-   automatically by the format implementations that need them — they exist so
-   that a minimal `rawshift-image` build links no decoder/metadata crate it does
-   not use.
+   The `zune-runtime` / `exif` features are pulled in automatically by the
+   format implementations that need them — they exist so that a minimal
+   `rawshift-image` build links no decoder/metadata crate it does not use.
 
 Resolution example: enabling `default` pulls in `png` → `png-decode` →
 `png-decode-zune` → the `zune-png` crate. To use a non-default implementation,

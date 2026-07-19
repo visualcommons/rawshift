@@ -8,7 +8,7 @@
 use rawshift_image::core::RgbImage;
 use rawshift_image::core::metadata::ImageMetadata;
 use rawshift_image::formats::export::{
-    BitDepth, CommonEncodeOptions, EncodeOptions, JpegEncEncodeConfig, LibwebpEncodeConfig,
+    BitDepth, CommonEncodeOptions, EncodeOptions, JpegEncodeConfig, LibwebpEncodeConfig,
     MetadataEmbedOptions, PngEncodeConfig, WebPMode,
 };
 use rawshift_image::formats::{encode_rgb_image, encode_rgb_image_to_vec};
@@ -87,9 +87,10 @@ mod jpeg_tests {
     use super::*;
 
     fn jpeg(quality: u8, exif: bool, icc: bool) -> EncodeOptions {
-        EncodeOptions::JpegJpegEnc(JpegEncEncodeConfig {
+        EncodeOptions::Jpeg(JpegEncodeConfig {
             quality,
             common: common(exif, icc, true),
+            ..JpegEncodeConfig::default()
         })
     }
 
@@ -211,6 +212,48 @@ mod jpeg_tests {
             high.len(),
             low.len()
         );
+    }
+
+    /// EXIF, ICC, and XMP written by the gamut-jpeg encoder must all read
+    /// back through `read_standard_image_metadata` (which extracts them via
+    /// `gamut_jpeg::metadata`).
+    #[test]
+    fn test_jpeg_metadata_roundtrip() {
+        use rawshift_image::core::metadata::{CameraInfo, ExifInfo};
+        use rawshift_image::formats::{StandardFormat, read_standard_image_metadata};
+
+        let img = synthetic_image();
+        let xmp_packet: &[u8] = b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\
+            <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"/>\
+            </x:xmpmeta>";
+        let md = ImageMetadata {
+            camera: CameraInfo {
+                make: "TestMake".to_string(),
+                model: "TestModel".to_string(),
+                ..Default::default()
+            },
+            exif: ExifInfo {
+                iso: Some(400),
+                ..Default::default()
+            },
+            xmp: Some(xmp_packet.to_vec()),
+            ..Default::default()
+        };
+
+        let bytes = encode_rgb_image_to_vec(&img, &md, &jpeg(90, true, true))
+            .expect("encode JPEG with metadata");
+
+        let read_md = read_standard_image_metadata(&bytes, StandardFormat::Jpeg);
+        assert_eq!(read_md.camera.make, "TestMake", "make round-trip");
+        assert_eq!(read_md.camera.model, "TestModel", "model round-trip");
+        assert_eq!(read_md.exif.iso, Some(400), "ISO round-trip");
+        assert_eq!(
+            read_md.xmp.as_deref(),
+            Some(xmp_packet),
+            "XMP packet round-trip"
+        );
+        let icc = read_md.icc_profile.expect("ICC profile round-trip");
+        assert_eq!(&icc[36..40], b"acsp", "ICC payload must be a profile");
     }
 }
 
@@ -769,103 +812,6 @@ mod jxl_tests {
 }
 
 // ============================================================================
-// JPEG Export Tests — jpegli backend (opt-in `jpeg-encode-jpegli`)
-// ============================================================================
-
-#[cfg(feature = "jpeg-encode-jpegli")]
-mod jpegli_tests {
-    use super::*;
-    use rawshift_image::formats::export::{JpegSubsampling, JpegliEncodeConfig};
-    use rawshift_image::formats::{StandardFormat, available_encoders, decode_standard_image};
-
-    /// `CommonEncodeOptions` at 8-bit depth with no metadata.
-    fn common_8bit() -> CommonEncodeOptions {
-        CommonEncodeOptions {
-            metadata: MetadataEmbedOptions {
-                embed_exif: false,
-                embed_icc: false,
-                embed_xmp: false,
-            },
-            bit_depth: BitDepth::Eight,
-        }
-    }
-
-    #[test]
-    fn jpegli_registers_as_encoder() {
-        assert!(
-            available_encoders()
-                .iter()
-                .any(|c| c.id.id == "jpeg/jpegli"),
-            "jpeg/jpegli should be listed when the feature is enabled"
-        );
-    }
-
-    #[test]
-    fn jpegli_encodes_and_decodes_roundtrip_8bit() {
-        let img = synthetic_image();
-        let opts = EncodeOptions::JpegJpegli(JpegliEncodeConfig {
-            common: common_8bit(),
-            ..JpegliEncodeConfig::default()
-        });
-        let bytes = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts)
-            .expect("encode JPEG via jpegli");
-        assert!(!bytes.is_empty());
-        assert_eq!(&bytes[..2], &[0xFF, 0xD8], "jpegli output should be a JPEG");
-        assert_eq!(
-            rawshift_image::formats::detect_standard_format(&bytes),
-            Some(StandardFormat::Jpeg),
-            "jpegli output should be detected as JPEG"
-        );
-        let decoded = decode_standard_image(&bytes, StandardFormat::Jpeg).expect("decode JPEG");
-        assert_eq!((decoded.width(), decoded.height()), (4, 4));
-    }
-
-    #[test]
-    fn jpegli_encodes_from_16bit_input() {
-        // The default depth is `Sixteen`, so jpegli is fed full-precision input;
-        // the output is still an 8-bit JPEG that decodes at the right size.
-        let img = synthetic_image();
-        let opts = EncodeOptions::JpegJpegli(JpegliEncodeConfig {
-            common: common(false, false, false),
-            ..JpegliEncodeConfig::default()
-        });
-        let bytes = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts)
-            .expect("encode 16-bit input via jpegli");
-        let decoded = decode_standard_image(&bytes, StandardFormat::Jpeg).expect("decode JPEG");
-        assert_eq!((decoded.width(), decoded.height()), (4, 4));
-    }
-
-    #[test]
-    fn jpegli_xyb_and_quality_encode() {
-        let img = synthetic_image();
-        let opts = EncodeOptions::JpegJpegli(JpegliEncodeConfig {
-            common: common_8bit(),
-            quality: Some(85),
-            xyb: true,
-            progressive: false,
-            subsampling: JpegSubsampling::Yuv444,
-            ..JpegliEncodeConfig::default()
-        });
-        let bytes = encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts)
-            .expect("encode XYB jpegli");
-        assert_eq!(&bytes[..2], &[0xFF, 0xD8]);
-    }
-
-    #[test]
-    fn jpegli_embeds_exif_and_icc_when_requested() {
-        let img = synthetic_image();
-        let opts = EncodeOptions::JpegJpegli(JpegliEncodeConfig {
-            common: common(true, true, false),
-            ..JpegliEncodeConfig::default()
-        });
-        let data =
-            encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &opts).expect("encode jpegli");
-        assert!(jpeg_has_exif(&data), "jpegli JPEG should contain EXIF");
-        assert!(jpeg_has_icc(&data), "jpegli JPEG should contain ICC");
-    }
-}
-
-// ============================================================================
 // EncodeOptions API Tests
 // ============================================================================
 
@@ -877,8 +823,6 @@ mod encode_options_tests {
     fn test_encode_options_constructors() {
         let _ = EncodeOptions::png();
         let _ = EncodeOptions::jpeg();
-        #[cfg(feature = "jpeg-encode-jpegli")]
-        let _ = EncodeOptions::jpeg_jpegli();
         let _ = EncodeOptions::webp_lossy();
         let _ = EncodeOptions::webp_lossless();
         #[cfg(feature = "avif-encode")]
@@ -891,7 +835,7 @@ mod encode_options_tests {
 
     #[test]
     fn test_jpeg_config_defaults() {
-        let cfg = JpegEncEncodeConfig::default();
+        let cfg = JpegEncodeConfig::default();
         assert_eq!(cfg.quality, 90, "JPEG default quality should be 90");
         assert!(
             cfg.common.metadata.embed_exif,
@@ -918,7 +862,7 @@ mod encode_options_tests {
     #[test]
     fn test_format_and_codec_id() {
         assert_eq!(EncodeOptions::png().format(), OutputFormat::Png);
-        assert_eq!(EncodeOptions::jpeg().codec_id().id, "jpeg/jpeg-encoder");
+        assert_eq!(EncodeOptions::jpeg().codec_id().id, "jpeg/gamut");
     }
 }
 

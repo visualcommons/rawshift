@@ -16,6 +16,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layer (see `docs/SUPPORT.md`). HEIC pixel decode in `rawshift-image` now
   works end-to-end on hardware through this backend.
 
+### Changed
+
+- *(image)* **breaking**: JPEG migrated to gamut-jpeg (pure Rust, baseline +
+  progressive both ways). Decode replaces `zune-jpeg` (`DecodeOptions::Jpeg`,
+  codec id `jpeg/gamut`; CMYK/YCCK conversion is bit-identical to the previous
+  backend); encode replaces `jpeg-encoder` **and** the entire jpegli stack
+  with one `EncodeOptions::Jpeg(JpegEncodeConfig)` exposing gamut's knobs
+  (quality, subsampling, progressive, restart interval, JFIF density).
+  JPEG EXIF/XMP/ICC now embed via the encoder and extract via
+  `gamut_jpeg::metadata` (JPEG metadata reads now also surface ICC + XMP);
+  `probe_standard_image` reads the JPEG header through `gamut_jpeg::info`.
+
+### Removed
+
+- *(image)* **breaking**: the `jpeg-decode-zune`, `jpeg-encode-jpeg-enc`,
+  `jpeg-encode-jpegli`, `jpeg-encode-jpegli-vendored`, and `container-embed`
+  features; the `zune-jpeg`, `jpeg-encoder`, and `img-parts` dependencies; the
+  vendored `google/jpegli` submodule and the cc/cmake/bindgen build-script
+  slice; `EncodeError::Jpeg`/`EncodeError::Jpegli`; `ExifContainer::Jpeg` and
+  the hand-rolled JPEG APP1 scanner (jpegli parity is tracked upstream:
+  gamut#19/#29/#30).
+
 ## [0.1.1](https://github.com/justin13888/rawshift/compare/v0.1.0...v0.1.1) - 2026-05-29
 
 ### Added

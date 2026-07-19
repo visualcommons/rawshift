@@ -69,9 +69,10 @@
 //!    for that format).
 //! 3. **Directions** — `jpeg-decode`, `jpeg-encode`, `arw-decode`, … For
 //!    compressed formats a direction feature aliases the **default**
-//!    implementation; RAW formats have a single in-repo implementation.
+//!    implementation; RAW formats (and the gamut-backed JPEG halves) have a
+//!    single implementation.
 //! 4. **Implementations** — compressed formats only, named
-//!    `format-direction-impl` (e.g. `jpeg-decode-zune`). Multiple may be enabled
+//!    `format-direction-impl` (e.g. `png-decode-zune`). Multiple may be enabled
 //!    at once; the active backend is chosen via [`formats::DecodeOptions`] and
 //!    [`formats::export::EncodeOptions`].
 //! 5. **Infrastructure** — `ifd-parser`, `serde`, and the verified hardware

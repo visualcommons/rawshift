@@ -34,16 +34,12 @@ pub fn available_encoders() -> Vec<CodecInfo> {
         "0.1",
         CodecDirection::Encode,
     ));
+    // Version tracks the gamut-jpeg crate at the pinned gamut commit (git
+    // dependency). Hand-maintained — bump together with the gamut pin.
     #[cfg(feature = "jpeg-encode")]
     encoders.push(CodecInfo::new(
-        CodecId::new("jpeg/jpeg-encoder"),
-        "0.7",
-        CodecDirection::Encode,
-    ));
-    #[cfg(feature = "jpeg-encode-jpegli")]
-    encoders.push(CodecInfo::new(
-        CodecId::new("jpeg/jpegli"),
-        "0.11",
+        CodecId::new("jpeg/gamut"),
+        "0.1",
         CodecDirection::Encode,
     ));
     #[cfg(feature = "webp-encode")]
@@ -83,10 +79,12 @@ pub fn available_encoders() -> Vec<CodecInfo> {
 pub fn available_decoders() -> Vec<CodecInfo> {
     #[allow(unused_mut)]
     let mut decoders: Vec<CodecInfo> = Vec::new();
+    // Version tracks the gamut-jpeg crate at the pinned gamut commit (git
+    // dependency). Hand-maintained — bump together with the gamut pin.
     #[cfg(feature = "jpeg-decode")]
     decoders.push(CodecInfo::new(
-        CodecId::new("jpeg/zune"),
-        "0.5",
+        CodecId::new("jpeg/gamut"),
+        "0.1",
         CodecDirection::Decode,
     ));
     #[cfg(feature = "png-decode")]

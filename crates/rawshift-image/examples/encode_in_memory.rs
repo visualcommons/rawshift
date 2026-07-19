@@ -41,10 +41,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // others, which are 8-bit). Only present when built with `jxl-encode`.
     #[cfg(feature = "jxl-encode")]
     options.push(EncodeOptions::jxl());
-    // The opt-in jpegli backend: a perceptual JPEG encoder (distance/XYB), fed
-    // 16-bit input. Only present when built with `jpeg-encode-jpegli`.
-    #[cfg(feature = "jpeg-encode-jpegli")]
-    options.push(EncodeOptions::jpeg_jpegli());
 
     for opts in options {
         let bytes = encode_rgb_image_to_vec(&image, &metadata, &opts)?;

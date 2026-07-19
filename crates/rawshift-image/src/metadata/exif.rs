@@ -2,12 +2,14 @@
 //!
 //! Builds and parses EXIF blobs with `gamut-exif` (the upstream home for the
 //! EXIF model — see the Upstream-First Policy) and converts them to and from
-//! [`ImageMetadata`]. Container-level concerns stay on this side for now:
-//! JPEG APP1 embedding goes through `img-parts`, AVIF/JXL embedding through
-//! the crate's ISOBMFF box splicing ([`crate::metadata::isobmff`]), and the
-//! decode-side blob *location* (APP1 segment, `eXIf` chunk, `EXIF` chunk,
-//! `Exif` item) is scanned here. All of that container surgery migrates behind
-//! the gamut codec boundaries with the per-format codec issues.
+//! [`ImageMetadata`]. Container-level concerns stay on this side only for the
+//! formats whose codec has not yet migrated to gamut: AVIF embedding goes
+//! through the crate's ISOBMFF box splicing ([`crate::metadata::isobmff`]),
+//! and the decode-side blob *location* (`eXIf` chunk, `EXIF` chunk, `Exif`
+//! item) is scanned here. JPEG APP segments are read and written by
+//! `gamut-jpeg` itself (`gamut_jpeg::metadata` / `JpegEncoder::with_exif`);
+//! the remaining container surgery migrates behind the gamut codec boundaries
+//! with the per-format codec issues.
 
 use crate::core::metadata::ImageMetadata;
 use gamut_exif::{ByteOrder, Exif, ExifTag, ExifWriter, Ifd, Value};
@@ -31,13 +33,6 @@ impl std::fmt::Display for ExifError {
 }
 
 impl std::error::Error for ExifError {}
-
-#[cfg(feature = "container-embed")]
-impl From<img_parts::Error> for ExifError {
-    fn from(e: img_parts::Error) -> Self {
-        ExifError::Container(e.to_string())
-    }
-}
 
 impl From<std::io::Error> for ExifError {
     fn from(e: std::io::Error) -> Self {
@@ -224,33 +219,15 @@ impl<'a> ExifBuilder<'a> {
 
     /// Build raw TIFF-level EXIF bytes (no APP1 wrapper or `Exif\0\0` prefix).
     ///
-    /// These bytes can be passed directly to `img_parts::ImageEXIF::set_exif()`
-    /// for JPEG and PNG embedding (img_parts handles the format-specific
-    /// wrapping). For WebP, prepend `b"Exif\0\0"` before passing to the muxer.
+    /// These bytes are the form the gamut encoders take (`with_exif` on the
+    /// JPEG/PNG/JXL encoders wraps them format-specifically). For WebP,
+    /// prepend `b"Exif\0\0"` before passing to the muxer.
     pub fn build_bytes(&self) -> Result<Vec<u8>, ExifError> {
         let exif = self.build();
         ExifWriter::new()
             .marker(false)
             .write(&exif)
             .map_err(|e| ExifError::Serialization(e.to_string()))
-    }
-
-    /// Append EXIF metadata to existing JPEG data.
-    ///
-    /// Uses img-parts for zero-copy segment manipulation.
-    #[cfg(feature = "container-embed")]
-    pub fn append_to_jpeg(&self, jpeg_data: Vec<u8>) -> Result<Vec<u8>, ExifError> {
-        use img_parts::jpeg::Jpeg;
-        use img_parts::{Bytes, ImageEXIF};
-        use std::io::Cursor;
-
-        let tiff_bytes = self.build_bytes()?;
-        let mut jpeg = Jpeg::from_bytes(Bytes::from(jpeg_data))?;
-        jpeg.set_exif(Some(Bytes::from(tiff_bytes)));
-
-        let mut output = Cursor::new(Vec::new());
-        jpeg.encoder().write_to(&mut output)?;
-        Ok(output.into_inner())
     }
 
     /// Append EXIF metadata to an in-memory AVIF byte stream.
@@ -281,8 +258,6 @@ impl<'a> ExifBuilder<'a> {
 /// carries the EXIF TIFF stream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExifContainer {
-    /// JPEG — APP1 `Exif\0\0` segment.
-    Jpeg,
     /// PNG — `eXIf` chunk.
     Png,
     /// TIFF — the whole file is the TIFF stream.
@@ -306,7 +281,6 @@ impl ExifParser {
     /// the container/blob is malformed.
     pub fn parse_from_bytes(file_data: &[u8], container: ExifContainer) -> ImageMetadata {
         let blob = match container {
-            ExifContainer::Jpeg => extract_exif_from_jpeg(file_data),
             ExifContainer::Png => extract_exif_from_png(file_data),
             ExifContainer::Tiff => Some(file_data.to_vec()),
             ExifContainer::WebP => extract_exif_from_webp(file_data),
@@ -604,45 +578,8 @@ fn exif_value_to_metadata(value: &Value) -> crate::core::metadata::MetadataValue
 //
 // These scanners only *locate* the EXIF payload inside a container; parsing is
 // gamut-exif's job. They migrate behind the gamut codec boundaries (codec-side
-// `MetadataBlock`) with the per-format codec migrations.
-
-/// Extract the EXIF payload of the first JPEG APP1 `Exif\0\0` segment.
-fn extract_exif_from_jpeg(data: &[u8]) -> Option<Vec<u8>> {
-    const EXIF_MARKER: &[u8] = b"Exif\x00\x00";
-    if data.get(..2) != Some(&[0xFF, 0xD8]) {
-        return None;
-    }
-    let mut pos = 2usize;
-    loop {
-        // Tolerate fill bytes between segments.
-        while *data.get(pos)? == 0xFF && data.get(pos + 1) == Some(&0xFF) {
-            pos += 1;
-        }
-        if *data.get(pos)? != 0xFF {
-            return None;
-        }
-        let marker = *data.get(pos + 1)?;
-        match marker {
-            // Standalone markers (no length field).
-            0xD8 | 0x01 | 0xD0..=0xD7 => {
-                pos += 2;
-                continue;
-            }
-            // Start of scan / end of image: no EXIF ahead of the entropy data.
-            0xDA | 0xD9 => return None,
-            _ => {}
-        }
-        let len = u16::from_be_bytes([*data.get(pos + 2)?, *data.get(pos + 3)?]) as usize;
-        if len < 2 {
-            return None;
-        }
-        let payload = data.get(pos + 4..pos + 2 + len)?;
-        if marker == 0xE1 && payload.starts_with(EXIF_MARKER) {
-            return Some(payload.to_vec());
-        }
-        pos += 2 + len;
-    }
-}
+// `MetadataBlock`) with the per-format codec migrations. (JPEG already did:
+// `gamut_jpeg::metadata` locates and strips the APP1/APP2 payloads.)
 
 /// Extract the payload of a PNG `eXIf` chunk (a bare TIFF stream).
 fn extract_exif_from_png(data: &[u8]) -> Option<Vec<u8>> {
@@ -850,28 +787,9 @@ mod tests {
             ImageMetadata::default()
         );
         assert_eq!(
-            ExifParser::parse_from_bytes(b"\x00\x01\x02\x03", ExifContainer::Jpeg),
+            ExifParser::parse_from_bytes(b"\x00\x01\x02\x03", ExifContainer::Png),
             ImageMetadata::default()
         );
-    }
-
-    #[test]
-    fn test_extract_from_jpeg_app1() {
-        // Wrap the built EXIF blob (marker included) in a minimal JPEG.
-        let md = sample_metadata();
-        let exif = ExifBuilder::new(&md).build();
-        let blob = exif.to_bytes().expect("blob with marker");
-
-        let mut jpeg = Vec::new();
-        jpeg.extend_from_slice(&[0xFF, 0xD8]); // SOI
-        jpeg.extend_from_slice(&[0xFF, 0xE1]); // APP1
-        jpeg.extend_from_slice(&((blob.len() + 2) as u16).to_be_bytes());
-        jpeg.extend_from_slice(&blob);
-        jpeg.extend_from_slice(&[0xFF, 0xD9]); // EOI
-
-        let parsed = ExifParser::parse_from_bytes(&jpeg, ExifContainer::Jpeg);
-        assert_eq!(parsed.camera.make, "SONY");
-        assert_eq!(parsed.exif.iso, Some(800));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! XMP metadata embedding for image export.
 //!
-//! Provides XMP embedding functions for the JPEG and AVIF containers (PNG and
+//! Provides the XMP embedding function for the AVIF container (JPEG, PNG, and
 //! JXL embed XMP through their gamut encoders instead). Every payload is
 //! validated with `gamut-xmp` before it is embedded, so a malformed packet is
 //! rejected instead of being spliced into the output.
@@ -25,20 +25,11 @@ impl std::fmt::Display for XmpError {
 
 impl std::error::Error for XmpError {}
 
-impl From<img_parts::Error> for XmpError {
-    fn from(e: img_parts::Error) -> Self {
-        XmpError::Container(e.to_string())
-    }
-}
-
 impl From<std::io::Error> for XmpError {
     fn from(e: std::io::Error) -> Self {
         XmpError::Container(e.to_string())
     }
 }
-
-/// Adobe XMP namespace marker used in JPEG APP1 segments.
-const XMP_JPEG_NS: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
 
 /// Validate an XMP payload with `gamut-xmp` before embedding it.
 ///
@@ -49,38 +40,6 @@ fn validate_xmp(xmp_bytes: &[u8]) -> Result<(), XmpError> {
     gamut_xmp::XmpMeta::from_packet(xmp_bytes)
         .map(|_| ())
         .map_err(|e| XmpError::Invalid(e.to_string()))
-}
-
-/// Append XMP metadata to existing JPEG data.
-///
-/// XMP is embedded as an APP1 segment (0xE1) with the Adobe XMP namespace prefix
-/// `http://ns.adobe.com/xap/1.0/\0` followed by the raw XMP packet bytes.
-/// The payload is validated with `gamut-xmp` first.
-pub fn append_xmp_to_jpeg(xmp_bytes: &[u8], jpeg_data: Vec<u8>) -> Result<Vec<u8>, XmpError> {
-    use img_parts::Bytes;
-    use img_parts::jpeg::{Jpeg, JpegSegment, markers};
-    use std::io::Cursor;
-
-    validate_xmp(xmp_bytes)?;
-
-    let mut contents = Vec::with_capacity(XMP_JPEG_NS.len() + xmp_bytes.len());
-    contents.extend_from_slice(XMP_JPEG_NS);
-    contents.extend_from_slice(xmp_bytes);
-
-    let mut jpeg = Jpeg::from_bytes(Bytes::from(jpeg_data))?;
-    let xmp_segment = JpegSegment::new_with_contents(markers::APP1, Bytes::from(contents));
-
-    // Insert just before the first segment with entropy (SOS), or at the end.
-    let pos = jpeg
-        .segments()
-        .iter()
-        .position(|s| s.has_entropy())
-        .unwrap_or_else(|| jpeg.segments().len());
-    jpeg.segments_mut().insert(pos, xmp_segment);
-
-    let mut output = Cursor::new(Vec::new());
-    jpeg.encoder().write_to(&mut output)?;
-    Ok(output.into_inner())
 }
 
 /// Append XMP metadata to an in-memory AVIF byte stream.
@@ -110,32 +69,6 @@ mod tests {
     const VALID_XMP: &[u8] = b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\
         <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"/>\
         </x:xmpmeta>";
-
-    #[test]
-    fn test_append_xmp_to_jpeg_basic() {
-        // Build a minimal valid JPEG: SOI + APP0 (JFIF) + EOI
-        let mut jpeg = Vec::new();
-        jpeg.extend_from_slice(&[0xFF, 0xD8]); // SOI
-        // APP0 (JFIF marker)
-        jpeg.extend_from_slice(&[0xFF, 0xE0]);
-        let app0_len: u16 = 16;
-        jpeg.extend_from_slice(&app0_len.to_be_bytes());
-        jpeg.extend_from_slice(b"JFIF\0");
-        jpeg.extend_from_slice(&[1, 1, 0, 0, 1, 0, 1, 0, 0]); // JFIF header rest
-        jpeg.extend_from_slice(&[0xFF, 0xD9]); // EOI
-
-        let xmp = VALID_XMP;
-        let result = append_xmp_to_jpeg(xmp, jpeg).expect("XMP embed should succeed");
-
-        // Must still be a valid JPEG (starts with SOI)
-        assert_eq!(&result[0..2], &[0xFF, 0xD8]);
-        // Must contain the XMP namespace prefix
-        let has_ns = result.windows(XMP_JPEG_NS.len()).any(|w| w == XMP_JPEG_NS);
-        assert!(has_ns, "output must contain XMP namespace marker");
-        // Must contain the XMP payload
-        let has_xmp = result.windows(xmp.len()).any(|w| w == xmp);
-        assert!(has_xmp, "output must contain XMP payload");
-    }
 
     #[test]
     fn test_malformed_xmp_is_rejected() {
