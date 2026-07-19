@@ -1,7 +1,11 @@
-//! RAW format decoders.
+//! Image format support: RAW decoders, standard-format decode, and encoding.
 //!
-//! This module provides format-specific decoders for various RAW image formats.
-//! Use `RawFile::open()` as the common entry point for automatic format detection.
+//! RAW formats (ARW, CR2, CR3, CRW, DNG, NEF, RAF) are opened through
+//! [`RawFile::open`], the common entry point with automatic format detection.
+//! Standard formats decode via [`decode_standard_image`] and encode via
+//! [`encode_rgb_image`] and friends; see [`export`] for the format-keyed
+//! [`export::EncodeOptions`] and [`registry`] for the compiled
+//! backend inventory.
 
 #[cfg(feature = "arw-decode")]
 pub(crate) mod arw;
@@ -216,6 +220,26 @@ impl<R: Read + Seek> RawFile<R> {
                 let file = raf::RafFile::parse(reader)?;
                 Ok(RawFile::Raf(Box::new(file)))
             }
+        }
+    }
+
+    /// The detected format of this RAW file.
+    pub fn format(&self) -> RawFormat {
+        match self {
+            #[cfg(feature = "arw-decode")]
+            Self::Arw(_) => RawFormat::Arw,
+            #[cfg(feature = "cr2-decode")]
+            Self::Cr2(_) => RawFormat::Cr2,
+            #[cfg(feature = "cr3-decode")]
+            Self::Cr3(_) => RawFormat::Cr3,
+            #[cfg(feature = "crw-decode")]
+            Self::Crw(_) => RawFormat::Crw,
+            #[cfg(feature = "dng-decode")]
+            Self::Dng(_) => RawFormat::Dng,
+            #[cfg(feature = "nef-decode")]
+            Self::Nef(_) => RawFormat::Nef,
+            #[cfg(feature = "raf-decode")]
+            Self::Raf(_) => RawFormat::Raf,
         }
     }
 

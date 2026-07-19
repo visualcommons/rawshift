@@ -15,7 +15,8 @@
 //! - **`formats`** — `RawFile`, `RawFormat`, `StandardFormat`,
 //!   `decode_standard_image`, `detect_standard_format`,
 //!   `read_standard_image_metadata`, `DngEncodeConfig`, `EncodeOptions`,
-//!   `CommonEncodeOptions`, `OutputFormat`, and the per-backend encode configs.
+//!   `CommonEncodeOptions`, `OutputFormat`, and the per-format decode/encode
+//!   configs.
 //! - **`processing`** — `ProcessingOptions` and demosaicing types.
 //! - **`transforms`** — `apply_black_level`, `apply_white_balance`,
 //!   `apply_white_balance_raw`, `apply_color_matrix`, `apply_tone_reproduction`,
@@ -53,7 +54,7 @@ pub use crate::formats::export::{
 pub use crate::formats::{
     AvifDecodeConfig, DecodeOptions, GifDecodeConfig, HeicDecodeConfig, ImageProbe,
     JpegDecodeConfig, JxlDecodeConfig, LibwebpDecodeConfig, PngDecodeConfig, ResvgDecodeConfig,
-    StandardFormat, TiffDecodeConfig, available_decoders, available_encoders,
+    StandardFormat, TiffDecodeConfig, ZunePpmDecodeConfig, available_decoders, available_encoders,
     decode_standard_image, decode_standard_image_with, detect_standard_format, encode_rgb_image,
     encode_rgb_image_to_vec, encode_rgb_image_to_writer, probe_standard_image,
     read_standard_image_metadata,

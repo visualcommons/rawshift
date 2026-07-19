@@ -35,7 +35,7 @@ Modules: `geometry`, `sensor`, `color`, `codec`, `metadata`.
 | `RawImage`(+Builder), `CfaPattern`, `XTransPattern`, `white_level_from_bit_depth` | kept unchanged (sensor domain); bridge to `gamut_dng` types lives in rawshift-image |
 | `RgbImage` | deleted from core → rawshift-image wrapper over `ImageBuf<Rgb16>` |
 | `pixel.rs` (`Sample`/`FromF32`/`Rgb<S>`/`Rgba<S>`) | deleted → re-export gamut-core `Sample`/`Pixel` markers; f32 stays transform-internal scratch |
-| `ColorSpace` | deleted → new `ColorDescription` (CICP primaries+transfer pair; consts `SRGB`, `LINEAR_SRGB` (pipeline working space), `DISPLAY_P3`, `REC2020_PQ`, `ADOBE_RGB` (= Unspecified + ICC-authoritative), `UNKNOWN`); manual serde via CICP code points until gamut derives land |
+| `ColorSpace` | deleted → new `ColorDescription` (CICP primaries+transfer pair; consts `SRGB`, `LINEAR_SRGB` (pipeline working space), `DISPLAY_P3`, `REC2020`, `UNSPECIFIED`; ICC-authoritative spaces such as Adobe RGB map to `UNSPECIFIED` with the preserved ICC profile as the authority); manual serde via CICP code points until gamut derives land |
 | `BitDepth` | deleted → re-export `gamut_color::BitDepth` (gated on upstream adding `Sixteen`) |
 | `CodecId`/`CodecInfo`/`CodecDirection`, `MetadataEmbedOptions` | kept (no gamut equivalent; video-shared / policy layer) |
 | `ImageMetadata` + typed structs + `extra` table, `MetadataValue/Key/Namespace/Entry`, `URational`/`SRational` | kept — camera color science is rawshift's domain; gamut-metadata is the carrier; bridge `to_gamut`/`from_gamut` in rawshift-image |
@@ -52,8 +52,10 @@ ChromaSubsampling`).
 ```rust
 pub struct RgbImage { buf: ImageBuf<Rgb16>, color: ColorDescription,
                       baseline_exposure: Option<f32>, default_crop: Option<Rect> }
-// new / from_buf / dimensions / color / baseline_exposure / default_crop /
-// as_ref() -> ImageRef<'_, Rgb16> / into_buf() / data() / data_mut()
+// new / with_color / from_buf / size / width / height / color /
+// baseline_exposure / default_crop / as_buf() -> &ImageBuf<Rgb16> /
+// into_buf() / into_data() / data() / data_mut() / replace_data() /
+// set_color / set_baseline_exposure / set_default_crop
 ```
 
 - Detection/probe: `detect_standard_format`, `probe_standard_image`,
@@ -62,39 +64,46 @@ pub struct RgbImage { buf: ImageBuf<Rgb16>, color: ColorDescription,
   (u8×257, gray expanded, alpha dropped, sRGB-tagged, ICC preserved in
   metadata). `decode_jxl_partial` dropped until gamut-jxl supports truncated
   streams.
-- Encode: `encode_image{,_to_vec,_to_writer}(image, metadata, …, options)`.
+- Encode: `encode_rgb_image{,_to_vec,_to_writer}(image, metadata, …, options)`.
 - RAW: `RawFile<R>::{open, format, metadata, thumbnail, decode_raw, process,
   export, is_linear_raw_dng}`; `ProcessingOptions` unchanged.
 - Working format: u16 interleaved end-to-end; f32 transform-internal only.
 - Errors: `RawError` gains `Gamut { context, source: gamut_core::Error }` and
   `HwDecoderUnavailable { codec, reason }`; backend-specific variants deleted.
-- Registry: `available_decoders/encoders()` report gamut backends with pinned
-  versions and runtime-conditional hardware entries.
+- Registry: `available_decoders/encoders()` report the compiled backends with
+  hand-maintained pinned versions. The AVIF/HEIC entries report the
+  container/pipeline decoder (always compiled with the feature); whether the
+  codestream can be decoded on this machine is runtime-conditional — probe
+  with `avif_hw_decode_available()` / `heic_hw_decode_available()`.
 
 Options are **format-keyed** (the backend-selection axis is gone — gamut is
-the backend). Config structs are rawshift-owned mirrors of committed gamut
-knobs; see the tables below.
+the backend). Every variant is format-named; where a non-gamut backend
+remains (blocked migrations, permanent exceptions) the *config struct* names
+it honestly (`LibwebpDecodeConfig`, `TiffDecodeConfig`, `GifDecodeConfig`,
+`ResvgDecodeConfig`, `ZunePpmDecodeConfig`). Config structs are
+rawshift-owned mirrors of committed gamut knobs; see the tables below.
 
 ### DecodeOptions
 
 | Variant | Fields (defaults) |
 | --- | --- |
-| `Jpeg` | `max_width`, `max_height` (None), `strict` (false) |
-| `Png` | `max_width`, `max_height` (None), `strict` (false) |
-| `WebP`, `Jxl`, `Tiff`, `Avif`, `Heic`, `Gif`, `Ppm` | — |
+| `Png` | `max_width`, `max_height`, `max_image_bytes`, `max_metadata_bytes` (all None = gamut defaults; hostile-input resource guards) |
 | `Svg` | `dpi: f32` (96.0) |
+| `Jpeg`, `WebP`, `Jxl`, `Tiff`, `Avif`, `Heic`, `Gif`, `Ppm` | — (empty config types reserved for future knobs; JPEG decode resource guards are an upstream ask, gamut#306) |
 
 ### EncodeOptions
 
 | Variant | Fields (defaults) |
 | --- | --- |
-| `Png` | `common` |
-| `Jpeg` | `common`, `quality: u8` (85), `subsampling` (4:2:0), `progressive` (false) |
-| `WebP` | `common`, `mode` (Lossy), `quality: f32` (75.0), `method: u8` (4) |
-| `Avif` | `common`, `quality: Option<u8>` (None = lossless), `speed: u8` (6) |
-| `Jxl` | `common`, `distance: f32` (1.0), `lossless` (false), `effort: u8` (7) |
-| `Tiff` | `common`, `compression` (Deflate) — new capability |
-| `Dng` | `common`, `compression` (LosslessJpeg), preview/profile options |
+| `Png` | `common`, `compression` (Default), `filter` (MinSumAbs), `auto_reduce` (false) |
+| `Jpeg` | `common`, `quality: u8` (90), `subsampling` (4:2:0), `progressive` (false), `restart_interval: u16` (0), `density` (1:1 aspect ratio) |
+| `WebP` | `common`, `mode` (Lossy), `quality: f32` (75.0), `method: u32` (4), `near_lossless: u32` (100 = off) |
+| `Avif` | `common`, `lossless: bool` (true), `quality: u8` (80, lossy only); 10/12-bit output pending gamut#251 |
+| `Jxl` | `common`, `lossless: bool` (true), `distance: f32` (1.0), `effort: u8` (7), `use_container` (false), `coded_bit_depth` (None) |
+| `Dng` | `software`, `embed_exif` (true), `embed_gps` (own config shape; LinearRaw 16-bit uncompressed) |
+
+TIFF encode (a `Tiff` variant) lands together with the gamut-tiff migration —
+blocked upstream (gamut#299/#300, tracked by rawshift#22).
 
 `CommonEncodeOptions { metadata: MetadataEmbedOptions (all true), bit_depth:
 BitDepth (Sixteen where supported) }`.
@@ -152,13 +161,15 @@ gamut metadata stack hang off.
 ```rust
 pub enum HwCodec  { Hevc, Av1 }
 pub enum HwBackend { VideoToolbox, Vaapi, MediaCodec }
-pub struct StillDecodeRequest<'a> { codec, config /* hvcC | av1C */,
-    payload /* NAL units | OBUs */, width, height, bit_depth, chroma }
-pub struct DecodedFrame { width, height, bit_depth, planes /* Nv12|P010|I420|I010 */, range }
-pub trait HwStillDecoder: Send { fn decode_frame(&mut self, req: &StillDecodeRequest) -> Result<DecodedFrame, HwDecodeError>; }
+pub enum CodecConfig<'a> { Hvcc(&'a [u8]), Av1c(&'a [u8]) } // variant implies the codec
+pub struct StillDecodeRequest<'a> { config: CodecConfig<'a>,
+    payload /* NAL units | OBUs */, width, height, bit_depth, chroma /* advisory */ }
+pub struct DecodedFrame { /* validated: format (Nv12|P010|I420|I010), width,
+    height, bit_depth, range, planes — constructed via DecodedFrame::new only */ }
+pub trait HwStillDecoder: Send { fn decode_still(&mut self, req: &StillDecodeRequest<'_>) -> Result<DecodedFrame, HwDecodeError>; }
 pub fn decoder(codec: HwCodec) -> Option<Box<dyn HwStillDecoder>>;
 pub fn backend() -> Option<HwBackend>;
-pub fn available_codecs() -> Vec<HwCodec>;
+pub fn available_codecs() -> &'static [HwCodec];
 ```
 
 - HEIC: gamut-heic parses the container (landed upstream in #238) → hwdec

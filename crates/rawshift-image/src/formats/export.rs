@@ -1,16 +1,16 @@
-//! Encoder selection and per-implementation configuration.
+//! Encoder selection and per-format configuration.
 //!
 //! [`EncodeOptions`] mirrors [`DecodeOptions`](super::standard::DecodeOptions):
-//! it is an *implementation-keyed* enum — each variant names one output format
-//! *and* one backend, and carries that backend's configuration struct. A format
-//! that gains an alternative encoder simply gains another variant; there is no
-//! generic, implementation-agnostic option set.
+//! it is a *format-keyed* enum — each variant names one output format and
+//! carries the configuration of the backend that encodes it. There is no
+//! backend-selection axis: gamut is the encoder for every migrated format,
+//! and the remaining non-gamut backends (libwebp, pending the gamut-webp
+//! migration) are named honestly by their configuration struct
+//! ([`LibwebpEncodeConfig`]) rather than by extra enum variants.
 //!
-//! `EncodeOptions` is `#[non_exhaustive]` so the planned C/C++ encoder backends
-//! (libjpeg-turbo, MozJPEG, SVT-AV1) can be added without a breaking
-//! change. Their configuration structs are already defined below — see
-//! [`MozjpegEncodeConfig`] and friends — so the API surface is stable ahead of
-//! the implementations.
+//! `EncodeOptions` is `#[non_exhaustive]` so formats whose encoders are
+//! pending upstream (e.g. TIFF encode via gamut-tiff) can be added without a
+//! breaking change.
 
 #[cfg(feature = "dng-encode")]
 use crate::formats::dng_export::DngEncodeConfig;
@@ -415,108 +415,27 @@ impl Default for JxlEncodeConfig {
     }
 }
 
-// ── Planned backend configs (API surface only — implementations pending) ──────
-//
-// These structs are defined now so the encode API is feature-complete and
-// documented ahead of the C/C++ backend work. They are not yet wired to an
-// `EncodeOptions` variant; each lands together with its backend in a follow-up.
-
-/// Configuration for the planned **libjpeg-turbo** JPEG encoder.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LibjpegTurboEncodeConfig {
-    /// Encoder-agnostic options. JPEG output is always 8-bit.
-    pub common: CommonEncodeOptions,
-    /// Quality, `1..=100`. Higher is better quality and larger files (monotonic).
-    pub quality: u8,
-    /// Emit a progressive (multi-scan) JPEG instead of baseline.
-    pub progressive: bool,
-    /// Chroma subsampling mode.
-    pub subsampling: JpegSubsampling,
-}
-
-impl Default for LibjpegTurboEncodeConfig {
-    fn default() -> Self {
-        Self {
-            common: CommonEncodeOptions::default(),
-            quality: 90,
-            progressive: false,
-            subsampling: JpegSubsampling::Yuv420,
-        }
-    }
-}
-
-/// Configuration for the planned **MozJPEG** JPEG encoder.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct MozjpegEncodeConfig {
-    /// Encoder-agnostic options. JPEG output is always 8-bit.
-    pub common: CommonEncodeOptions,
-    /// Quality, `1..=100`. Higher is better quality and larger files (monotonic).
-    pub quality: u8,
-    /// Emit a progressive JPEG (MozJPEG enables this by default).
-    pub progressive: bool,
-    /// Enable trellis quantisation — slower, produces smaller files.
-    pub trellis: bool,
-    /// Chroma subsampling mode.
-    pub subsampling: JpegSubsampling,
-}
-
-impl Default for MozjpegEncodeConfig {
-    fn default() -> Self {
-        Self {
-            common: CommonEncodeOptions::default(),
-            quality: 85,
-            progressive: true,
-            trellis: true,
-            subsampling: JpegSubsampling::Yuv420,
-        }
-    }
-}
-
-/// Configuration for the planned **SVT-AV1** AVIF encoder.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct SvtAv1EncodeConfig {
-    /// Encoder-agnostic options. SVT-AV1 can produce 8/10-bit AVIF.
-    pub common: CommonEncodeOptions,
-    /// Constant-Rate-Factor, `0..=63`. Lower is better quality and larger files
-    /// (monotonic).
-    pub crf: u8,
-    /// Encoder preset, `0` (slowest, best) to `13` (fastest).
-    pub preset: u8,
-}
-
-impl Default for SvtAv1EncodeConfig {
-    fn default() -> Self {
-        Self {
-            common: CommonEncodeOptions::default(),
-            crf: 35,
-            preset: 8,
-        }
-    }
-}
-
 // ── EncodeOptions ─────────────────────────────────────────────────────────────
 
-/// Selects the encoder implementation and carries its configuration.
+/// Selects the output format and carries its encoder configuration.
 ///
 /// Obtain one with [`EncodeOptions::default_for`] for a format's default
-/// backend, or with a constructor such as [`EncodeOptions::jpeg`], or by naming
-/// a variant directly to pin a specific backend.
+/// configuration, or with a constructor such as [`EncodeOptions::jpeg`], or by
+/// naming a variant directly.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum EncodeOptions {
     /// PNG via `gamut-png` (requires `png-encode`).
     #[cfg(feature = "png-encode")]
-    PngGamut(PngEncodeConfig),
+    Png(PngEncodeConfig),
     /// JPEG via `gamut-jpeg` (requires `jpeg-encode`).
     #[cfg(feature = "jpeg-encode")]
     Jpeg(JpegEncodeConfig),
-    /// WebP via `libwebp` (requires `webp-encode`).
+    /// WebP via `libwebp` (requires `webp-encode`; the gamut-webp migration is
+    /// blocked upstream — gamut#302, tracked by rawshift#24).
     #[cfg(feature = "webp-encode")]
-    WebpLibwebp(LibwebpEncodeConfig),
+    WebP(LibwebpEncodeConfig),
     /// AVIF via `gamut-avif` (requires `avif-encode`).
     #[cfg(feature = "avif-encode")]
     Avif(AvifEncodeConfig),
@@ -540,7 +459,7 @@ impl EncodeOptions {
     /// PNG with default configuration.
     #[cfg(feature = "png-encode")]
     pub fn png() -> Self {
-        Self::PngGamut(PngEncodeConfig::default())
+        Self::Png(PngEncodeConfig::default())
     }
 
     /// JPEG with default configuration.
@@ -552,13 +471,13 @@ impl EncodeOptions {
     /// Lossy WebP with default configuration.
     #[cfg(feature = "webp-encode")]
     pub fn webp_lossy() -> Self {
-        Self::WebpLibwebp(LibwebpEncodeConfig::lossy())
+        Self::WebP(LibwebpEncodeConfig::lossy())
     }
 
     /// Lossless WebP with default configuration.
     #[cfg(feature = "webp-encode")]
     pub fn webp_lossless() -> Self {
-        Self::WebpLibwebp(LibwebpEncodeConfig::lossless())
+        Self::WebP(LibwebpEncodeConfig::lossless())
     }
 
     /// AVIF with default configuration (lossless).
@@ -583,11 +502,11 @@ impl EncodeOptions {
     pub fn format(&self) -> OutputFormat {
         match self {
             #[cfg(feature = "png-encode")]
-            EncodeOptions::PngGamut(_) => OutputFormat::Png,
+            EncodeOptions::Png(_) => OutputFormat::Png,
             #[cfg(feature = "jpeg-encode")]
             EncodeOptions::Jpeg(_) => OutputFormat::Jpeg,
             #[cfg(feature = "webp-encode")]
-            EncodeOptions::WebpLibwebp(_) => OutputFormat::WebP,
+            EncodeOptions::WebP(_) => OutputFormat::WebP,
             #[cfg(feature = "avif-encode")]
             EncodeOptions::Avif(_) => OutputFormat::Avif,
             #[cfg(feature = "jxl-encode")]
@@ -605,11 +524,11 @@ impl EncodeOptions {
     pub fn codec_id(&self) -> CodecId {
         match self {
             #[cfg(feature = "png-encode")]
-            EncodeOptions::PngGamut(_) => CodecId::new("png/gamut"),
+            EncodeOptions::Png(_) => CodecId::new("png/gamut"),
             #[cfg(feature = "jpeg-encode")]
             EncodeOptions::Jpeg(_) => CodecId::new("jpeg/gamut"),
             #[cfg(feature = "webp-encode")]
-            EncodeOptions::WebpLibwebp(_) => CodecId::new("webp/libwebp"),
+            EncodeOptions::WebP(_) => CodecId::new("webp/libwebp"),
             #[cfg(feature = "avif-encode")]
             EncodeOptions::Avif(_) => CodecId::new("avif/gamut"),
             #[cfg(feature = "jxl-encode")]
@@ -628,11 +547,11 @@ impl EncodeOptions {
     pub fn common(&self) -> CommonEncodeOptions {
         match self {
             #[cfg(feature = "png-encode")]
-            EncodeOptions::PngGamut(c) => c.common,
+            EncodeOptions::Png(c) => c.common,
             #[cfg(feature = "jpeg-encode")]
             EncodeOptions::Jpeg(c) => c.common,
             #[cfg(feature = "webp-encode")]
-            EncodeOptions::WebpLibwebp(c) => c.common,
+            EncodeOptions::WebP(c) => c.common,
             #[cfg(feature = "avif-encode")]
             EncodeOptions::Avif(c) => c.common,
             #[cfg(feature = "jxl-encode")]

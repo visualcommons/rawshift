@@ -876,17 +876,19 @@ empty_decode_config!(AvifDecodeConfig, "gamut-avif + rawshift-hwdec");
 empty_decode_config!(HeicDecodeConfig, "gamut-heic + rawshift-hwdec");
 empty_decode_config!(ZunePpmDecodeConfig, "zune-ppm");
 
-/// Selects which decoder implementation handles a standard image, and carries
-/// that implementation's configuration.
+/// Selects the format a standard image is decoded as, and carries that
+/// format's decoder configuration.
 ///
-/// Each variant pairs a compressed format with one backend library. rawshift
-/// can be built with multiple implementations of the same format enabled (see
-/// the implementation feature flags in the crate documentation); this enum is
-/// how a caller pins exactly which one [`decode_standard_image_with`] uses.
+/// The enum is *format-keyed*: each variant names one format, and there is no
+/// backend-selection axis — gamut is the decoder for every migrated format.
+/// Where a non-gamut backend remains (libwebp and the `tiff` crate pending
+/// blocked upstream migrations; `gif`/`resvg`/`zune-ppm` as permanent
+/// exceptions) the configuration struct names it honestly (e.g.
+/// [`LibwebpDecodeConfig`]), but the variant stays format-named.
 ///
-/// Use [`DecodeOptions::default_for`] to obtain the default backend for a
-/// format. RAW formats are intentionally absent — they have a single in-repo
-/// implementation and are decoded through [`RawFile`](crate::formats::RawFile).
+/// Use [`DecodeOptions::default_for`] to obtain the default configuration for
+/// a format. RAW formats are intentionally absent — they are decoded through
+/// [`RawFile`](crate::formats::RawFile).
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -901,7 +903,7 @@ pub enum DecodeOptions {
     Png(PngDecodeConfig),
     /// WebP via `libwebp`.
     #[cfg(feature = "webp-decode")]
-    WebpLibwebp(LibwebpDecodeConfig),
+    WebP(LibwebpDecodeConfig),
     /// JPEG XL via `gamut-jxl` (the pure-Rust jxl-rs decoder).
     #[cfg(feature = "jxl-decode")]
     Jxl(JxlDecodeConfig),
@@ -921,10 +923,10 @@ pub enum DecodeOptions {
     Heic(HeicDecodeConfig),
     /// SVG via `resvg`.
     #[cfg(feature = "svg-decode")]
-    SvgResvg(ResvgDecodeConfig),
+    Svg(ResvgDecodeConfig),
     /// PPM / Netpbm via `zune-ppm`.
     #[cfg(feature = "ppm-decode")]
-    PpmZune(ZunePpmDecodeConfig),
+    Ppm(ZunePpmDecodeConfig),
 }
 
 impl DecodeOptions {
@@ -936,7 +938,7 @@ impl DecodeOptions {
             #[cfg(feature = "png-decode")]
             DecodeOptions::Png(_) => StandardFormat::Png,
             #[cfg(feature = "webp-decode")]
-            DecodeOptions::WebpLibwebp(_) => StandardFormat::WebP,
+            DecodeOptions::WebP(_) => StandardFormat::WebP,
             #[cfg(feature = "jxl-decode")]
             DecodeOptions::Jxl(_) => StandardFormat::Jxl,
             #[cfg(feature = "gif-decode")]
@@ -948,9 +950,9 @@ impl DecodeOptions {
             #[cfg(feature = "heic-decode")]
             DecodeOptions::Heic(_) => StandardFormat::Heic,
             #[cfg(feature = "svg-decode")]
-            DecodeOptions::SvgResvg(_) => StandardFormat::Svg,
+            DecodeOptions::Svg(_) => StandardFormat::Svg,
             #[cfg(feature = "ppm-decode")]
-            DecodeOptions::PpmZune(_) => StandardFormat::Ppm,
+            DecodeOptions::Ppm(_) => StandardFormat::Ppm,
             // Unreachable: with no decode feature enabled `DecodeOptions` has
             // no variants and no value of it can be constructed.
             #[allow(unreachable_patterns)]
@@ -966,7 +968,7 @@ impl DecodeOptions {
             #[cfg(feature = "png-decode")]
             DecodeOptions::Png(_) => CodecId::new("png/gamut"),
             #[cfg(feature = "webp-decode")]
-            DecodeOptions::WebpLibwebp(_) => CodecId::new("webp/libwebp"),
+            DecodeOptions::WebP(_) => CodecId::new("webp/libwebp"),
             #[cfg(feature = "jxl-decode")]
             DecodeOptions::Jxl(_) => CodecId::new("jxl/gamut"),
             #[cfg(feature = "gif-decode")]
@@ -978,9 +980,9 @@ impl DecodeOptions {
             #[cfg(feature = "heic-decode")]
             DecodeOptions::Heic(_) => CodecId::new("heic/gamut"),
             #[cfg(feature = "svg-decode")]
-            DecodeOptions::SvgResvg(_) => CodecId::new("svg/resvg"),
+            DecodeOptions::Svg(_) => CodecId::new("svg/resvg"),
             #[cfg(feature = "ppm-decode")]
-            DecodeOptions::PpmZune(_) => CodecId::new("ppm/zune"),
+            DecodeOptions::Ppm(_) => CodecId::new("ppm/zune"),
             #[allow(unreachable_patterns)]
             _ => unreachable!(),
         }
@@ -997,9 +999,7 @@ impl DecodeOptions {
             #[cfg(feature = "png-decode")]
             StandardFormat::Png => Some(DecodeOptions::Png(PngDecodeConfig::default())),
             #[cfg(feature = "webp-decode")]
-            StandardFormat::WebP => {
-                Some(DecodeOptions::WebpLibwebp(LibwebpDecodeConfig::default()))
-            }
+            StandardFormat::WebP => Some(DecodeOptions::WebP(LibwebpDecodeConfig::default())),
             #[cfg(feature = "jxl-decode")]
             StandardFormat::Jxl => Some(DecodeOptions::Jxl(JxlDecodeConfig::default())),
             #[cfg(feature = "gif-decode")]
@@ -1011,9 +1011,9 @@ impl DecodeOptions {
             #[cfg(feature = "heic-decode")]
             StandardFormat::Heic => Some(DecodeOptions::Heic(HeicDecodeConfig::default())),
             #[cfg(feature = "svg-decode")]
-            StandardFormat::Svg => Some(DecodeOptions::SvgResvg(ResvgDecodeConfig::default())),
+            StandardFormat::Svg => Some(DecodeOptions::Svg(ResvgDecodeConfig::default())),
             #[cfg(feature = "ppm-decode")]
-            StandardFormat::Ppm => Some(DecodeOptions::PpmZune(ZunePpmDecodeConfig::default())),
+            StandardFormat::Ppm => Some(DecodeOptions::Ppm(ZunePpmDecodeConfig::default())),
             #[allow(unreachable_patterns)]
             _ => None,
         }
@@ -1082,7 +1082,7 @@ pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawRe
         #[cfg(feature = "png-decode")]
         DecodeOptions::Png(cfg) => decode_png(data, cfg),
         #[cfg(feature = "webp-decode")]
-        DecodeOptions::WebpLibwebp(_cfg) => decode_webp(data),
+        DecodeOptions::WebP(_cfg) => decode_webp(data),
         #[cfg(feature = "jxl-decode")]
         DecodeOptions::Jxl(_cfg) => decode_jxl(data),
         #[cfg(feature = "gif-decode")]
@@ -1094,9 +1094,9 @@ pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawRe
         #[cfg(feature = "heic-decode")]
         DecodeOptions::Heic(_cfg) => decode_heic(data),
         #[cfg(feature = "svg-decode")]
-        DecodeOptions::SvgResvg(cfg) => decode_svg(data, cfg),
+        DecodeOptions::Svg(cfg) => decode_svg(data, cfg),
         #[cfg(feature = "ppm-decode")]
-        DecodeOptions::PpmZune(cfg) => decode_ppm(data, cfg),
+        DecodeOptions::Ppm(cfg) => decode_ppm(data, cfg),
         // Unreachable: with no decode feature enabled `DecodeOptions` has no
         // variants and no value of it can be constructed.
         #[allow(unreachable_patterns)]

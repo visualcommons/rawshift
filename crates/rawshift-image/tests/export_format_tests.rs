@@ -276,7 +276,7 @@ mod webp_tests {
         let img = synthetic_image();
         let path = temp_path("export_lossy_exif.webp");
 
-        let opts = EncodeOptions::WebpLibwebp(webp(true, false, false));
+        let opts = EncodeOptions::WebP(webp(true, false, false));
         encode_rgb_image(&img, &ImageMetadata::default(), &path, &opts).expect("Export WebP");
 
         let data = fs::read(&path).expect("Read WebP");
@@ -312,7 +312,7 @@ mod webp_tests {
         let img = synthetic_image();
         let path = temp_path("export_no_meta.webp");
 
-        let opts = EncodeOptions::WebpLibwebp(webp(false, false, false));
+        let opts = EncodeOptions::WebP(webp(false, false, false));
         encode_rgb_image(&img, &ImageMetadata::default(), &path, &opts).expect("Export WebP");
 
         let data = fs::read(&path).expect("Read WebP");
@@ -328,7 +328,7 @@ mod webp_tests {
         let img = synthetic_image();
         let path = temp_path("export_icc.webp");
 
-        let opts = EncodeOptions::WebpLibwebp(webp(false, true, false));
+        let opts = EncodeOptions::WebP(webp(false, true, false));
         encode_rgb_image(&img, &ImageMetadata::default(), &path, &opts).expect("Export WebP");
 
         let data = fs::read(&path).expect("Read WebP");
@@ -347,7 +347,7 @@ mod webp_tests {
             ..Default::default()
         };
 
-        let opts = EncodeOptions::WebpLibwebp(webp(false, false, true));
+        let opts = EncodeOptions::WebP(webp(false, false, true));
         encode_rgb_image(&img, &meta, &path, &opts).expect("Export WebP");
 
         let data = fs::read(&path).expect("Read WebP");
@@ -388,18 +388,12 @@ mod webp_tests {
         let mut high = webp(false, false, false);
         high.quality = 95.0;
 
-        let low = encode_rgb_image_to_vec(
-            &img,
-            &ImageMetadata::default(),
-            &EncodeOptions::WebpLibwebp(low),
-        )
-        .expect("Export low quality");
-        let high = encode_rgb_image_to_vec(
-            &img,
-            &ImageMetadata::default(),
-            &EncodeOptions::WebpLibwebp(high),
-        )
-        .expect("Export high quality");
+        let low =
+            encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &EncodeOptions::WebP(low))
+                .expect("Export low quality");
+        let high =
+            encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &EncodeOptions::WebP(high))
+                .expect("Export high quality");
 
         assert!(
             high.len() > low.len(),
@@ -442,7 +436,7 @@ mod png_tests {
     fn test_png_export_8bit() {
         let img = synthetic_image();
 
-        let opts = EncodeOptions::PngGamut(PngEncodeConfig {
+        let opts = EncodeOptions::Png(PngEncodeConfig {
             common: CommonEncodeOptions {
                 bit_depth: BitDepth::Eight,
                 ..CommonEncodeOptions::default()
@@ -480,7 +474,7 @@ mod png_tests {
         let xmp = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"></x:xmpmeta>";
         metadata.xmp = Some(xmp.as_bytes().to_vec());
 
-        let opts = EncodeOptions::PngGamut(PngEncodeConfig {
+        let opts = EncodeOptions::Png(PngEncodeConfig {
             common: common(true, true, true),
             ..PngEncodeConfig::default()
         });

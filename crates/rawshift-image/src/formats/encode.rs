@@ -36,11 +36,11 @@ pub fn encode_rgb_image_to_vec(
 ) -> RawResult<Vec<u8>> {
     match encode_options {
         #[cfg(feature = "png-encode")]
-        EncodeOptions::PngGamut(cfg) => encode_png(image, metadata, cfg),
+        EncodeOptions::Png(cfg) => encode_png(image, metadata, cfg),
         #[cfg(feature = "jpeg-encode")]
         EncodeOptions::Jpeg(cfg) => encode_jpeg(image, metadata, cfg),
         #[cfg(feature = "webp-encode")]
-        EncodeOptions::WebpLibwebp(cfg) => encode_webp(image, metadata, cfg),
+        EncodeOptions::WebP(cfg) => encode_webp(image, metadata, cfg),
         #[cfg(feature = "avif-encode")]
         EncodeOptions::Avif(cfg) => encode_avif(image, metadata, cfg),
         #[cfg(feature = "jxl-encode")]
