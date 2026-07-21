@@ -488,8 +488,9 @@ dependencies = [
 
 [[package]]
 name = "gamut-av1"
-version = "0.4.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7281f68cb437b34726d4eb788c7a9fab10724c166c4ae5cfda6ff65f7155ae94"
 dependencies = [
  "gamut-bitstream",
  "gamut-color",
@@ -499,8 +500,9 @@ dependencies = [
 
 [[package]]
 name = "gamut-avif"
-version = "1.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a6df2615bd17e126f3a0b6716430206b97fcf2f9fa0acc2725a5052e9e06b09"
 dependencies = [
  "gamut-av1",
  "gamut-codec-abi",
@@ -511,29 +513,33 @@ dependencies = [
 
 [[package]]
 name = "gamut-bitstream"
-version = "0.2.2"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "706ef7c7342d2cf3d2737690a6127b1c91f908add9d18c72e5d17c3931f2fe6a"
 dependencies = [
  "gamut-core",
 ]
 
 [[package]]
 name = "gamut-codec-abi"
-version = "0.1.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38704051ac2980276478f6eb9c55a26fb608151f8e42c355f5a699a2f3afde03"
 
 [[package]]
 name = "gamut-color"
-version = "1.1.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde55ae76aee646990fd4f353574fbcfaf9f37a5f3e54ba0907c7d384936e56a"
 dependencies = [
  "gamut-core",
 ]
 
 [[package]]
 name = "gamut-core"
-version = "2.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b17c79c8672b675d538dceffda1dd5d00ba279cbcca4f75c7b4fa847741d5d31"
 dependencies = [
  "thiserror",
 ]
@@ -541,29 +547,33 @@ dependencies = [
 [[package]]
 name = "gamut-deflate"
 version = "0.1.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b128070e10042ed241459f2a6542c9bd3639e3115b8a445732bf099f929ceec1"
 
 [[package]]
 name = "gamut-dng"
 version = "1.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab77ef628afcec0c690536c44040f484e8c95761a977efc183dfe03e77beee64"
 dependencies = [
  "gamut-bitstream",
  "gamut-core",
  "gamut-ifd",
- "gamut-jxl",
+ "gamut-jxl 0.3.0",
  "miniz_oxide",
 ]
 
 [[package]]
 name = "gamut-dsp"
 version = "2.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed494150ad7376cd7e5f8775d175c5a22e497604f31ebc0ce47d94554d7861fb"
 
 [[package]]
 name = "gamut-exif"
 version = "1.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9ce8735a1fc71d77b5361f4f126676abab8811cdd3797a6bacdb920cd20f85d"
 dependencies = [
  "gamut-core",
  "gamut-ifd",
@@ -572,8 +582,9 @@ dependencies = [
 
 [[package]]
 name = "gamut-heic"
-version = "0.2.1"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f4d36811d22489afe2be15572022d29ed0ab2d9ac5ab00a89355f0122d9632d"
 dependencies = [
  "gamut-codec-abi",
  "gamut-color",
@@ -584,7 +595,8 @@ dependencies = [
 [[package]]
 name = "gamut-icc"
 version = "1.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09916f0aea3f9dbe1c5ac67e0e29956b9af43c8c86a0fbe6b47c597b63fd8cee"
 dependencies = [
  "gamut-core",
  "md-5",
@@ -593,8 +605,9 @@ dependencies = [
 
 [[package]]
 name = "gamut-ifd"
-version = "2.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d3bd47b53d4007db880394ed226de033d992646cfa394768237fed0e429806e"
 dependencies = [
  "gamut-core",
 ]
@@ -602,7 +615,8 @@ dependencies = [
 [[package]]
 name = "gamut-iptc"
 version = "1.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99b7bb8412adf69f48657d207ff5358750ebe4efe81c2dd7b32091034f354d6b"
 dependencies = [
  "gamut-core",
  "gamut-xmp",
@@ -611,8 +625,9 @@ dependencies = [
 
 [[package]]
 name = "gamut-isobmff"
-version = "2.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57d60a05bc5adea2f820e285b0b85dc3e2e66a45c42e10f552415f53bf85060d"
 dependencies = [
  "gamut-core",
 ]
@@ -620,7 +635,8 @@ dependencies = [
 [[package]]
 name = "gamut-jpeg"
 version = "0.1.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15f8fc170fc64c37d8a17c2c5c2ab7e23de375f01c99cf816e1f3eae7362b3c7"
 dependencies = [
  "gamut-codec-abi",
  "gamut-color",
@@ -631,7 +647,18 @@ dependencies = [
 [[package]]
 name = "gamut-jxl"
 version = "0.3.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aeb902868a80069b5896495a66fc3a4ce7e0b85beb8acb008ac5c21f3279b073"
+dependencies = [
+ "gamut-core",
+ "jxl",
+]
+
+[[package]]
+name = "gamut-jxl"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8449465a694deb302f468edee6b5ed0c49587b03add54298bebebbedd7d02622"
 dependencies = [
  "gamut-codec-abi",
  "gamut-core",
@@ -642,7 +669,8 @@ dependencies = [
 [[package]]
 name = "gamut-jxl-sys"
 version = "0.1.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9b11d4b466b3f17ab6c7424d9051cff24d03cfd4d00e3170f7311aa7c30ed0d"
 dependencies = [
  "cmake",
  "jpegxl-src",
@@ -651,7 +679,8 @@ dependencies = [
 [[package]]
 name = "gamut-metadata"
 version = "1.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "502d8badb1ddfd9bca06fdec9a8e756dbf3eccc5be8274612bb89a20950b19f3"
 dependencies = [
  "gamut-exif",
  "gamut-icc",
@@ -663,7 +692,8 @@ dependencies = [
 [[package]]
 name = "gamut-png"
 version = "0.1.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a3d427c3d8d1850296d31e41812fefbd352ba65bd70794e8a849aca7fa76dbf"
 dependencies = [
  "gamut-codec-abi",
  "gamut-core",
@@ -674,7 +704,8 @@ dependencies = [
 [[package]]
 name = "gamut-xmp"
 version = "1.0.0"
-source = "git+https://github.com/justin13888/gamut?rev=dde9f640ab02ec9c3437c3f1181164f6e7c60151#dde9f640ab02ec9c3437c3f1181164f6e7c60151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd39a4ebd0d14800751e3ae64a0c86a07e00b77f3ac564570e0e8987d41945bb"
 dependencies = [
  "gamut-core",
  "quick-xml",
@@ -1221,7 +1252,7 @@ dependencies = [
  "gamut-ifd",
  "gamut-isobmff",
  "gamut-jpeg",
- "gamut-jxl",
+ "gamut-jxl 0.4.0",
  "gamut-metadata",
  "gamut-png",
  "gamut-xmp",

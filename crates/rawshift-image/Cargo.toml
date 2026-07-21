@@ -68,8 +68,8 @@ gamut-jpeg     = { workspace = true, optional = true }
 gamut-heic     = { workspace = true, optional = true }
 # gamut-isobmff surfaces in gamut-heic's and gamut-avif's public APIs
 # (`HeifItem::colour()` / `AvifItem::colour()` return its `ColourInformation`),
-# so the HEIC/AVIF ICC-extraction paths need the crate directly. Same pinned
-# gamut revision as everything else.
+# so the HEIC/AVIF ICC-extraction paths need the crate directly. Its workspace
+# version stays aligned with the other gamut container crates.
 gamut-isobmff  = { workspace = true, optional = true }
 # rawshift-hwdec provides hardware HEVC/AV1 still-frame decode. Optional and
 # pulled only by the `hw`/`hw-*` features: a `heic`- or `avif`-only build is a

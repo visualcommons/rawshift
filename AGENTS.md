@@ -10,13 +10,14 @@ Clean-slate implementation for raw image decoding with full metadata support and
 
 rawshift depends on [gamut](https://github.com/justin13888/gamut) for image
 primitives, color, metadata, container parsing, and codecs. gamut is consumed
-as a git dependency pinned to an exact commit hash in the workspace
-`Cargo.toml` — never a branch, never crates.io (until gamut publishes).
+as versioned crates.io dependencies in the workspace `Cargo.toml`; git
+dependencies are not permitted because they prevent publishing rawshift.
 
 - If a rawshift change needs any change in gamut (new API, bug fix, missing
   format capability), you MUST: (1) open an issue on `justin13888/gamut`
-  first, (2) wait for it to land on gamut `master`, (3) bump the pinned
-  commit hash, and only then (4) make the rawshift change.
+  first, (2) wait for it to land on gamut `master`, (3) wait for the affected
+  gamut crates to be published, (4) update the workspace dependency versions,
+  and only then (5) make the rawshift change.
 - Robustness/hardening doubts about gamut (parser bounds checks, byte
   completeness, fuzz coverage) are handled the same way, as `chore`-labeled
   gamut issues: they are correctness verifications, not API asks, and they
@@ -33,9 +34,9 @@ as a git dependency pinned to an exact commit hash in the workspace
   remove targets/APIs; they were decided once at v1.
 - MSRV stays as low as upstream dependencies require; never raise it
   independently.
-- Bumping the gamut pin is a deliberate, reviewed change: one commit that
-  only updates the hash, a full test + benchmark run, and a CHANGELOG.md note
-  for any behavioral change.
+- Updating gamut dependencies is a deliberate, reviewed change: one commit
+  that only updates the version requirements and lockfile, a full test +
+  benchmark run, and a CHANGELOG.md note for any behavioral change.
 
 ## Testing Methodology
 

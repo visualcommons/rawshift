@@ -10,8 +10,8 @@
 //!
 //! ## Architecture: gamut-backed
 //!
-//! rawshift-image is built on [gamut], consumed as a git dependency pinned to
-//! an exact commit in the workspace `Cargo.toml`. gamut owns the generic
+//! rawshift-image is built on the published [gamut] crates, with versions
+//! managed centrally in the workspace `Cargo.toml`. gamut owns the generic
 //! ground: image primitives (`ImageBuf`, the sealed pixel vocabulary), colour
 //! (CICP code points, ICC), container/IFD parsing, the metadata stack
 //! (EXIF/ICC/XMP), and the codecs for every migrated format — JPEG, PNG,

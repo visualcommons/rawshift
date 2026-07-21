@@ -18,31 +18,26 @@ homepage = "https://github.com/justin13888/rawshift"
 
 [workspace.dependencies]
 # gamut — upstream home for image primitives, color, metadata, container
-# parsing, and codecs (see AGENTS.md "Upstream-First Policy"). Consumed as a
-# git dependency pinned to an exact commit hash: never a branch, never
-# crates.io (until gamut publishes). Crates are added here lazily, as each
-# migration issue starts consuming one.
-#
-# Bumping this pin is a deliberate, reviewed change — see README "Bumping the
-# gamut pin" for the required procedure.
-gamut-core = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-color = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-exif = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-ifd = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-dng = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-metadata = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-xmp = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-icc = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-jpeg = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
+# parsing, and codecs (see AGENTS.md "Upstream-First Policy"). Crates are
+# added here lazily, as each migration issue starts consuming one.
+gamut-core = "2.0.1"
+gamut-color = "2.0.0"
+gamut-exif = "1.0.0"
+gamut-ifd = "2.0.1"
+gamut-dng = "1.0.0"
+gamut-metadata = "1.0.0"
+gamut-xmp = "1.0.0"
+gamut-icc = "1.0.0"
+gamut-jpeg = "0.1.0"
 # default-features off: gamut-jxl defaults to decode+encode; rawshift's
 # `jxl-decode` / `jxl-encode` features select the halves explicitly.
-gamut-jxl = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151", default-features = false }
-gamut-png = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-avif = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
-gamut-heic = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
+gamut-jxl = { version = "0.4.0", default-features = false }
+gamut-png = "0.1.0"
+gamut-avif = "1.1.0"
+gamut-heic = "0.2.2"
 # Dev-only in rawshift-image: constructs synthetic HEIF containers for the
 # backend-less HEIC enumeration/decode-pipeline tests.
-gamut-isobmff = { git = "https://github.com/justin13888/gamut", rev = "dde9f640ab02ec9c3437c3f1181164f6e7c60151" }
+gamut-isobmff = "2.0.1"
 
 # Shared infrastructure dependencies (used across multiple workspace crates).
 thiserror = "2.0"

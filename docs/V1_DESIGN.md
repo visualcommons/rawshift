@@ -6,9 +6,8 @@ upstream-first for every gap (see the policy in [AGENTS.md](../AGENTS.md)),
 hardware codestream decode for HEVC/AV1, and no video. **v1 is the clean
 final state: 0.x source compatibility is a non-goal.**
 
-gamut is consumed as a git dependency pinned to an exact commit hash in the
-workspace `Cargo.toml` (see README "Bumping the gamut pin" for the
-procedure); this document does not restate the hash.
+gamut is consumed as versioned crates.io dependencies managed in the workspace
+`Cargo.toml` (see README "Updating gamut dependencies" for the procedure).
 
 ## Workspace layout
 
@@ -208,6 +207,5 @@ stay: `gif`, `resvg`, `zune-ppm` (+ its `zune-core` runtime).
 
 ## Release
 
-git-pinned gamut means rawshift cannot publish to crates.io until gamut
-publishes; v1 is a git-consumable release (revisited at the v1 release
-issue).
+All gamut dependencies are published on crates.io, so the rawshift workspace
+can be packaged and published in dependency order by release-plz.

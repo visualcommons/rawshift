@@ -9,12 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 v1 is the gamut migration release: rawshift's generic ground — image
 primitives, colour, containers, metadata, and the migrated codecs — now comes
-from [gamut](https://github.com/justin13888/gamut), consumed as a git
-dependency pinned to an exact commit hash. **Release shape:** a git-pinned
-dependency cannot be published to crates.io, so v1 ships as a
-**git-consumable release** (tag + pinned gamut hash) until gamut publishes;
-the crates.io release is deferred by owner decision (#37). 0.x source
-compatibility is a non-goal (see `docs/V1_DESIGN.md`).
+from the published [gamut](https://github.com/justin13888/gamut) crates.
+**Release shape:** v1 is publishable to crates.io now that every direct gamut
+dependency is a registry package. 0.x source compatibility is a non-goal (see
+`docs/V1_DESIGN.md`).
 
 ### Changed
 
@@ -162,9 +160,9 @@ All entries below are **breaking**, grouped by area.
   thumbnail / auxiliary (alpha, depth, gain map) enumeration / decode, plus
   the `avif_hw_decode_available()` / `heic_hw_decode_available()` runtime
   probes and `MetadataNamespace::Avif` container facts.
-- *(image)* gamut consumed as a git dependency pinned to an exact commit
-  hash in the workspace `Cargo.toml` (never a branch; see the upstream-first
-  policy in `AGENTS.md` and the pin-bump procedure in the README).
+- *(image)* gamut consumed as versioned crates.io dependencies managed in the
+  workspace `Cargo.toml` (see the upstream-first policy in `AGENTS.md` and the
+  update procedure in the README).
 - *(bench)* First codec benches: JPEG and PNG encode+decode round-trips on
   the gamut backends, plus gated HEIC/AVIF hardware-decode benches that
   self-generate fixtures via heif-enc/avifenc and skip cleanly without the

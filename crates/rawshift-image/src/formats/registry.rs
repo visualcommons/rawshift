@@ -26,16 +26,16 @@ use crate::core::{CodecDirection, CodecId, CodecInfo};
 pub fn available_encoders() -> Vec<CodecInfo> {
     #[allow(unused_mut)]
     let mut encoders: Vec<CodecInfo> = Vec::new();
-    // Version tracks the gamut-png crate at the pinned gamut commit (git
-    // dependency). Hand-maintained — bump together with the gamut pin.
+    // Version tracks the gamut-png crate. Hand-maintained — update together
+    // with the workspace dependency.
     #[cfg(feature = "png-encode")]
     encoders.push(CodecInfo::new(
         CodecId::new("png/gamut"),
         "0.1",
         CodecDirection::Encode,
     ));
-    // Version tracks the gamut-jpeg crate at the pinned gamut commit (git
-    // dependency). Hand-maintained — bump together with the gamut pin.
+    // Version tracks the gamut-jpeg crate. Hand-maintained — update together
+    // with the workspace dependency.
     #[cfg(feature = "jpeg-encode")]
     encoders.push(CodecInfo::new(
         CodecId::new("jpeg/gamut"),
@@ -48,21 +48,21 @@ pub fn available_encoders() -> Vec<CodecInfo> {
         "0.14",
         CodecDirection::Encode,
     ));
-    // Version tracks the gamut-avif crate at the pinned gamut commit (git
-    // dependency). Hand-maintained — bump together with the gamut pin.
+    // Version tracks the gamut-avif crate. Hand-maintained — update together
+    // with the workspace dependency.
     #[cfg(feature = "avif-encode")]
     encoders.push(CodecInfo::new(
         CodecId::new("avif/gamut"),
-        "1.0",
+        "1.1",
         CodecDirection::Encode,
     ));
-    // Version tracks the gamut-jxl crate at the pinned gamut commit (git
-    // dependency; wraps libjxl 0.12 via gamut-jxl-sys). Hand-maintained —
-    // bump together with the gamut pin.
+    // Version tracks the gamut-jxl crate (which wraps libjxl 0.12 via
+    // gamut-jxl-sys). Hand-maintained — update together with the workspace
+    // dependency.
     #[cfg(feature = "jxl-encode")]
     encoders.push(CodecInfo::new(
         CodecId::new("jxl/gamut"),
-        "0.3",
+        "0.4",
         CodecDirection::Encode,
     ));
     #[cfg(feature = "dng-encode")]
@@ -79,16 +79,16 @@ pub fn available_encoders() -> Vec<CodecInfo> {
 pub fn available_decoders() -> Vec<CodecInfo> {
     #[allow(unused_mut)]
     let mut decoders: Vec<CodecInfo> = Vec::new();
-    // Version tracks the gamut-jpeg crate at the pinned gamut commit (git
-    // dependency). Hand-maintained — bump together with the gamut pin.
+    // Version tracks the gamut-jpeg crate. Hand-maintained — update together
+    // with the workspace dependency.
     #[cfg(feature = "jpeg-decode")]
     decoders.push(CodecInfo::new(
         CodecId::new("jpeg/gamut"),
         "0.1",
         CodecDirection::Decode,
     ));
-    // Version tracks the gamut-png crate at the pinned gamut commit (git
-    // dependency). Hand-maintained — bump together with the gamut pin.
+    // Version tracks the gamut-png crate. Hand-maintained — update together
+    // with the workspace dependency.
     #[cfg(feature = "png-decode")]
     decoders.push(CodecInfo::new(
         CodecId::new("png/gamut"),
@@ -101,13 +101,12 @@ pub fn available_decoders() -> Vec<CodecInfo> {
         "0.14",
         CodecDirection::Decode,
     ));
-    // Version tracks the gamut-jxl crate at the pinned gamut commit (git
-    // dependency; pure-Rust jxl-rs decode). Hand-maintained — bump together
-    // with the gamut pin.
+    // Version tracks the gamut-jxl crate (pure-Rust jxl-rs decode).
+    // Hand-maintained — update together with the workspace dependency.
     #[cfg(feature = "jxl-decode")]
     decoders.push(CodecInfo::new(
         CodecId::new("jxl/gamut"),
-        "0.3",
+        "0.4",
         CodecDirection::Decode,
     ));
     #[cfg(feature = "gif-decode")]
@@ -122,8 +121,8 @@ pub fn available_decoders() -> Vec<CodecInfo> {
         "0.11",
         CodecDirection::Decode,
     ));
-    // Version tracks the gamut-avif crate at the pinned gamut commit (git
-    // dependency). Hand-maintained — bump together with the gamut pin. The
+    // Version tracks the gamut-avif crate. Hand-maintained — update together
+    // with the workspace dependency. The
     // entry reports the container/pipeline decoder, which is always compiled
     // with `avif-decode`; whether the AV1 codestream can actually be decoded
     // on this machine is runtime-conditional — probe it with
@@ -131,11 +130,11 @@ pub fn available_decoders() -> Vec<CodecInfo> {
     #[cfg(feature = "avif-decode")]
     decoders.push(CodecInfo::new(
         CodecId::new("avif/gamut"),
-        "1.0",
+        "1.1",
         CodecDirection::Decode,
     ));
-    // Version tracks the gamut-heic crate at the pinned gamut commit (git
-    // dependency). Hand-maintained — bump together with the gamut pin. The
+    // Version tracks the gamut-heic crate. Hand-maintained — update together
+    // with the workspace dependency. The
     // entry reports the container/pipeline decoder, which is always compiled
     // with `heic-decode`; whether the HEVC codestream can actually be decoded
     // on this machine is runtime-conditional — probe it with
