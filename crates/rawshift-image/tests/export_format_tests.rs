@@ -574,7 +574,7 @@ mod avif_tests {
     }
 
     /// 10/12-bit AVIF output is temporarily unavailable — gamut-avif is 8-bit
-    /// only until justin13888/gamut#251 lands — and must be reported, not
+    /// only until visualcommons/gamut#251 lands — and must be reported, not
     /// silently degraded.
     #[test]
     fn rejects_10_and_12_bit() {
@@ -591,7 +591,7 @@ mod avif_tests {
                 .expect_err("10/12-bit AVIF encode must be rejected");
             let msg = err.to_string();
             assert!(
-                msg.contains("justin13888/gamut#251"),
+                msg.contains("visualcommons/gamut#251"),
                 "error must reference the upstream issue, got: {msg}"
             );
         }

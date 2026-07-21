@@ -1,6 +1,6 @@
 # rawshift-core
 
-Shared core types for [rawshift](https://github.com/justin13888/rawshift) —
+Shared core types for [rawshift](https://github.com/visualcommons/rawshift) —
 geometry, pixel samples, and the format-agnostic metadata model.
 
 This crate holds pure, stateless data structures with **no decoding logic**. It

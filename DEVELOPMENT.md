@@ -106,7 +106,7 @@ Do this in order:
 
 5. **Configure a Trusted Publisher for each of the four crates** on crates.io
    (crate → Settings → Trusted Publishing → Add GitHub):
-   - Repository owner: `justin13888`
+   - Repository owner: `visualcommons`
    - Repository name: `rawshift`
    - Workflow filename: `release-plz.yml`
    - Environment: *(leave blank)*

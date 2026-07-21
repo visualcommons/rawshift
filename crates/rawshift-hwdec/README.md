@@ -1,6 +1,6 @@
 # rawshift-hwdec
 
-Hardware still-frame codestream decode for [rawshift](https://github.com/justin13888/rawshift):
+Hardware still-frame codestream decode for [rawshift](https://github.com/visualcommons/rawshift):
 HEVC (HEIC) and AV1 (AVIF) intra pictures through the platform decode APIs
 fixed permanently in [`docs/SUPPORT.md`](../../docs/SUPPORT.md) —
 VideoToolbox (macOS/iOS), VAAPI (linux-gnu, dlopen'd at runtime), and NDK

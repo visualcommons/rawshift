@@ -1,5 +1,5 @@
 //! Structural sanity checks on a real DNG fixture, run over the gamut-ifd
-//! tree the DNG decoder is built on (results feed justin13888/gamut#174).
+//! tree the DNG decoder is built on (results feed visualcommons/gamut#174).
 
 use gamut_ifd::{Ifd, tags};
 use std::fs;

@@ -11,7 +11,7 @@
 //!
 //! Coverage per issue #33: 8-bit 4:2:0 (lossless → bit-exact), alpha
 //! auxiliary, `grid` derivation, 10-bit (hardware decode works; the RGBA
-//! presentation gates upstream — justin13888/gamut#303 — so the specific
+//! presentation gates upstream — visualcommons/gamut#303 — so the specific
 //! error is asserted), Exif/XMP items, and the AV1-profile scope of
 //! rawshift's own gamut-encoded output.
 
@@ -309,7 +309,7 @@ fn avif_grid_hw_decodes_bit_exact() {
 
 /// 10-bit: the hardware decodes the P010 surface fine, but gamut-avif's RGBA
 /// presentation surface is 8-bit-only until high-bit-depth presentation
-/// lands upstream (the justin13888/gamut#303 program). Assert the specific
+/// lands upstream (the visualcommons/gamut#303 program). Assert the specific
 /// upstream gate — not a hardware failure — so this test starts failing the
 /// moment upstream unlocks it (then flip it to a pixel assertion).
 #[test]

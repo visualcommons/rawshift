@@ -357,13 +357,13 @@ fn encode_avif(
     // gamut-avif takes 8-bit RGB: `Eight` and `Sixteen` are accepted
     // (`Sixteen` is down-converted, as with every 8-bit-only backend).
     // 10/12-bit AVIF output is temporarily unavailable — it is pending
-    // high-bit-depth support in gamut-avif (justin13888/gamut#251) — so those
+    // high-bit-depth support in gamut-avif (visualcommons/gamut#251) — so those
     // requests are reported rather than silently degraded.
     match cfg.common.bit_depth {
         BitDepth::Eight | BitDepth::Sixteen => {}
         other => {
             return Err(RawError::Encode(EncodeError::UnsupportedBitDepth {
-                format: "AVIF (10/12-bit output pending justin13888/gamut#251)",
+                format: "AVIF (10/12-bit output pending visualcommons/gamut#251)",
                 requested: other,
             }));
         }

@@ -118,7 +118,7 @@ impl Default for ColorDescription {
 }
 
 // Manual serde over the CICP code points: the gamut enums do not (yet) derive
-// serde (justin13888/gamut#257); the numeric pair is also the stable wire form,
+// serde (visualcommons/gamut#257); the numeric pair is also the stable wire form,
 // so this representation survives that issue landing.
 #[cfg(feature = "serde")]
 impl serde::Serialize for ColorDescription {
@@ -151,7 +151,7 @@ impl<'de> serde::Deserialize<'de> for ColorDescription {
 }
 
 /// Serde adapter for the re-exported [`BitDepth`], which carries no serde
-/// derives upstream (justin13888/gamut#257). Serializes as the bit count.
+/// derives upstream (visualcommons/gamut#257). Serializes as the bit count.
 ///
 /// Use on struct fields:
 /// `#[cfg_attr(feature = "serde", serde(with = "rawshift_core::color::bit_depth_serde"))]`

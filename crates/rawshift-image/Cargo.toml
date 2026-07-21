@@ -46,7 +46,7 @@ gamut-metadata = { workspace = true, optional = true }
 gamut-png      = { workspace = true, optional = true }
 # gamut-avif backs both AVIF halves. Encode: AvifEncoder (8-bit RGB, lossless
 # or lossy AV1 intra at identity 4:4:4 — pure Rust, no C toolchain); 10/12-bit
-# and alpha encode are pending upstream (justin13888/gamut#251). Decode:
+# and alpha encode are pending upstream (visualcommons/gamut#251). Decode:
 # container parsing, item/metadata enumeration, grid/iden/iovl derivation,
 # colour conversion, alpha merge, and the clap/irot/imir transforms. The AV1
 # codestream itself is decoded through the pluggable Av1StillDecoder seam,
@@ -97,7 +97,7 @@ clap = { version = "4.5", features = ["derive"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 eyre = "0.6.12"
 # dng_check exercises the gamut-ifd tree directly (structural DNG assertions
-# feeding justin13888/gamut#174).
+# feeding visualcommons/gamut#174).
 gamut-ifd = { workspace = true, features = ["bigtiff"] }
 # export_format_tests reads back the ICC profile gamut-jxl embeds in the JXL
 # codestream (`JxlDecoder::embedded_icc_profile`) — a box-scan cannot see it.
@@ -202,8 +202,8 @@ tiff-decode = ["tiff-decode-tiff"]
 # additionally needs a hardware AV1 decoder (`hw`/`hw-*`, see below) and
 # reports `RawError::HwDecoderUnavailable` without one. 10/12-bit content
 # hardware-decodes but its RGBA presentation is pending upstream
-# (justin13888/gamut#303); software AV1 decode is post-v1
-# (justin13888/gamut#259). `exif` supplies the parser for the container's
+# (visualcommons/gamut#303); software AV1 decode is post-v1
+# (visualcommons/gamut#259). `exif` supplies the parser for the container's
 # Exif item; `gamut-isobmff` surfaces in the ICC-extraction path
 # (`AvifItem::colour()`).
 avif-decode = ["dep:gamut-avif", "dep:gamut-isobmff", "exif"]
@@ -211,7 +211,7 @@ avif-decode = ["dep:gamut-avif", "dep:gamut-isobmff", "exif"]
 # PNG and the RAW direction features, it has a single gamut-backed
 # implementation, so the format-direction feature itself pulls the dependency.
 # Pure Rust (gamut-av1 AV1 intra + gamut-isobmff container) — 8-bit RGB,
-# lossless or lossy; 10/12-bit output is pending justin13888/gamut#251.
+# lossless or lossy; 10/12-bit output is pending visualcommons/gamut#251.
 # `exif` supplies the ExifBuilder and the `gamut-xmp` validation used when
 # splicing EXIF/ICC/XMP items into the encoded container.
 avif-encode = ["dep:gamut-avif", "exif"]

@@ -336,7 +336,7 @@ impl Default for LibwebpEncodeConfig {
 /// [`EncodeError::UnsupportedBitDepth`](crate::error::EncodeError::UnsupportedBitDepth)
 /// — high-bit-depth AVIF encode is **temporarily unavailable** pending
 /// 10/12-bit support in gamut-avif
-/// ([justin13888/gamut#251](https://github.com/justin13888/gamut/issues/251)).
+/// ([visualcommons/gamut#251](https://github.com/visualcommons/gamut/issues/251)).
 ///
 /// EXIF / ICC / XMP metadata is spliced into the encoded container as ISOBMFF
 /// items by rawshift (gamut-avif does not emit metadata items yet).

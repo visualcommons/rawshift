@@ -11,7 +11,7 @@ The minimum supported Rust version tracks the minimum required by upstream
 dependencies (currently **1.92.0**, set by [gamut]) and stays as low as the
 upstream dependencies require — it is never raised independently.
 
-[gamut]: https://github.com/justin13888/gamut
+[gamut]: https://github.com/visualcommons/gamut
 
 ## Compilation targets
 

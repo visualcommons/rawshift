@@ -13,8 +13,8 @@ version = "0.1.1"
 edition = "2024"
 rust-version = "1.92.0"
 license = "MPL-2.0"
-repository = "https://github.com/justin13888/rawshift"
-homepage = "https://github.com/justin13888/rawshift"
+repository = "https://github.com/visualcommons/rawshift"
+homepage = "https://github.com/visualcommons/rawshift"
 
 [workspace.dependencies]
 # gamut — upstream home for image primitives, color, metadata, container

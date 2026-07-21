@@ -44,7 +44,7 @@
 //! [`DecodedFrame::new`] validates plane geometry against the pixel format so
 //! an internally inconsistent frame cannot be constructed.
 //!
-//! [`docs/SUPPORT.md`]: https://github.com/justin13888/rawshift/blob/master/docs/SUPPORT.md
+//! [`docs/SUPPORT.md`]: https://github.com/visualcommons/rawshift/blob/master/docs/SUPPORT.md
 
 #![deny(unsafe_op_in_unsafe_fn)]
 

@@ -2,7 +2,7 @@
 
 - Stateless: The library should assume nothing about the state to support portability and parallelization.
 - Separation of IO and CPU: Writing good IO-heavy and CPU-heavy code can be tough in different ways so we separate it where possible to simplify benching.
-- Reinvent the wheel only when necessary: We should aim to use existing mature libraries for functionality; but often there are libraries that are either: lacking low-level features, non-performant for specific use cases, or insufficiently mature. For image primitives, codecs, containers, and metadata, the mature library is [gamut](https://github.com/justin13888/gamut) — improve it upstream rather than reimplementing here (see the Upstream-First Policy in AGENTS.md). Accepted exceptions: GIF (`gif`), SVG (`resvg`), PPM (`zune-ppm`).
+- Reinvent the wheel only when necessary: We should aim to use existing mature libraries for functionality; but often there are libraries that are either: lacking low-level features, non-performant for specific use cases, or insufficiently mature. For image primitives, codecs, containers, and metadata, the mature library is [gamut](https://github.com/visualcommons/gamut) — improve it upstream rather than reimplementing here (see the Upstream-First Policy in AGENTS.md). Accepted exceptions: GIF (`gif`), SVG (`resvg`), PPM (`zune-ppm`).
 
 ## Safety Boundaries
 

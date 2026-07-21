@@ -93,7 +93,7 @@ impl Rect {
 }
 
 // Manual serde: `Dimensions` is a gamut type without serde derives
-// (justin13888/gamut#257), so `Rect` flattens to four integers on the wire —
+// (visualcommons/gamut#257), so `Rect` flattens to four integers on the wire —
 // which is also the more natural stable form.
 #[cfg(feature = "serde")]
 impl serde::Serialize for Rect {
@@ -124,7 +124,7 @@ impl<'de> serde::Deserialize<'de> for Rect {
 }
 
 /// Serde adapter for the re-exported [`Dimensions`], which carries no serde
-/// derives upstream (justin13888/gamut#257).
+/// derives upstream (visualcommons/gamut#257).
 ///
 /// Use on struct fields:
 /// `#[cfg_attr(feature = "serde", serde(with = "rawshift_core::image::dimensions_serde"))]`

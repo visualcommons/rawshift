@@ -7,7 +7,7 @@ how to get test data, and how to add new test images.
 
 Real RAW test images and their reference sidecar files live in a **separate repo**:
 
-> **[justin13888/rawshift-test-fixtures](https://github.com/justin13888/rawshift-test-fixtures)**
+> **[visualcommons/rawshift-test-fixtures](https://github.com/visualcommons/rawshift-test-fixtures)**
 
 Each camera device (Make/Model) is independently versioned and released as a
 tarball via GitHub Releases. This repo pins specific device versions in
@@ -101,7 +101,7 @@ test_fixtures/
 Pins which device versions to fetch:
 ```json
 {
-  "repo": "justin13888/rawshift-test-fixtures",
+  "repo": "visualcommons/rawshift-test-fixtures",
   "devices": {
     "sony-ilce-6700": { "version": 1, "make": "SONY", "model": "ILCE-6700" },
     "apple-iphone-17-pro-max": { "version": 1, "make": "Apple", "model": "iPhone_17_Pro_Max" }
@@ -165,7 +165,7 @@ python3 scripts/test_coverage_report.py
 
 ## Adding New RAW Test Images
 
-See the [rawshift-test-fixtures README](https://github.com/justin13888/rawshift-test-fixtures)
+See the [rawshift-test-fixtures README](https://github.com/visualcommons/rawshift-test-fixtures)
 for the full workflow. Summary:
 
 1. Source a CC0-licensed sample from **raw.pixls.us** or **DPReview**
@@ -199,7 +199,7 @@ cargo test --features=full
 The pre-migration `tiff_parser_tests` suite died with the in-repo binrw TIFF
 parser (rawshift#21) — IFD structure walking is now gamut-ifd, exercised by
 `ifd_decoder_tests` and `dng_check`; its malformed-input corpus was
-contributed upstream (justin13888/gamut#262, #264).
+contributed upstream (visualcommons/gamut#262, #264).
 
 Tests skip gracefully when fixture files are missing — `cargo test` always
 passes even without test data.

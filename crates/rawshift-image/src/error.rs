@@ -47,7 +47,7 @@ pub enum RawError {
     ///
     /// `context` names the rawshift operation that invoked gamut, since the
     /// upstream error alone rarely identifies the call site (structured
-    /// diagnostic context upstream is justin13888/gamut#254).
+    /// diagnostic context upstream is visualcommons/gamut#254).
     #[error("{context}: {source}")]
     Gamut {
         /// The rawshift operation that invoked gamut.

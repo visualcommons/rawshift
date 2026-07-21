@@ -8,13 +8,13 @@ Clean-slate implementation for raw image decoding with full metadata support and
 
 ## Upstream-First Policy (gamut)
 
-rawshift depends on [gamut](https://github.com/justin13888/gamut) for image
+rawshift depends on [gamut](https://github.com/visualcommons/gamut) for image
 primitives, color, metadata, container parsing, and codecs. gamut is consumed
 as versioned crates.io dependencies in the workspace `Cargo.toml`; git
 dependencies are not permitted because they prevent publishing rawshift.
 
 - If a rawshift change needs any change in gamut (new API, bug fix, missing
-  format capability), you MUST: (1) open an issue on `justin13888/gamut`
+  format capability), you MUST: (1) open an issue on `visualcommons/gamut`
   first, (2) wait for it to land on gamut `master`, (3) wait for the affected
   gamut crates to be published, (4) update the workspace dependency versions,
   and only then (5) make the rawshift change.

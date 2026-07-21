@@ -1,6 +1,6 @@
 # rawshift-video
 
-Video format support for [rawshift](https://github.com/justin13888/rawshift).
+Video format support for [rawshift](https://github.com/visualcommons/rawshift).
 
 > **Status: parked for v1, unpublished.** rawshift v1 ships image only. No
 > video code ships today, this crate is marked `publish = false`, and it is

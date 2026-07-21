@@ -1,7 +1,7 @@
 # rawshift-image
 
 Still-image decoding, RAW processing, and encoding for
-[rawshift](https://github.com/justin13888/rawshift).
+[rawshift](https://github.com/visualcommons/rawshift).
 
 This crate carries the full per-format feature system described below. Most
 consumers should depend on the [`rawshift`](https://crates.io/crates/rawshift)
@@ -14,21 +14,21 @@ or an explicit hardware-decode backend pin (`hw-*`).
 
 | Format       | Decoding                                                                                 | Encoding                                                                                         | Notes                                     |
 | ------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| Sony ARW     | [gamut-ifd](https://github.com/justin13888/gamut) structure + in-repo LJPEG (Stabilizing) | N/A                                                                                              |                                           |
-| Canon CR2    | [gamut-ifd](https://github.com/justin13888/gamut) structure + in-repo LJPEG (Incomplete)  | N/A                                                                                              | No test fixtures.                         |
-| Canon CR3    | In-repo ISOBMFF box walk + [gamut-ifd](https://github.com/justin13888/gamut) for embedded TIFF (Incomplete) | N/A                                                                            | Metadata only. CRX codec not implemented. |
+| Sony ARW     | [gamut-ifd](https://github.com/visualcommons/gamut) structure + in-repo LJPEG (Stabilizing) | N/A                                                                                              |                                           |
+| Canon CR2    | [gamut-ifd](https://github.com/visualcommons/gamut) structure + in-repo LJPEG (Incomplete)  | N/A                                                                                              | No test fixtures.                         |
+| Canon CR3    | In-repo ISOBMFF box walk + [gamut-ifd](https://github.com/visualcommons/gamut) for embedded TIFF (Incomplete) | N/A                                                                            | Metadata only. CRX codec not implemented. |
 | Canon CRW    | Custom CIFF parser (Incomplete)                                                          | N/A                                                                                              | Detection only. No pixel decode.          |
-| Adobe DNG    | [gamut-dng](https://github.com/justin13888/gamut) (Stabilizing)                          | [gamut-dng](https://github.com/justin13888/gamut) `DngEncoder` (Stabilizing)                     | Includes Apple ProRAW (DNG 1.7 + JXL).    |
-| Nikon NEF    | [gamut-ifd](https://github.com/justin13888/gamut) structure (Incomplete)                  | N/A                                                                                              | No test fixtures.                         |
+| Adobe DNG    | [gamut-dng](https://github.com/visualcommons/gamut) (Stabilizing)                          | [gamut-dng](https://github.com/visualcommons/gamut) `DngEncoder` (Stabilizing)                     | Includes Apple ProRAW (DNG 1.7 + JXL).    |
+| Nikon NEF    | [gamut-ifd](https://github.com/visualcommons/gamut) structure (Incomplete)                  | N/A                                                                                              | No test fixtures.                         |
 | Fujifilm RAF | Custom RAF parser (Incomplete)                                                           | N/A                                                                                              | No test fixtures.                         |
-| JPEG         | [gamut-jpeg](https://github.com/justin13888/gamut) (Stable)                             | [gamut-jpeg](https://github.com/justin13888/gamut) (Stable)                                      | Pure Rust. Decode: baseline + progressive, grayscale/YCbCr/RGB/CMYK/YCCK. Encode: baseline or progressive 8-bit DCT (quality/subsampling/restart/density); APP1/APP2 EXIF/XMP/ICC both ways. |
-| PNG          | [gamut-png](https://github.com/justin13888/gamut) (Stable)                              | [gamut-png](https://github.com/justin13888/gamut) (Stable)                                       | Pure Rust. Decode: every colour type/bit depth incl. Adam7, eXIf/iCCP/XMP extraction, resource guards. Encode: 8/16-bit RGB, eXIf/iCCP/XMP chunks. |
-| WebP         | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                              | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                                      | C FFI bindings to libwebp. gamut-webp migration blocked upstream ([gamut#302](https://github.com/justin13888/gamut/issues/302), tracked by [rawshift#24](https://github.com/justin13888/rawshift/issues/24)). |
+| JPEG         | [gamut-jpeg](https://github.com/visualcommons/gamut) (Stable)                             | [gamut-jpeg](https://github.com/visualcommons/gamut) (Stable)                                      | Pure Rust. Decode: baseline + progressive, grayscale/YCbCr/RGB/CMYK/YCCK. Encode: baseline or progressive 8-bit DCT (quality/subsampling/restart/density); APP1/APP2 EXIF/XMP/ICC both ways. |
+| PNG          | [gamut-png](https://github.com/visualcommons/gamut) (Stable)                              | [gamut-png](https://github.com/visualcommons/gamut) (Stable)                                       | Pure Rust. Decode: every colour type/bit depth incl. Adam7, eXIf/iCCP/XMP extraction, resource guards. Encode: 8/16-bit RGB, eXIf/iCCP/XMP chunks. |
+| WebP         | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                              | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                                      | C FFI bindings to libwebp. gamut-webp migration blocked upstream ([gamut#302](https://github.com/visualcommons/gamut/issues/302), tracked by [rawshift#24](https://github.com/visualcommons/rawshift/issues/24)). |
 | GIF          | [gif](https://github.com/image-rs/image-gif) (Stable)                                    | Not planned                                                                                      | Permanent exception to the gamut migration (AGENTS.md). |
-| TIFF         | [tiff](https://github.com/image-rs/image-tiff) (Stable)                                  | Not planned                                                                                      | gamut-tiff migration blocked upstream ([gamut#299](https://github.com/justin13888/gamut/issues/299)/[#300](https://github.com/justin13888/gamut/issues/300), tracked by [rawshift#22](https://github.com/justin13888/rawshift/issues/22)). |
-| JXL          | [gamut-jxl](https://github.com/justin13888/gamut) (Stable)                               | [gamut-jxl](https://github.com/justin13888/gamut) (Stable)                                       | Decode is pure Rust (jxl-rs); encode wraps the reference libjxl, cmake-built and statically linked by gamut-jxl-sys. |
-| AVIF         | [gamut-avif](https://github.com/justin13888/gamut) container/pipeline + [rawshift-hwdec](../rawshift-hwdec) hardware AV1 (Functional) | [gamut-avif](https://github.com/justin13888/gamut) (Functional)                                  | Decode: container, metadata, and auxiliary enumeration always work; pixel decode needs a hardware AV1 backend (`hw`/`hw-*`, AV1 Profile 0) and reports `HwDecoderUnavailable` without one — software fallback is post-v1 ([gamut#259](https://github.com/justin13888/gamut/issues/259)); 10/12-bit presentation pending [gamut#303](https://github.com/justin13888/gamut/issues/303). Encode via gamut (pure Rust; 8-bit RGB, lossless/lossy AV1 intra, 4:4:4). 10/12-bit encode temporarily unavailable, pending [gamut#251](https://github.com/justin13888/gamut/issues/251). |
-| HEIC         | [gamut-heic](https://github.com/justin13888/gamut) container/pipeline + [rawshift-hwdec](../rawshift-hwdec) hardware HEVC (Functional) | Not planned                                                                                      | Requires `heic` feature. Container, metadata, and auxiliary enumeration always work; pixel decode needs a hardware HEVC backend (`hw`/`hw-*`) and reports `HwDecoderUnavailable` without one. |
+| TIFF         | [tiff](https://github.com/image-rs/image-tiff) (Stable)                                  | Not planned                                                                                      | gamut-tiff migration blocked upstream ([gamut#299](https://github.com/visualcommons/gamut/issues/299)/[#300](https://github.com/visualcommons/gamut/issues/300), tracked by [rawshift#22](https://github.com/visualcommons/rawshift/issues/22)). |
+| JXL          | [gamut-jxl](https://github.com/visualcommons/gamut) (Stable)                               | [gamut-jxl](https://github.com/visualcommons/gamut) (Stable)                                       | Decode is pure Rust (jxl-rs); encode wraps the reference libjxl, cmake-built and statically linked by gamut-jxl-sys. |
+| AVIF         | [gamut-avif](https://github.com/visualcommons/gamut) container/pipeline + [rawshift-hwdec](../rawshift-hwdec) hardware AV1 (Functional) | [gamut-avif](https://github.com/visualcommons/gamut) (Functional)                                  | Decode: container, metadata, and auxiliary enumeration always work; pixel decode needs a hardware AV1 backend (`hw`/`hw-*`, AV1 Profile 0) and reports `HwDecoderUnavailable` without one — software fallback is post-v1 ([gamut#259](https://github.com/visualcommons/gamut/issues/259)); 10/12-bit presentation pending [gamut#303](https://github.com/visualcommons/gamut/issues/303). Encode via gamut (pure Rust; 8-bit RGB, lossless/lossy AV1 intra, 4:4:4). 10/12-bit encode temporarily unavailable, pending [gamut#251](https://github.com/visualcommons/gamut/issues/251). |
+| HEIC         | [gamut-heic](https://github.com/visualcommons/gamut) container/pipeline + [rawshift-hwdec](../rawshift-hwdec) hardware HEVC (Functional) | Not planned                                                                                      | Requires `heic` feature. Container, metadata, and auxiliary enumeration always work; pixel decode needs a hardware HEVC backend (`hw`/`hw-*`) and reports `HwDecoderUnavailable` without one. |
 | SVG          | [resvg/tiny-skia](https://github.com/linebender/resvg) (Functional)                      | Not planned                                                                                      | Permanent exception to the gamut migration (AGENTS.md). |
 | PPM          | [zune-ppm](https://github.com/etemesi254/zune-image/tree/dev/crates/zune-ppm) (Functional) | Not planned                                                                                    | Netpbm family: P5, P6, P7, PFM. Permanent exception to the gamut migration (AGENTS.md). |
 
@@ -71,7 +71,7 @@ below.
      statically — it needs cmake and a C++ toolchain. `avif-encode` is pure
      Rust: 8-bit RGB, lossless or lossy AV1 intra; 10/12-bit AVIF encode is
      temporarily unavailable, pending
-     [gamut#251](https://github.com/justin13888/gamut/issues/251).
+     [gamut#251](https://github.com/visualcommons/gamut/issues/251).
      `avif-decode` is container/metadata pure Rust; its pixel decode needs a
      hardware AV1 backend — see the `hw` flags under tier 5.)
    - Exception/blocked formats: `webp-decode`, `webp-encode`, `gif-decode`,
@@ -86,12 +86,12 @@ below.
    - `gif-decode-gif`, `svg-decode-resvg`, `ppm-decode-zune` — permanent
      exceptions to the gamut migration (AGENTS.md upstream-first policy).
    - `tiff-decode-tiff` — gamut-tiff migration blocked upstream
-     ([gamut#299](https://github.com/justin13888/gamut/issues/299)/[#300](https://github.com/justin13888/gamut/issues/300),
-     tracked by [rawshift#22](https://github.com/justin13888/rawshift/issues/22)).
+     ([gamut#299](https://github.com/visualcommons/gamut/issues/299)/[#300](https://github.com/visualcommons/gamut/issues/300),
+     tracked by [rawshift#22](https://github.com/visualcommons/rawshift/issues/22)).
    - `webp-decode-libwebp`, `webp-encode-libwebp` — gamut-webp migration
      blocked upstream
-     ([gamut#302](https://github.com/justin13888/gamut/issues/302), tracked by
-     [rawshift#24](https://github.com/justin13888/rawshift/issues/24)).
+     ([gamut#302](https://github.com/visualcommons/gamut/issues/302), tracked by
+     [rawshift#24](https://github.com/visualcommons/rawshift/issues/24)).
 5. **Infrastructure / linking features** — cross-cutting, not tied to one format.
    - `ifd-parser` — the gamut-ifd TIFF/IFD structure engine used by the
      TIFF-based RAW decoders and format detection.

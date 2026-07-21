@@ -19,9 +19,9 @@
 //! Presentation is 8-bit today: a 10/12-bit AVIF hardware-decodes fine at the
 //! rawshift-hwdec level (P010), but gamut-avif's RGBA presentation surface
 //! rejects `bit_depth > 8` until high-bit-depth presentation lands upstream
-//! (the justin13888/gamut#303 program), so such files report a matchable
+//! (the visualcommons/gamut#303 program), so such files report a matchable
 //! [`RawError::Format`] here. Software AV1 decode (Windows/musl/wasm) is
-//! post-v1 via justin13888/gamut#259 — AVIF pixel decode is hardware-only,
+//! post-v1 via visualcommons/gamut#259 — AVIF pixel decode is hardware-only,
 //! like HEIC.
 //!
 //! AVIF is also reachable through the generic standard-format API
@@ -135,7 +135,7 @@ impl AvifFile {
     /// decoder is available (probe with [`avif_hw_decode_available`]), and
     /// [`RawError::Format`] for a malformed or unsupported image — including
     /// 10/12-bit content, whose RGBA presentation is pending upstream
-    /// (justin13888/gamut#303; see the module docs).
+    /// (visualcommons/gamut#303; see the module docs).
     pub fn decode_primary(&self) -> RawResult<RgbImage> {
         self.decode_item(self.image.primary_item().id())
     }

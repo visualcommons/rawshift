@@ -1,7 +1,7 @@
 # rawshift v1 Design
 
 The finalized shape of rawshift v1: full dependence on
-[gamut](https://github.com/justin13888/gamut) wherever it covers the ground,
+[gamut](https://github.com/visualcommons/gamut) wherever it covers the ground,
 upstream-first for every gap (see the policy in [AGENTS.md](../AGENTS.md)),
 hardware codestream decode for HEVC/AV1, and no video. **v1 is the clean
 final state: 0.x source compatibility is a non-goal.**

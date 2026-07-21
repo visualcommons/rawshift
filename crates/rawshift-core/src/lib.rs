@@ -5,7 +5,7 @@
 //! vocabulary (re-exported from `gamut-core`), CFA patterns, the raw sensor
 //! container, and the format-agnostic [`metadata`] model.
 //!
-//! Generic image primitives come from [gamut](https://github.com/justin13888/gamut)
+//! Generic image primitives come from [gamut](https://github.com/visualcommons/gamut)
 //! and are re-exported here rather than reimplemented (see the workspace
 //! upstream-first policy): [`Dimensions`], the sealed [`Pixel`]/[`Sample`]
 //! traits with their marker types ([`Rgb16`], [`Rgba8`], …), the [`ImageBuf`]/

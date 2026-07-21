@@ -26,7 +26,7 @@
 //! (`libwebp` for WebP, the `tiff` crate for TIFF) or permanent exceptions
 //! (`gif`, `resvg`, `zune-ppm`); see the workspace upstream-first policy.
 //!
-//! [gamut]: https://github.com/justin13888/gamut
+//! [gamut]: https://github.com/visualcommons/gamut
 //! [`rawshift`]: https://docs.rs/rawshift
 //!
 //! ## Supported Formats
