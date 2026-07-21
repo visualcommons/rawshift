@@ -48,6 +48,6 @@ git_tag_enable = false
 name = "rawshift-video"
 # Parked for v1: the crate carries `publish = false`, so release-plz must not
 # try to release it, changelog it, or tag it.
-release = false
+publish = false
 changelog_update = false
 git_tag_enable = false
