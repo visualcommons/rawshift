@@ -20,7 +20,7 @@ is missing or no hardware decoder is usable at runtime.
 Pre-migration baselines were **not captured** before the gamut migration epic
 (#38) started, so no repo-wide before/after comparison exists. Per-codec
 before/after numbers were recorded in the individual migration PRs where they
-were measured (PNG: #47, JPEG: #52). The table below is the **post-migration
+were measured (PNG: #47, JPEG: #52, WebP: #24). The table below is the **post-migration
 baseline** — the reference point for future regressions — captured on
 2026-07-18 at commit `217c596` (post `chore(features,ci)`), `--quick` mode.
 
@@ -42,11 +42,30 @@ re-measure with a full `cargo bench` run before acting on small deltas.
 | jpeg_decode_512x512 (gamut-jpeg) | 6.04 ms |
 | png_encode_512x512 (gamut-png) | 23.0 ms |
 | png_decode_512x512 (gamut-png) | 4.72 ms |
+| webp_encode_512x512 (gamut-webp) | 9.97 ms² |
+| webp_decode_512x512 (gamut-webp) | 4.88 ms² |
 | heic_hw_decode_primary_512x512 (gamut-heic + VAAPI HEVC) | 9.20 ms |
 | avif_hw_decode_primary_512x512 (gamut-avif + VAAPI AV1) | 9.48 ms |
 
 ¹ Lazy zero-page allocation artifact at this size; not a real throughput
 number.
+
+² Added from the full (non-`--quick`) WebP migration run on 2026-08-05.
+
+### WebP migration comparison (2026-08-05)
+
+Full Criterion runs on the same Ryzen 7 7800X3D host, using the synthetic
+512×512 gradient and each backend's default lossy quality (75):
+
+| Benchmark | libwebp 0.14.2 | gamut-webp 0.3.1 |
+|---|---:|---:|
+| webp_encode_512x512 | 7.40 ms | 9.97 ms |
+| webp_decode_512x512 | 766 µs | 4.88 ms |
+
+The decode comparison includes each encoder's own output, so it measures the
+end-to-end default round trip rather than holding the compressed stream
+constant. These values establish the gamut-webp baseline; performance work
+belongs upstream under the repository's upstream-first policy.
 
 ### demosaic
 

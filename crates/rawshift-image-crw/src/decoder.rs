@@ -173,8 +173,7 @@ impl<R: Read + Seek> CrwFile<R> {
     ///
     /// Full CRW/CIFF pixel decoding requires a complete CIFF heap parser and a
     /// Canon-specific RAW decompressor, which are not yet implemented. This
-    /// method returns [`RawError::UnsupportedOperation`] until that work is
-    /// done.
+    /// method returns [`RawError::Unsupported`] until that work is done.
     pub fn decode_raw(&mut self) -> RawResult<RawImage> {
         Err(RawError::Unsupported(
             "CRW pixel decode is not yet implemented; \

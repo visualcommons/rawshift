@@ -227,8 +227,8 @@ pub fn avif_hw_decode_available() -> bool {
 ///
 /// Reads the embedded EXIF, XMP, and ICC profile and maps them onto
 /// [`ImageMetadata`]. Returns a default (empty) value when the file carries no
-/// metadata or cannot be parsed. Used by both [`AvifFile::metadata`] and
-/// [`read_standard_image_metadata`](crate::formats::read_standard_image_metadata).
+/// metadata or cannot be parsed. Used by both [`AvifFile::metadata`] and the
+/// `rawshift-image` facade's standard metadata reader.
 pub fn read_avif_metadata(data: &[u8]) -> ImageMetadata {
     match AvifContainer::parse(data) {
         Ok(container) => metadata_from_image(container.image()),

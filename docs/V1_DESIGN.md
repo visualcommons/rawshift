@@ -80,7 +80,7 @@ pub struct RgbImage { buf: ImageBuf<Rgb16>, color: ColorDescription,
 Options are **format-keyed** (the backend-selection axis is gone — gamut is
 the backend). Every variant is format-named; where a non-gamut backend
 remains (blocked migrations, permanent exceptions) the *config struct* names
-it honestly (`LibwebpDecodeConfig`, `TiffDecodeConfig`, `GifDecodeConfig`,
+it honestly (`TiffDecodeConfig`, `GifDecodeConfig`,
 `ResvgDecodeConfig`, `ZunePpmDecodeConfig`). Config structs are
 rawshift-owned mirrors of committed gamut knobs; see the tables below.
 
@@ -98,7 +98,7 @@ rawshift-owned mirrors of committed gamut knobs; see the tables below.
 | --- | --- |
 | `Png` | `common`, `compression` (Default), `filter` (MinSumAbs), `auto_reduce` (false) |
 | `Jpeg` | `common`, `quality: u8` (90), `subsampling` (4:2:0), `progressive` (false), `restart_interval: u16` (0), `density` (1:1 aspect ratio) |
-| `WebP` | `common`, `mode` (Lossy), `quality: f32` (75.0), `method: u32` (4), `near_lossless: u32` (100 = off) |
+| `WebP` | `common`, `mode` (Lossy), `quality: u8` (75, lossy only) |
 | `Avif` | `common`, `lossless: bool` (true), `quality: u8` (80, lossy only); 10/12-bit output pending gamut#251 |
 | `Jxl` | `common`, `lossless: bool` (true), `distance: f32` (1.0), `effort: u8` (7), `use_container` (false), `coded_bit_depth` (None) |
 | `Dng` | `software`, `embed_exif` (true), `embed_gps` (own config shape; LinearRaw 16-bit uncompressed) |
@@ -115,7 +115,7 @@ BitDepth (Sixteen where supported) }`.
 | --- | --- | --- | --- |
 | JPEG | ✅ | ✅ | gamut JPEG (upstream #28) |
 | PNG | ✅ | ✅ | gamut-png (decoder upstream) |
-| WebP | ✅ | ✅ | libwebp (`libwebp-sys`) — gamut-webp migration blocked upstream (gamut#302, tracked by rawshift#24) |
+| WebP | ✅ | ✅ | gamut-webp (pure Rust VP8/VP8L) |
 | JXL | ✅ (pure Rust) | ✅ (libjxl via gamut-jxl-sys) | gamut-jxl |
 | TIFF | ✅ | — | `tiff` crate — gamut-tiff migration (incl. new encode) blocked upstream (gamut#299/#300, tracked by rawshift#22) |
 | AVIF | ✅ hardware | ✅ (Rgb8 lossless now; 10/12-bit upstream) | gamut-avif container + rawshift-hwdec AV1 |
@@ -150,10 +150,9 @@ tier-1 target expecting success. Deleted feature axes: the per-implementation
 flags of every gamut-backed format, `container-embed`, `tiff-parser`
 (replaced by `ifd-parser` over gamut-ifd), `heic-vendored`, every
 `*-vendored` linking flag. Retained (delivered reality, post-#34 audit):
-six implementation aliases — `gif-decode-gif` / `svg-decode-resvg` /
+four implementation aliases — `gif-decode-gif` / `svg-decode-resvg` /
 `ppm-decode-zune` (permanent exceptions per AGENTS.md) and
-`tiff-decode-tiff` / `webp-decode-libwebp` / `webp-encode-libwebp` (blocked
-migrations: gamut#299/#300 via rawshift#22, gamut#302 via rawshift#24) —
+`tiff-decode-tiff` (blocked migration: gamut#299/#300 via rawshift#22) —
 plus the `zune-runtime` and `exif` infrastructure flags they and the
 gamut metadata stack hang off.
 
@@ -202,8 +201,7 @@ ravif, avif-serialize, libaom-sys, image, libheif-rs, little_exif,
 img-parts, binrw. `build.rs` shrinks to cfg aliases + feature/target
 verification.
 
-Still present, pending blocked upstream migrations (post-#34 audit):
-`libwebp-sys` (gamut-webp — gamut#302 via rawshift#24) and `tiff`
+Still present, pending a blocked upstream migration (post-#34 audit): `tiff`
 (gamut-tiff — gamut#299/#300 via rawshift#22). Permanent exceptions that
 stay: `gif`, `resvg`, `zune-ppm` (+ its `zune-core` runtime).
 

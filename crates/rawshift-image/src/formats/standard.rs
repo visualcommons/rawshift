@@ -393,7 +393,7 @@ pub use rawshift_image_gif::GifDecodeConfig;
 pub use rawshift_image_jpeg::JpegDecodeConfig;
 pub use rawshift_image_jxl::JxlDecodeConfig;
 pub use rawshift_image_tiff::TiffDecodeConfig;
-pub use rawshift_image_webp::LibwebpDecodeConfig;
+pub use rawshift_image_webp::WebpDecodeConfig;
 empty_decode_config!(AvifDecodeConfig, "gamut-avif + rawshift-hwdec");
 empty_decode_config!(HeicDecodeConfig, "gamut-heic + rawshift-hwdec");
 pub use rawshift_image_ppm::ZunePpmDecodeConfig;
@@ -403,10 +403,9 @@ pub use rawshift_image_ppm::ZunePpmDecodeConfig;
 ///
 /// The enum is *format-keyed*: each variant names one format, and there is no
 /// backend-selection axis — gamut is the decoder for every migrated format.
-/// Where a non-gamut backend remains (libwebp and the `tiff` crate pending
-/// blocked upstream migrations; `gif`/`resvg`/`zune-ppm` as permanent
-/// exceptions) the configuration struct names it honestly (e.g.
-/// [`LibwebpDecodeConfig`]), but the variant stays format-named.
+/// Where a non-gamut backend remains (the `tiff` crate pending an upstream
+/// migration; `gif`/`resvg`/`zune-ppm` as permanent exceptions), the
+/// configuration struct names it honestly, but the variant stays format-named.
 ///
 /// Use [`DecodeOptions::default_for`] to obtain the default configuration for
 /// a format. RAW formats are intentionally absent — they are decoded through
@@ -423,9 +422,9 @@ pub enum DecodeOptions {
     /// interlace; alpha/transparency is dropped, palettes expand to RGB).
     #[cfg(feature = "png-decode")]
     Png(PngDecodeConfig),
-    /// WebP via `libwebp`.
+    /// WebP via the pure-Rust `gamut-webp` decoder.
     #[cfg(feature = "webp-decode")]
-    WebP(LibwebpDecodeConfig),
+    WebP(WebpDecodeConfig),
     /// JPEG XL via `gamut-jxl` (the pure-Rust jxl-rs decoder).
     #[cfg(feature = "jxl-decode")]
     Jxl(JxlDecodeConfig),
@@ -490,7 +489,7 @@ impl DecodeOptions {
             #[cfg(feature = "png-decode")]
             DecodeOptions::Png(_) => CodecId::new("png/gamut"),
             #[cfg(feature = "webp-decode")]
-            DecodeOptions::WebP(_) => CodecId::new("webp/libwebp"),
+            DecodeOptions::WebP(_) => CodecId::new("webp/gamut"),
             #[cfg(feature = "jxl-decode")]
             DecodeOptions::Jxl(_) => CodecId::new("jxl/gamut"),
             #[cfg(feature = "gif-decode")]
@@ -521,7 +520,7 @@ impl DecodeOptions {
             #[cfg(feature = "png-decode")]
             StandardFormat::Png => Some(DecodeOptions::Png(PngDecodeConfig::default())),
             #[cfg(feature = "webp-decode")]
-            StandardFormat::WebP => Some(DecodeOptions::WebP(LibwebpDecodeConfig::default())),
+            StandardFormat::WebP => Some(DecodeOptions::WebP(WebpDecodeConfig::default())),
             #[cfg(feature = "jxl-decode")]
             StandardFormat::Jxl => Some(DecodeOptions::Jxl(JxlDecodeConfig::default())),
             #[cfg(feature = "gif-decode")]
@@ -1029,7 +1028,8 @@ mod probe_tests {
     }
 }
 
-/// Extract EXIF metadata from a standard image without decoding pixel data.
+/// Extract EXIF, ICC, and XMP metadata from a standard image without decoding
+/// pixel data.
 ///
 /// Reads embedded EXIF from image file bytes and maps the tags to the unified
 /// [`ImageMetadata`](crate::core::metadata::ImageMetadata) type.  Returns a
@@ -1042,7 +1042,7 @@ mod probe_tests {
 /// |--------|----------------|
 /// | JPEG   | APP1 EXIF + APP1 XMP + APP2 ICC segments (requires `jpeg`) |
 /// | TIFF   | IFD0 EXIF tags |
-/// | WebP   | EXIF chunk |
+/// | WebP   | gamut-webp EXIF + ICC + XMP chunks (requires `webp-decode` or `webp-encode`) |
 /// | AVIF   | gamut-avif Exif + ICC + XMP items (requires `avif-decode`) |
 /// | PNG    | eXIf + iCCP + XMP iTXt chunks (requires `png`) |
 /// | HEIC   | HEIF Exif + ICC + XMP items (requires the `heic` feature) |
@@ -1084,15 +1084,31 @@ pub fn read_standard_image_metadata(
         return read_png_metadata(data);
     }
 
+    // WebP metadata chunks are located by gamut-webp and parsed through the
+    // unified gamut-metadata model before being projected into ImageMetadata.
+    #[cfg(any(feature = "webp-decode", feature = "webp-encode"))]
+    if format == StandardFormat::WebP {
+        return read_webp_metadata(data);
+    }
+
     let container = match format {
         StandardFormat::Tiff => ExifContainer::Tiff,
-        StandardFormat::WebP => ExifContainer::WebP,
         // Formats without an EXIF extraction path (GIF, SVG, JXL, …), plus
         // JPEG/PNG/AVIF when no feature compiled the gamut metadata reader in.
         _ => return crate::core::metadata::ImageMetadata::default(),
     };
 
     ExifParser::parse_from_bytes(data, container)
+}
+
+/// Extract EXIF / ICC / XMP from WebP RIFF chunks via `gamut-webp` and
+/// `gamut-metadata`.
+#[cfg(all(
+    feature = "exif",
+    any(feature = "webp-decode", feature = "webp-encode")
+))]
+fn read_webp_metadata(data: &[u8]) -> crate::core::metadata::ImageMetadata {
+    rawshift_image_webp::read_metadata(data)
 }
 
 /// Extract EXIF / ICC / XMP from a JPEG's APP segments via `gamut-jpeg`.

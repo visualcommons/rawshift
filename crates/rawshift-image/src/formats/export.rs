@@ -4,9 +4,8 @@
 //! it is a *format-keyed* enum — each variant names one output format and
 //! carries the configuration of the backend that encodes it. There is no
 //! backend-selection axis: gamut is the encoder for every migrated format,
-//! and the remaining non-gamut backends (libwebp, pending the gamut-webp
-//! migration) are named honestly by their configuration struct
-//! ([`LibwebpEncodeConfig`]) rather than by extra enum variants.
+//! and permanent exceptions are named by their configuration struct rather
+//! than by extra enum variants.
 //!
 //! `EncodeOptions` is `#[non_exhaustive]` so formats whose encoders are
 //! pending upstream (e.g. TIFF encode via gamut-tiff) can be added without a
@@ -279,33 +278,26 @@ impl Default for JpegEncodeConfig {
     }
 }
 
-/// Configuration for the `libwebp` WebP encoder.
-#[derive(Debug, Clone, PartialEq)]
+/// Configuration for the pure-Rust `gamut-webp` WebP encoder.
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LibwebpEncodeConfig {
+pub struct WebpEncodeConfig {
     /// Encoder-agnostic options. WebP output is always 8-bit.
     pub common: CommonEncodeOptions,
     /// Lossy or lossless mode.
     pub mode: WebPMode,
-    /// Quality, `0.0..=100.0`. For lossy this is image quality; for lossless it
-    /// is the compression effort. Higher quality is larger (lossy). Default: `75.0`.
-    pub quality: f32,
-    /// Compression method, `0` (fast) to `6` (slowest, best). Default: `4`.
-    pub method: u32,
-    /// Near-lossless preprocessing, `0..=100` (`100` = off). Lossless mode only.
-    /// Default: `100`.
-    pub near_lossless: u32,
+    /// Lossy quality, clamped to `0..=100` by gamut-webp; ignored in lossless
+    /// mode. Higher is better quality and generally larger. Default: `75`.
+    pub quality: u8,
 }
 
-impl LibwebpEncodeConfig {
+impl WebpEncodeConfig {
     /// Lossy encoding with sensible defaults.
     pub fn lossy() -> Self {
         Self {
             common: CommonEncodeOptions::default(),
             mode: WebPMode::Lossy,
-            quality: 75.0,
-            method: 4,
-            near_lossless: 100,
+            quality: 75,
         }
     }
 
@@ -318,7 +310,7 @@ impl LibwebpEncodeConfig {
     }
 }
 
-impl Default for LibwebpEncodeConfig {
+impl Default for WebpEncodeConfig {
     fn default() -> Self {
         Self::lossy()
     }
@@ -432,10 +424,9 @@ pub enum EncodeOptions {
     /// JPEG via `gamut-jpeg` (requires `jpeg-encode`).
     #[cfg(feature = "jpeg-encode")]
     Jpeg(JpegEncodeConfig),
-    /// WebP via `libwebp` (requires `webp-encode`; the gamut-webp migration is
-    /// blocked upstream — gamut#302, tracked by rawshift#24).
+    /// WebP via `gamut-webp` (requires `webp-encode`).
     #[cfg(feature = "webp-encode")]
-    WebP(LibwebpEncodeConfig),
+    WebP(WebpEncodeConfig),
     /// AVIF via `gamut-avif` (requires `avif-encode`).
     #[cfg(feature = "avif-encode")]
     Avif(AvifEncodeConfig),
@@ -471,13 +462,13 @@ impl EncodeOptions {
     /// Lossy WebP with default configuration.
     #[cfg(feature = "webp-encode")]
     pub fn webp_lossy() -> Self {
-        Self::WebP(LibwebpEncodeConfig::lossy())
+        Self::WebP(WebpEncodeConfig::lossy())
     }
 
     /// Lossless WebP with default configuration.
     #[cfg(feature = "webp-encode")]
     pub fn webp_lossless() -> Self {
-        Self::WebP(LibwebpEncodeConfig::lossless())
+        Self::WebP(WebpEncodeConfig::lossless())
     }
 
     /// AVIF with default configuration (lossless).
@@ -528,7 +519,7 @@ impl EncodeOptions {
             #[cfg(feature = "jpeg-encode")]
             EncodeOptions::Jpeg(_) => CodecId::new("jpeg/gamut"),
             #[cfg(feature = "webp-encode")]
-            EncodeOptions::WebP(_) => CodecId::new("webp/libwebp"),
+            EncodeOptions::WebP(_) => CodecId::new("webp/gamut"),
             #[cfg(feature = "avif-encode")]
             EncodeOptions::Avif(_) => CodecId::new("avif/gamut"),
             #[cfg(feature = "jxl-encode")]

@@ -224,10 +224,6 @@ pub enum EncodeError {
         /// The bit depth that was requested but is not supported.
         requested: BitDepth,
     },
-
-    /// WebP encoding error.
-    #[error("WebP error: {0}")]
-    WebP(String),
 }
 
 /// Result type alias using RawError.

@@ -13,6 +13,9 @@ use rawshift_image::formats::{
 use serde::Deserialize;
 use std::path::PathBuf;
 
+#[path = "fixtures/libwebp_metadata.rs"]
+mod libwebp_metadata;
+
 /// Ground truth for a standard format fixture.
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -46,6 +49,29 @@ fn test_data_path(rel: &str) -> PathBuf {
         .join("test_data")
         .join("standard")
         .join(rel)
+}
+
+#[cfg(feature = "webp-decode")]
+#[test]
+fn decode_and_read_metadata_from_libwebp_fixture() {
+    let data = libwebp_metadata::libwebp_metadata_webp();
+    let image = decode_standard_image(&data, StandardFormat::WebP)
+        .expect("gamut-webp must decode a libwebp-produced file");
+    assert_eq!((image.width(), image.height()), (1, 1));
+    assert_eq!(image.data(), &[0x1212, 0x5656, 0x9a9a]);
+
+    let chunks = gamut_webp::metadata(&data).expect("fixture RIFF metadata");
+    assert!(chunks.exif.is_some());
+    assert!(chunks.icc.is_some());
+    assert!(chunks.xmp.is_some());
+
+    let metadata = read_standard_image_metadata(&data, StandardFormat::WebP);
+    assert!(metadata.exif_raw.is_some(), "typed EXIF bridge");
+    assert!(metadata.icc_profile.is_some(), "typed ICC bridge");
+    assert!(
+        metadata.xmp.is_none(),
+        "the fixture's empty RDF graph is normalized out by gamut-metadata"
+    );
 }
 
 fn test_fixture_path(rel: &str) -> PathBuf {

@@ -30,7 +30,7 @@ types and `FormatSniffer`/`ImageDecoder`/`ImageEncoder` contracts from
 | Fujifilm RAF | Custom RAF parser (Incomplete)                                                           | N/A                                                                                              | No test fixtures.                         |
 | JPEG         | [gamut-jpeg](https://github.com/visualcommons/gamut) (Stable)                             | [gamut-jpeg](https://github.com/visualcommons/gamut) (Stable)                                      | Pure Rust. Decode: baseline + progressive, grayscale/YCbCr/RGB/CMYK/YCCK. Encode: baseline or progressive 8-bit DCT (quality/subsampling/restart/density); APP1/APP2 EXIF/XMP/ICC both ways. |
 | PNG          | [gamut-png](https://github.com/visualcommons/gamut) (Stable)                              | [gamut-png](https://github.com/visualcommons/gamut) (Stable)                                       | Pure Rust. Decode: every colour type/bit depth incl. Adam7, eXIf/iCCP/XMP extraction, resource guards. Encode: 8/16-bit RGB, eXIf/iCCP/XMP chunks. |
-| WebP         | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                              | [libwebp-sys](https://github.com/noxf/libwebp-sys) (Stable)                                      | C FFI bindings to libwebp. gamut-webp migration blocked upstream ([gamut#302](https://github.com/visualcommons/gamut/issues/302), tracked by [rawshift#24](https://github.com/visualcommons/rawshift/issues/24)). |
+| WebP         | [gamut-webp](https://github.com/visualcommons/gamut) (Stable)                             | [gamut-webp](https://github.com/visualcommons/gamut) (Stable)                                      | Pure Rust VP8/VP8L; EXIF/XMP/ICC metadata in both directions. |
 | GIF          | [gif](https://github.com/image-rs/image-gif) (Stable)                                    | Not planned                                                                                      | Permanent exception to the gamut migration (AGENTS.md). |
 | TIFF         | [tiff](https://github.com/image-rs/image-tiff) (Stable)                                  | Not planned                                                                                      | gamut-tiff migration blocked upstream ([gamut#299](https://github.com/visualcommons/gamut/issues/299)/[#300](https://github.com/visualcommons/gamut/issues/300), tracked by [rawshift#22](https://github.com/visualcommons/rawshift/issues/22)). |
 | JXL          | [gamut-jxl](https://github.com/visualcommons/gamut) (Stable)                               | [gamut-jxl](https://github.com/visualcommons/gamut) (Stable)                                       | Decode is pure Rust (jxl-rs); encode wraps the reference libjxl, cmake-built and statically linked by gamut-jxl-sys. |
@@ -53,9 +53,8 @@ under [Feature Flags](#feature-flags).
 Cargo features are organised in tiers, from high-level bundles down to
 infrastructure flags. gamut is the backend: every gamut-backed direction
 feature pulls its `gamut-*` crate directly, so the tier-4 implementation
-layer has collapsed to six retained aliases — the permanent exceptions
-(GIF/SVG/PPM) and the blocked migrations (TIFF/WebP) listed under tier 4
-below.
+layer has collapsed to four retained aliases — the permanent exceptions
+(GIF/SVG/PPM) and the blocked TIFF migration listed under tier 4 below.
 
 1. **Bundle features** — coarse, ready-made groupings.
    - `default` — `jpeg`, `png`, `webp`, `jxl-decode`, `gif-decode`, `tiff-decode`, `ppm-decode`.
@@ -70,9 +69,9 @@ below.
    - `arw`, `cr2`, `cr3`, `crw`, `nef`, `raf` — RAW, decode-only
 3. **Direction features** — one per format per direction.
    - gamut-backed formats: `jpeg-decode`, `jpeg-encode`, `png-decode`,
-     `png-encode`, `jxl-decode`, `jxl-encode`, `avif-decode`, `avif-encode`,
+     `png-encode`, `webp-decode`, `webp-encode`, `jxl-decode`, `jxl-encode`, `avif-decode`, `avif-encode`,
      `heic-decode` — each has a single gamut-backed implementation
-     (`gamut-jpeg` / `gamut-png` / `gamut-jxl` / `gamut-avif` / `gamut-heic`)
+     (`gamut-jpeg` / `gamut-png` / `gamut-webp` / `gamut-jxl` / `gamut-avif` / `gamut-heic`)
      and pulls it directly, with no tier-4 layer below it. (`jxl-encode` wraps
      the reference libjxl, which `gamut-jxl-sys` cmake-builds and links
      statically — it needs cmake and a C++ toolchain. `avif-encode` is pure
@@ -81,13 +80,13 @@ below.
      [gamut#251](https://github.com/visualcommons/gamut/issues/251).
      `avif-decode` is container/metadata pure Rust; its pixel decode needs a
      hardware AV1 backend — see the `hw` flags under tier 5.)
-   - Exception/blocked formats: `webp-decode`, `webp-encode`, `gif-decode`,
-     `tiff-decode`, `svg-decode`, `ppm-decode` — each is an alias for its
+   - Exception/blocked formats: `gif-decode`, `tiff-decode`, `svg-decode`,
+     `ppm-decode` — each is an alias for its
      retained tier-4 implementation feature (see tier 4).
    - RAW formats: `arw-decode`, `cr2-decode`, `cr3-decode`, `crw-decode`,
      `dng-decode`, `dng-encode`, `nef-decode`, `raf-decode` — RAW formats have a
      single in-repo implementation, so there is no tier-4 layer below them.
-4. **Implementation features** — six retained aliases, named
+4. **Implementation features** — four retained aliases, named
    `format-direction-impl`. The gamut migrations collapsed this tier for every
    gamut-backed format; these remain, each for a named reason:
    - `gif-decode-gif`, `svg-decode-resvg`, `ppm-decode-zune` — permanent
@@ -95,10 +94,6 @@ below.
    - `tiff-decode-tiff` — gamut-tiff migration blocked upstream
      ([gamut#299](https://github.com/visualcommons/gamut/issues/299)/[#300](https://github.com/visualcommons/gamut/issues/300),
      tracked by [rawshift#22](https://github.com/visualcommons/rawshift/issues/22)).
-   - `webp-decode-libwebp`, `webp-encode-libwebp` — gamut-webp migration
-     blocked upstream
-     ([gamut#302](https://github.com/visualcommons/gamut/issues/302), tracked by
-     [rawshift#24](https://github.com/visualcommons/rawshift/issues/24)).
 5. **Infrastructure / linking features** — cross-cutting, not tied to one format.
    - `ifd-parser` — the gamut-ifd TIFF/IFD structure engine used by the
      TIFF-based RAW decoders and format detection.

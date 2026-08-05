@@ -35,7 +35,7 @@ use rawshift_core::metadata::ImageMetadata;
 /// EXIF is rebuilt from the typed fields with [`ExifBuilder`]; the stored XMP
 /// and ICC blobs are parsed into their typed gamut forms (and skipped when
 /// malformed). See the module docs for what the projection drops.
-#[allow(dead_code)] // consumed by the codec metadata slices (#24)
+#[allow(dead_code)] // consumed by format crates that opt into metadata support
 pub fn to_gamut(md: &ImageMetadata) -> Metadata {
     let exif_model = ExifBuilder::new(md).build();
     let exif = (!exif_model.image().fields().is_empty()
@@ -61,7 +61,7 @@ pub fn to_gamut(md: &ImageMetadata) -> Metadata {
 /// parser uses (typed fields plus the generic `extra` mirror, and the
 /// re-serialized blob in `exif_raw`); XMP and ICC are serialized back into
 /// their blob fields.
-#[allow(dead_code)] // consumed by the codec metadata slices (#24)
+#[allow(dead_code)] // consumed by format crates that opt into metadata support
 pub fn from_gamut(metadata: &Metadata) -> ImageMetadata {
     let mut md = match &metadata.exif {
         Some(exif) => ExifParser::parse_metadata(exif),

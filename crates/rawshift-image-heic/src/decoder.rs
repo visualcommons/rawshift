@@ -213,8 +213,8 @@ pub fn heic_hw_decode_available() -> bool {
 ///
 /// Reads the embedded EXIF, XMP, and ICC profile and maps them onto
 /// [`ImageMetadata`]. Returns a default (empty) value when the file carries no
-/// metadata or cannot be parsed. Used by both [`HeicFile::metadata`] and
-/// [`read_standard_image_metadata`](crate::formats::read_standard_image_metadata).
+/// metadata or cannot be parsed. Used by both [`HeicFile::metadata`] and the
+/// `rawshift-image` facade's standard metadata reader.
 pub fn read_heic_metadata(data: &[u8]) -> ImageMetadata {
     match HeifContainer::parse(data) {
         Ok(container) => metadata_from_image(container.image()),
