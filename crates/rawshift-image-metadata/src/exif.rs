@@ -4,15 +4,15 @@
 //! EXIF model — see the Upstream-First Policy) and converts them to and from
 //! [`ImageMetadata`]. Container-level concerns stay on this side only for the
 //! formats whose codec has not yet migrated to gamut: AVIF embedding goes
-//! through the crate's ISOBMFF box splicing ([`crate::metadata::isobmff`]),
+//! through the crate's ISOBMFF box splicing ([`crate::isobmff`]),
 //! and the decode-side blob *location* (`eXIf` chunk, `EXIF` chunk, `Exif`
 //! item) is scanned here. JPEG APP segments are read and written by
 //! `gamut-jpeg` itself (`gamut_jpeg::metadata` / `JpegEncoder::with_exif`);
 //! the remaining container surgery migrates behind the gamut codec boundaries
 //! with the per-format codec issues.
 
-use crate::core::metadata::ImageMetadata;
 use gamut_exif::{ByteOrder, Exif, ExifTag, ExifWriter, Ifd, Value};
+use rawshift_core::metadata::ImageMetadata;
 
 /// Error type for EXIF operations.
 #[derive(Debug)]
@@ -168,7 +168,7 @@ impl<'a> ExifBuilder<'a> {
     /// Build GPS-related EXIF tags.
     fn build_gps(&self, exif: &mut Exif) {
         let gps = &self.metadata.gps;
-        let triple = |v: &[crate::core::metadata::URational; 3]| {
+        let triple = |v: &[rawshift_core::metadata::URational; 3]| {
             Value::Rational(vec![
                 (v[0].numerator, v[0].denominator),
                 (v[1].numerator, v[1].denominator),
@@ -235,8 +235,8 @@ impl<'a> ExifBuilder<'a> {
     /// AVIF uses the HEIF/ISOBMFF container; the EXIF payload is stored as an
     /// `Exif` item (an `ExifDataBlock`: a 4-byte TIFF-header offset followed by
     /// the TIFF stream) and wired into `iinf`/`iloc`/`iref` — see
-    /// [`crate::metadata::isobmff::insert_item`].
-    #[cfg_attr(not(feature = "avif"), allow(dead_code))]
+    /// [`crate::isobmff::insert_item`].
+    #[cfg_attr(not(feature = "avif-encode"), allow(dead_code))]
     pub fn append_to_avif(&self, avif_data: Vec<u8>) -> Result<Vec<u8>, ExifError> {
         let tiff_bytes = self.build_bytes()?;
         // ExifDataBlock (ISO 23008-12): exif_tiff_header_offset then the payload.
@@ -244,7 +244,7 @@ impl<'a> ExifBuilder<'a> {
         let mut payload = Vec::with_capacity(4 + tiff_bytes.len());
         payload.extend_from_slice(&0u32.to_be_bytes());
         payload.extend_from_slice(&tiff_bytes);
-        crate::metadata::isobmff::insert_item(avif_data, *b"Exif", &payload)
+        crate::isobmff::insert_item(avif_data, *b"Exif", &payload)
             .map_err(|e| ExifError::Container(format!("AVIF EXIF embedding failed: {e}")))
     }
 }
@@ -299,7 +299,7 @@ impl ExifParser {
 
     /// Convert an already-parsed [`gamut_exif::Exif`] into [`ImageMetadata`].
     pub fn parse_metadata(exif: &Exif) -> ImageMetadata {
-        use crate::core::metadata::*;
+        use rawshift_core::metadata::*;
 
         let mut md = ImageMetadata::default();
 
@@ -400,8 +400,8 @@ impl ExifParser {
     }
 
     /// Populate [`ImageMetadata::extra`] with a typed mirror of every EXIF tag.
-    fn populate_extra(exif: &Exif, md: &mut crate::core::metadata::ImageMetadata) {
-        use crate::core::metadata::{MetadataKey, MetadataNamespace};
+    fn populate_extra(exif: &Exif, md: &mut rawshift_core::metadata::ImageMetadata) {
+        use rawshift_core::metadata::{MetadataKey, MetadataNamespace};
 
         let directories: [(MetadataNamespace, Option<&Ifd>); 5] = [
             (MetadataNamespace::Exif, Some(exif.image())),
@@ -458,21 +458,21 @@ fn first_u16(value: &Value) -> Option<u16> {
 }
 
 /// The first element of a `RATIONAL` value, as a [`URational`].
-fn first_urational(value: &Value) -> Option<crate::core::metadata::URational> {
+fn first_urational(value: &Value) -> Option<rawshift_core::metadata::URational> {
     match value {
         Value::Rational(v) => v
             .first()
-            .map(|&(n, d)| crate::core::metadata::URational::new(n, d)),
+            .map(|&(n, d)| rawshift_core::metadata::URational::new(n, d)),
         _ => None,
     }
 }
 
 /// The first element of an `SRATIONAL` value, as an [`SRational`].
-fn first_srational(value: &Value) -> Option<crate::core::metadata::SRational> {
+fn first_srational(value: &Value) -> Option<rawshift_core::metadata::SRational> {
     match value {
         Value::SRational(v) => v
             .first()
-            .map(|&(n, d)| crate::core::metadata::SRational::new(n, d)),
+            .map(|&(n, d)| rawshift_core::metadata::SRational::new(n, d)),
         _ => None,
     }
 }
@@ -481,8 +481,8 @@ fn first_srational(value: &Value) -> Option<crate::core::metadata::SRational> {
 ///
 /// Single-element values collapse to a scalar; multi-element values become a
 /// [`MetadataValue::Array`].
-fn exif_value_to_metadata(value: &Value) -> crate::core::metadata::MetadataValue {
-    use crate::core::metadata::{MetadataValue, SRational, URational};
+fn exif_value_to_metadata(value: &Value) -> rawshift_core::metadata::MetadataValue {
+    use rawshift_core::metadata::{MetadataValue, SRational, URational};
 
     fn collapse(mut vals: Vec<MetadataValue>) -> MetadataValue {
         if vals.len() == 1 {
@@ -607,7 +607,7 @@ fn extract_exif_from_webp(data: &[u8]) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::metadata::*;
+    use rawshift_core::metadata::*;
 
     fn sample_metadata() -> ImageMetadata {
         ImageMetadata {

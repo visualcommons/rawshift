@@ -23,15 +23,15 @@ use std::io::{Read, Seek, SeekFrom};
 
 use gamut_ifd::{ByteOrder, Ifd, Value, Variant, read_ifd_at};
 
-use crate::core::metadata::{DateTimeInfo, ExifInfo, GpsInfo, SRational, URational};
-use crate::error::{ParseError, RawError, RawResult};
+use rawshift_core::metadata::{DateTimeInfo, ExifInfo, GpsInfo, SRational, URational};
+use rawshift_image_core::{ParseError, RawError, RawResult};
 
 /// The tag catalogue used by the ARW/CR2/NEF decoders, CR3's CMT TIFF blocks,
 /// and format detection.
 ///
 /// Numeric ids per TIFF 6.0, TIFF/EP, Exif 3.0, DNG 1.7, and the community
 /// Sony SR2 documentation. Names follow the legacy `TiffTag` variants.
-pub(crate) mod tags {
+pub mod tags {
     // ── Baseline TIFF (TIFF 6.0 §8) ──────────────────────────────────────────
     pub const NEW_SUBFILE_TYPE: u16 = 0x00FE;
     pub const IMAGE_WIDTH: u16 = 0x0100;
@@ -134,7 +134,7 @@ const MAX_SUB_IFD_DEPTH: usize = 8;
 
 /// A parsed TIFF container: its layout parameters and the IFD chain with the
 /// standard sub-IFD pointer tree resolved.
-pub(crate) struct TiffTree {
+pub struct TiffTree {
     /// The byte order the stream was written in.
     pub order: ByteOrder,
     /// Classic TIFF or BigTIFF.
@@ -146,7 +146,7 @@ pub(crate) struct TiffTree {
 
 /// Reads the whole stream into memory (from absolute offset 0, matching the
 /// legacy parser, which always sought to the file start).
-pub(crate) fn read_all<R: Read + Seek>(mut reader: R) -> RawResult<Vec<u8>> {
+pub fn read_all<R: Read + Seek>(mut reader: R) -> RawResult<Vec<u8>> {
     reader.seek(SeekFrom::Start(0))?;
     let mut data = Vec::new();
     reader.read_to_end(&mut data)?;
@@ -159,7 +159,7 @@ pub(crate) fn read_all<R: Read + Seek>(mut reader: R) -> RawResult<Vec<u8>> {
 /// A malformed *child* directory is skipped with a warning (matching the
 /// legacy parser); a malformed header or top-level chain is an error, wrapped
 /// as [`RawError::Gamut`] under `context`.
-pub(crate) fn parse_tree(data: &[u8], context: &'static str) -> RawResult<TiffTree> {
+pub fn parse_tree(data: &[u8], context: &'static str) -> RawResult<TiffTree> {
     let file = gamut_ifd::read(data).map_err(|e| RawError::gamut(context, e))?;
     let mut ifds = file.ifds;
     let mut visited: Vec<u64> = Vec::new();
@@ -223,7 +223,7 @@ fn resolve_pointers(
 }
 
 /// The child IFDs attached under pointer `tag`, or an empty slice.
-pub(crate) fn sub_ifd_group(ifd: &Ifd, tag: u16) -> &[Ifd] {
+pub fn sub_ifd_group(ifd: &Ifd, tag: u16) -> &[Ifd] {
     ifd.sub_ifds()
         .iter()
         .find(|group| group.tag == tag)
@@ -232,29 +232,29 @@ pub(crate) fn sub_ifd_group(ifd: &Ifd, tag: u16) -> &[Ifd] {
 }
 
 /// The EXIF private sub-IFD of `ifd0`, if it was resolved.
-pub(crate) fn exif_ifd(ifd0: &Ifd) -> Option<&Ifd> {
+pub fn exif_ifd(ifd0: &Ifd) -> Option<&Ifd> {
     sub_ifd_group(ifd0, tags::EXIF_IFD_POINTER).first()
 }
 
 /// The GPS sub-IFD of `ifd0`, if it was resolved.
-pub(crate) fn gps_ifd(ifd0: &Ifd) -> Option<&Ifd> {
+pub fn gps_ifd(ifd0: &Ifd) -> Option<&Ifd> {
     sub_ifd_group(ifd0, tags::GPS_INFO_IFD_POINTER).first()
 }
 
 /// Normalises an on-disk string the way the legacy parser did: trailing NUL
 /// padding stripped, then surrounding whitespace trimmed.
-pub(crate) fn clean_ascii(s: &str) -> String {
+pub fn clean_ascii(s: &str) -> String {
     s.trim_end_matches('\0').trim().to_string()
 }
 
 /// Reads `tag` as a normalised string (see [`clean_ascii`]).
-pub(crate) fn ascii_tag(ifd: &Ifd, tag: u16) -> Option<String> {
+pub fn ascii_tag(ifd: &Ifd, tag: u16) -> Option<String> {
     ifd.get(tag).and_then(Value::as_str).map(clean_ascii)
 }
 
 /// The first element of an unsigned-integer `tag` (`BYTE`/`SHORT`/`LONG`),
 /// the coercion array-shaped tags like `BitsPerSample` need.
-pub(crate) fn first_u32(ifd: &Ifd, tag: u16) -> Option<u32> {
+pub fn first_u32(ifd: &Ifd, tag: u16) -> Option<u32> {
     match ifd.get(tag)? {
         Value::Byte(v) => v.first().map(|&x| u32::from(x)),
         Value::Short(v) => v.first().map(|&x| u32::from(x)),
@@ -265,7 +265,7 @@ pub(crate) fn first_u32(ifd: &Ifd, tag: u16) -> Option<u32> {
 
 /// Borrows `len` bytes at `offset` of `data`, or reports the out-of-bounds
 /// access as [`ParseError::OffsetOutOfBounds`].
-pub(crate) fn read_range(data: &[u8], offset: u64, len: usize) -> RawResult<&[u8]> {
+pub fn read_range(data: &[u8], offset: u64, len: usize) -> RawResult<&[u8]> {
     usize::try_from(offset)
         .ok()
         .and_then(|start| data.get(start..start.checked_add(len)?))
@@ -278,7 +278,7 @@ pub(crate) fn read_range(data: &[u8], offset: u64, len: usize) -> RawResult<&[u8
 
 /// Extracts the embedded JPEG thumbnail referenced by IFD0's
 /// `JPEGInterchangeFormat`/`JPEGInterchangeFormatLength` pair, if present.
-pub(crate) fn jpeg_thumbnail(data: &[u8], ifd0: &Ifd) -> RawResult<Option<Vec<u8>>> {
+pub fn jpeg_thumbnail(data: &[u8], ifd0: &Ifd) -> RawResult<Option<Vec<u8>>> {
     let Some(offset) = first_u32(ifd0, tags::JPEG_INTERCHANGE_FORMAT) else {
         return Ok(None);
     };
@@ -346,7 +346,7 @@ fn urational3_tag(ifd: &Ifd, tag: u16) -> Option<[URational; 3]> {
 // ============================================================================
 
 /// Extracts EXIF exposure/capture settings from IFD0's EXIF sub-IFD.
-pub(crate) fn extract_exif(ifd0: &Ifd) -> ExifInfo {
+pub fn extract_exif(ifd0: &Ifd) -> ExifInfo {
     let Some(exif) = exif_ifd(ifd0) else {
         return ExifInfo::default();
     };
@@ -367,7 +367,7 @@ pub(crate) fn extract_exif(ifd0: &Ifd) -> ExifInfo {
 }
 
 /// Extracts date/time information from IFD0 and its EXIF sub-IFD.
-pub(crate) fn extract_datetime(ifd0: &Ifd) -> DateTimeInfo {
+pub fn extract_datetime(ifd0: &Ifd) -> DateTimeInfo {
     let modify_date = ascii_tag(ifd0, tags::DATE_TIME);
     let exif = exif_ifd(ifd0);
 
@@ -390,7 +390,7 @@ pub(crate) fn extract_datetime(ifd0: &Ifd) -> DateTimeInfo {
 }
 
 /// Extracts GPS location data from IFD0's GPS sub-IFD.
-pub(crate) fn extract_gps(ifd0: &Ifd) -> GpsInfo {
+pub fn extract_gps(ifd0: &Ifd) -> GpsInfo {
     let Some(gps) = gps_ifd(ifd0) else {
         return GpsInfo::default();
     };
@@ -410,7 +410,7 @@ pub(crate) fn extract_gps(ifd0: &Ifd) -> GpsInfo {
 }
 
 /// Extracts lens make/model from IFD0's EXIF sub-IFD.
-pub(crate) fn extract_lens_info(ifd0: &Ifd) -> (Option<String>, Option<String>) {
+pub fn extract_lens_info(ifd0: &Ifd) -> (Option<String>, Option<String>) {
     let Some(exif) = exif_ifd(ifd0) else {
         return (None, None);
     };
@@ -421,7 +421,7 @@ pub(crate) fn extract_lens_info(ifd0: &Ifd) -> (Option<String>, Option<String>) 
 }
 
 /// Extracts the orientation (1-8) from IFD0.
-pub(crate) fn extract_orientation(ifd0: &Ifd) -> Option<u16> {
+pub fn extract_orientation(ifd0: &Ifd) -> Option<u16> {
     u16_tag(ifd0, tags::ORIENTATION)
 }
 

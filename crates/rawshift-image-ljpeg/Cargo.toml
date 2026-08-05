@@ -1,0 +1,15 @@
+[package]
+name = "rawshift-image-ljpeg"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Lossless JPEG decode support for rawshift RAW format crates"
+documentation = "https://docs.rs/rawshift-image-ljpeg"
+keywords = ["raw", "image", "jpeg", "lossless"]
+categories = ["multimedia::images", "compression"]
+
+[dependencies]
+rawshift-image-core = { workspace = true }

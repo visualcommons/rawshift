@@ -6,7 +6,7 @@
 //! move it behind the gamut codec boundaries (JPEG, PNG, and JXL already
 //! embed through their gamut encoders).
 
-use crate::metadata::isobmff::{find_box, patch_iloc_extents, read_u32_be, write_u32_be};
+use crate::isobmff::{find_box, patch_iloc_extents, read_u32_be, write_u32_be};
 
 /// Error type for ICC operations.
 #[derive(Debug)]

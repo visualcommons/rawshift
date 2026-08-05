@@ -9,8 +9,8 @@
 
 use rawshift_core::{ColorDescription, Dimensions, ImageBuf, Rgb16};
 
-use crate::core::Rect;
-use crate::error::{RawError, RawResult};
+use crate::{RawError, RawResult};
+use rawshift_core::Rect;
 
 /// A container for interleaved 16-bit RGB image data (R, G, B, R, G, B, …).
 ///

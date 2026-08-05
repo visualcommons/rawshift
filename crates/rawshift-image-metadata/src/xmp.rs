@@ -48,7 +48,7 @@ fn validate_xmp(xmp_bytes: &[u8]) -> Result<(), XmpError> {
 /// end of the data.  Since the new box follows all existing boxes (including
 /// `mdat`), no `iloc` extent offsets need to be patched.
 /// The payload is validated with `gamut-xmp` first.
-#[cfg_attr(not(feature = "avif"), allow(dead_code))]
+#[cfg_attr(not(feature = "avif-encode"), allow(dead_code))]
 pub fn append_xmp_to_avif(xmp_bytes: &[u8], avif_data: Vec<u8>) -> Result<Vec<u8>, XmpError> {
     validate_xmp(xmp_bytes)?;
 

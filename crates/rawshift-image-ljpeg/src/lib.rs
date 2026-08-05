@@ -13,7 +13,9 @@
 //! - Mode 6: Rb + (Ra - Rc) / 2
 //! - Mode 7: (Ra + Rb) / 2
 
-use crate::error::{FormatError, RawError, RawResult};
+pub mod bit_pump;
+
+use rawshift_image_core::{FormatError, RawError, RawResult};
 
 /// JPEG Markers
 #[allow(dead_code)]
@@ -133,7 +135,7 @@ impl HuffmanTable {
 }
 
 // Re-export BitPump for external use
-pub use super::bit_pump::BitPump;
+pub use crate::bit_pump::BitPump;
 
 /// Lossless JPEG Decoder.
 ///

@@ -29,7 +29,9 @@ pub(crate) mod heic;
 #[cfg(all(feature = "hw", any(feature = "heic-decode", feature = "avif-decode")))]
 pub(crate) mod hw_planes;
 #[cfg(feature = "ifd-parser")]
-pub(crate) mod ifd;
+pub(crate) mod ifd {
+    pub use rawshift_image_ifd::*;
+}
 #[cfg(feature = "nef-decode")]
 pub(crate) mod nef;
 #[cfg(feature = "raf-decode")]

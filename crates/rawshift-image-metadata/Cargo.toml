@@ -1,0 +1,25 @@
+[package]
+name = "rawshift-image-metadata"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Metadata adapters shared by rawshift image format crates"
+documentation = "https://docs.rs/rawshift-image-metadata"
+keywords = ["image", "exif", "icc", "xmp"]
+categories = ["multimedia::images"]
+
+[dependencies]
+rawshift-core = { workspace = true }
+gamut-exif = { workspace = true, optional = true }
+gamut-icc = { workspace = true }
+gamut-ifd = { workspace = true, optional = true, features = ["bigtiff"] }
+gamut-metadata = { workspace = true, optional = true }
+gamut-xmp = { workspace = true, optional = true }
+
+[features]
+exif = ["dep:gamut-exif", "dep:gamut-metadata", "dep:gamut-xmp"]
+avif-encode = ["dep:gamut-xmp"]
+ifd-parser = ["dep:gamut-ifd"]

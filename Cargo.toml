@@ -5,6 +5,10 @@ members = [
     "crates/rawshift-core",
     "crates/rawshift-hwdec",
     "crates/rawshift-image",
+    "crates/rawshift-image-core",
+    "crates/rawshift-image-metadata",
+    "crates/rawshift-image-ifd",
+    "crates/rawshift-image-ljpeg",
     "crates/rawshift-video",
 ]
 
@@ -49,6 +53,10 @@ serde     = { version = "1.0", features = ["derive"] }
 rawshift-core  = { path = "crates/rawshift-core", version = "0.1.1" }
 rawshift-hwdec = { path = "crates/rawshift-hwdec", version = "0.1.1" }
 rawshift-image = { path = "crates/rawshift-image", version = "0.1.1" }
+rawshift-image-core = { path = "crates/rawshift-image-core", version = "0.1.1" }
+rawshift-image-metadata = { path = "crates/rawshift-image-metadata", version = "0.1.1" }
+rawshift-image-ifd = { path = "crates/rawshift-image-ifd", version = "0.1.1" }
+rawshift-image-ljpeg = { path = "crates/rawshift-image-ljpeg", version = "0.1.1" }
 rawshift-video = { path = "crates/rawshift-video", version = "0.1.1" }
 
 # Profiles must live at the workspace root — Cargo ignores profiles declared in

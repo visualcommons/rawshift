@@ -1,0 +1,26 @@
+[package]
+name = "rawshift-image-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Shared contracts and image types for rawshift format crates"
+documentation = "https://docs.rs/rawshift-image-core"
+keywords = ["raw", "image", "codec", "metadata"]
+categories = ["multimedia::images"]
+
+[dependencies]
+rawshift-core = { workspace = true }
+gamut-core = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[features]
+serde = ["dep:serde", "rawshift-core/serde"]
+cr2-decode = []
+cr3-decode = []
+crw-decode = []
+nef-decode = []
+raf-decode = []

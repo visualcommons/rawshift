@@ -21,6 +21,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rawshift-core  = { workspace = true }
+rawshift-image-core = { workspace = true }
+rawshift-image-metadata = { workspace = true }
+rawshift-image-ifd = { workspace = true, optional = true }
+rawshift-image-ljpeg = { workspace = true, optional = true }
 gamut-core     = { workspace = true }
 # gamut-icc backs the sRGB profile construction and validation in
 # `metadata/icc.rs`, which compiles unconditionally (the `IccProfile` type is
@@ -214,7 +218,7 @@ avif-decode = ["dep:gamut-avif", "dep:gamut-isobmff", "exif"]
 # lossless or lossy; 10/12-bit output is pending visualcommons/gamut#251.
 # `exif` supplies the ExifBuilder and the `gamut-xmp` validation used when
 # splicing EXIF/ICC/XMP items into the encoded container.
-avif-encode = ["dep:gamut-avif", "exif"]
+avif-encode = ["dep:gamut-avif", "exif", "rawshift-image-metadata/avif-encode"]
 # HEIC decode is backed directly by gamut-heic (no tier-4 layer): container
 # parsing, metadata, and auxiliary-image enumeration always work; pixel decode
 # additionally needs a hardware HEVC decoder (`hw`/`hw-*`, see below) and
@@ -223,10 +227,10 @@ avif-encode = ["dep:gamut-avif", "exif"]
 heic-decode = ["dep:gamut-heic", "dep:gamut-isobmff", "exif"]
 svg-decode  = ["svg-decode-resvg"]
 ppm-decode  = ["ppm-decode-zune"]
-arw-decode  = ["ifd-parser"]
-cr2-decode  = ["ifd-parser"]
-cr3-decode  = ["ifd-parser"]
-crw-decode  = []
+arw-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg"]
+cr2-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-core/cr2-decode"]
+cr3-decode  = ["ifd-parser", "rawshift-image-core/cr3-decode"]
+crw-decode  = ["rawshift-image-core/crw-decode"]
 # DNG decode is backed by gamut-dng (raw image, levels, camera profile; JPEG
 # XL tile decode is built into gamut-dng, so `jxl-decode` is no longer pulled).
 # `ifd-parser` is additionally pulled because format sniffing
@@ -234,8 +238,8 @@ crw-decode  = []
 # container through gamut-ifd.
 dng-decode  = ["ifd-parser", "dep:gamut-dng"]
 dng-encode  = ["dep:gamut-dng"]
-nef-decode  = ["ifd-parser"]
-raf-decode  = []
+nef-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-core/nef-decode"]
+raf-decode  = ["rawshift-image-core/raf-decode"]
 
 # ── Tier 4: implementation features (six retained aliases only) ───────────────
 # The gamut migrations collapsed this tier for every gamut-backed format — the
@@ -267,8 +271,8 @@ ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
 # ── Tier 5: infrastructure / linking features ─────────────────────────────────
 # gamut-ifd TIFF/IFD structure engine (used by the migrated TIFF-based RAW
 # decoders and by format detection).
-ifd-parser    = ["dep:gamut-ifd"]
-serde         = ["dep:serde", "rawshift-core/serde"]
+ifd-parser    = ["dep:gamut-ifd", "dep:rawshift-image-ifd", "rawshift-image-metadata/ifd-parser"]
+serde         = ["dep:serde", "rawshift-core/serde", "rawshift-image-core/serde"]
 # `zune-core` codec primitives (bit depth, colorspace, decoder/encoder option
 # builders). Pulled by the zune-backed PPM impl feature (`zune-ppm` is a
 # permanent exception to the gamut migration — see AGENTS.md).
@@ -277,7 +281,7 @@ zune-runtime  = ["dep:zune-core"]
 # blob model, `gamut-metadata` + `gamut-xmp` for the unified-model bridge).
 # Pulled by format impl features that parse embedded EXIF on decode or write it
 # on encode.
-exif          = ["dep:gamut-exif", "dep:gamut-metadata", "dep:gamut-xmp"]
+exif          = ["dep:gamut-exif", "dep:gamut-metadata", "dep:gamut-xmp", "rawshift-image-metadata/exif"]
 # Hardware still-frame decode (HEVC for HEIC; AV1 for AVIF). These are
 # **verified** feature flags — see docs/SUPPORT.md for the permanent
 # target/API matrix:

@@ -25,10 +25,10 @@
 //! EXIF fields, mirrors every EXIF tag into `extra`, and stores the XMP/ICC
 //! carriers back as blobs.
 
-use crate::core::metadata::ImageMetadata;
-use crate::metadata::exif::{ExifBuilder, ExifParser};
+use crate::exif::{ExifBuilder, ExifParser};
 use gamut_exif::ExifWriter;
 use gamut_metadata::Metadata;
+use rawshift_core::metadata::ImageMetadata;
 
 /// Project an [`ImageMetadata`] into gamut's unified [`Metadata`] model.
 ///
@@ -85,7 +85,7 @@ pub fn from_gamut(metadata: &Metadata) -> ImageMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::metadata::*;
+    use rawshift_core::metadata::*;
 
     fn sample_metadata() -> ImageMetadata {
         ImageMetadata {
@@ -188,7 +188,7 @@ mod tests {
         let xmp_packet = gamut_xmp::XmpMeta::new().to_packet();
         let md = ImageMetadata {
             xmp: Some(xmp_packet),
-            icc_profile: Some(crate::metadata::icc::IccProfile::srgb().as_bytes().to_vec()),
+            icc_profile: Some(crate::icc::IccProfile::srgb().as_bytes().to_vec()),
             ..Default::default()
         };
 

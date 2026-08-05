@@ -1260,6 +1260,10 @@ dependencies = [
  "libwebp-sys",
  "rawshift-core",
  "rawshift-hwdec",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "rawshift-image-ljpeg",
+ "rawshift-image-metadata",
  "rayon",
  "resvg",
  "serde",
@@ -1271,6 +1275,45 @@ dependencies = [
  "tracing-subscriber",
  "zune-core 0.5.1",
  "zune-ppm",
+]
+
+[[package]]
+name = "rawshift-image-core"
+version = "0.1.1"
+dependencies = [
+ "gamut-core",
+ "rawshift-core",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "rawshift-image-ifd"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-core",
+ "rawshift-image-core",
+ "tracing",
+]
+
+[[package]]
+name = "rawshift-image-ljpeg"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+]
+
+[[package]]
+name = "rawshift-image-metadata"
+version = "0.1.1"
+dependencies = [
+ "gamut-exif",
+ "gamut-icc",
+ "gamut-ifd",
+ "gamut-metadata",
+ "gamut-xmp",
+ "rawshift-core",
 ]
 
 [[package]]
