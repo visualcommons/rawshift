@@ -36,16 +36,14 @@
 //! invariant. The bitstream parsers ([`bits`], [`hevc`], [`av1`]) are safe
 //! Rust.
 
-mod av1;
-mod bits;
-mod hevc;
-mod sys;
+pub(crate) mod sys;
 
 use std::ffi::c_int;
 use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::sync::OnceLock;
 
+use crate::bitstream::{av1, bits, hevc};
 use crate::{
     CodecConfig, ColorRange, DecodedFrame, HwBackend, HwCodec, HwDecodeError, HwStillDecoder,
     PixelFormat, Plane, StillDecodeRequest,

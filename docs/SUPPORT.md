@@ -21,7 +21,7 @@ upstream dependencies require — it is never raised independently.
 | `aarch64-unknown-linux-gnu` | 1 (CI build + test) | VAAPI (runtime dlopen) | |
 | `aarch64-apple-darwin` | 1 (CI build + test) | VideoToolbox | |
 | `aarch64-apple-ios` | 1 (CI build) | VideoToolbox | device tests are manual |
-| `aarch64-linux-android` | 1 (CI build) | MediaCodec | minimum API level fixed when the backend lands |
+| `aarch64-linux-android` | 1 (CI build) | MediaCodec | Android API 29+; physical-device gate is manual |
 | `x86_64-pc-windows-msvc` | 1 (CI build + test) | none (justified below) | HEIC/AVIF pixel decode unavailable until a software AV1 decoder lands upstream; everything else works |
 | `x86_64-unknown-linux-musl` | 2 (CI build) | none | static deploys; no dlopen |
 | `wasm32-unknown-unknown` | 2 (CI build) | none | in-memory API only; no hardware decode, threads, or file IO |
@@ -39,11 +39,21 @@ fixed:
 | --- | --- | --- | --- | --- | --- |
 | VideoToolbox | ✅ in | macOS 11+, iOS 14+ | ✅ | ✅ runtime-probed (M3+ / A17 Pro+ hardware) | system framework |
 | VAAPI (libva) | ✅ in | Linux (gnu) | ✅ Main / Main10 | ✅ AV1 Main (driver-dependent) | dlopen at runtime — absence degrades to "no decoder", never a link failure |
-| MediaCodec (NDK) | ✅ in | Android | ✅ | ✅ (device codec; mandated on newer API levels) | NDK |
+| MediaCodec (NDK) | ✅ in | Android API 29+ | ✅ hardware-probed | ✅ hardware-probed | NDK decode; JNI `MediaCodecList` discovery |
 
 VAAPI covers Intel and AMD natively, **and NVIDIA via the maintained
 [`nvidia-vaapi-driver`](https://github.com/elFarto/nvidia-vaapi-driver)
 translation layer over NVDEC**.
+
+Android uses one decode backend only: NDK `AMediaCodec`, with an
+`AImageReader` output surface. A caller explicitly supplies its process
+`JavaVM` once so rawshift can use the API-29 `MediaCodecInfo` hardware and
+alias classification methods; the selected component is then opened by exact
+name through `AMediaCodec`. Eight-bit output is normalized to dense I420.
+P010 is strict (no downconversion) and requires API 33+, where the public
+MediaCodec P010 capability constant is defined; it is normalized to dense,
+MSB-aligned biplanar P010. See `android/mediacodec-harness/README.md` for the
+formal physical-device acceptance matrix.
 
 ### Excluded APIs, with justification
 

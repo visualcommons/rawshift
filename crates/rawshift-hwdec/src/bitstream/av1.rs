@@ -1,5 +1,6 @@
-//! AV1 still-picture parsing for the VAAPI backend — **safe Rust only**
-//! (no `unsafe`; FFI stays in `sys.rs`/`mod.rs`).
+#![cfg_attr(not(hwdec_backend = "vaapi"), allow(dead_code))]
+//! AV1 still-picture parsing shared by hardware backends — **safe Rust only**
+//! (no `unsafe`; platform FFI stays in backend modules).
 //!
 //! ## Scope
 //!
@@ -16,7 +17,8 @@
 //! `VASliceParameterBufferAV1` per tile.
 
 use super::bits::{BitReader, PResult, ParseError, clip3};
-use super::sys;
+#[cfg(hwdec_backend = "vaapi")]
+use crate::vaapi::sys;
 
 // ── OBU framing (§5.3) ──────────────────────────────────────────────────────
 
@@ -1144,6 +1146,7 @@ pub fn parse_still_picture(config_obus: &[u8], payload: &[u8]) -> PResult<StillP
 
 /// Fill `VADecPictureParameterBufferAV1` for `pic` decoded into `surface`
 /// (and, when film grain is applied, displayed into `display_surface`).
+#[cfg(hwdec_backend = "vaapi")]
 pub fn build_pic_param(
     pic: &StillPicture,
     surface: sys::VASurfaceID,
@@ -1411,6 +1414,7 @@ pub fn build_pic_param(
 
 /// Fill `VASliceParameterBufferAV1` for one tile placed at offset 0 of its
 /// own data buffer.
+#[cfg(hwdec_backend = "vaapi")]
 pub fn build_tile_param(tile: &Tile) -> sys::VASliceParameterBufferAV1 {
     sys::VASliceParameterBufferAV1 {
         slice_data_size: tile.data.len() as u32,
@@ -1517,6 +1521,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(hwdec_backend = "vaapi")]
     fn pic_param_maps_seq_and_frame_fields() {
         let pic = parse_still_picture(&[], AV1_64X64_LIBAOM).unwrap();
         let p = build_pic_param(&pic, 5, sys::VA_INVALID_SURFACE).unwrap();

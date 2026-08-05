@@ -153,7 +153,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.92.0"
-          targets: aarch64-apple-darwin,x86_64-unknown-linux-musl
+          targets: aarch64-apple-darwin,aarch64-linux-android,x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@v2
       - name: Invalid combos must fail with the compile_error text
         run: |
@@ -182,6 +182,12 @@ jobs:
         run: |
           # Explicit pin on its native target.
           cargo check -p rawshift-image --no-default-features --features hw-vaapi --target x86_64-unknown-linux-gnu
+          # Android's Java API is needed only at runtime; `cargo check` on a
+          # Linux runner fully type-checks the JNI/NDK implementation and the
+          # public re-exports without an emulator or cross linker.
+          cargo check -p rawshift-hwdec --features mediacodec --target aarch64-linux-android
+          cargo check -p rawshift-image --no-default-features --features hw-mediacodec --target aarch64-linux-android
+          cargo check -p rawshift --no-default-features --features image,hw-mediacodec --target aarch64-linux-android
           # The portable `hw` is valid everywhere: it selects the native
           # backend where one exists and compiles the no-backend stub (with a
           # build-script warning) where none does (musl).
