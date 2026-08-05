@@ -292,52 +292,67 @@ fn encode_jpeg(
 fn encode_webp(
     image: &RgbImage,
     metadata: &ImageMetadata,
-    cfg: &super::export::LibwebpEncodeConfig,
+    cfg: &super::export::WebpEncodeConfig,
 ) -> RawResult<Vec<u8>> {
-    use crate::codecs::webp::{build_webp_config, encode_webp_rgb, mux_webp};
     use crate::metadata::exif::ExifBuilder;
     use crate::metadata::icc::IccProfile;
+    use gamut_core::{Dimensions, EncodeImage, ImageRef, Rgb8};
+    use gamut_webp::WebpEncoder;
 
     check_8bit_backend(cfg.common.bit_depth, "WebP")?;
 
-    let lossless = cfg.mode == WebPMode::Lossless;
-    let config = build_webp_config(lossless, cfg.quality, cfg.method, cfg.near_lossless)
-        .map_err(|e| RawError::Encode(EncodeError::WebP(e)))?;
-
     let data_8bit = pack_rgb8(image);
-    let encoded = encode_webp_rgb(&data_8bit, image.width(), image.height(), &config)
-        .map_err(|e| RawError::Encode(EncodeError::WebP(e)))?;
-
     let m = &cfg.common.metadata;
-    let exif_bytes = if m.embed_exif {
-        match ExifBuilder::new(metadata).build_bytes() {
-            Ok(bytes) => Some(bytes),
-            Err(e) => {
-                tracing::warn!("Failed to build EXIF for WebP: {e}");
-                None
-            }
-        }
-    } else {
-        None
-    };
-    let icc_bytes = if m.embed_icc {
-        Some(IccProfile::srgb().as_bytes().to_vec())
-    } else {
-        None
-    };
-    let xmp_bytes = if m.embed_xmp {
-        metadata.xmp.as_deref()
+    let mut model = crate::metadata::bridge::to_gamut(metadata);
+    model.exif = m.embed_exif.then(|| ExifBuilder::new(metadata).build());
+    if !m.embed_xmp {
+        model.xmp = None;
+    } else if metadata.xmp.is_some() && model.xmp.is_none() {
+        tracing::warn!("Skipping malformed XMP metadata while encoding WebP");
+    }
+    model.icc = if m.embed_icc {
+        Some(
+            gamut_icc::IccProfile::parse(IccProfile::srgb().as_bytes()).map_err(|e| {
+                RawError::Encode(EncodeError::Encoding {
+                    format: "WebP",
+                    message: format!("WebP ICC encoding error: {e}"),
+                })
+            })?,
+        )
     } else {
         None
     };
 
-    mux_webp(
-        &encoded,
-        exif_bytes.as_deref(),
-        icc_bytes.as_deref(),
-        xmp_bytes,
-    )
-    .map_err(|e| RawError::Encode(EncodeError::WebP(e)))
+    let blocks = model.encode().map_err(|e| {
+        RawError::Encode(EncodeError::Encoding {
+            format: "WebP",
+            message: format!("WebP metadata encoding error: {e}"),
+        })
+    })?;
+
+    let mut encoder = match cfg.mode {
+        WebPMode::Lossless => WebpEncoder::lossless(),
+        WebPMode::Lossy => WebpEncoder::lossy(cfg.quality),
+    };
+    if let Some(exif) = blocks.exif.as_deref() {
+        encoder = encoder.with_exif(exif);
+    }
+    if let Some(xmp) = blocks.xmp.as_deref() {
+        encoder = encoder.with_xmp(xmp);
+    }
+    if let Some(icc) = blocks.icc.as_deref() {
+        encoder = encoder.with_icc_profile(icc);
+    }
+
+    let encoding_error = |e: gamut_core::Error| {
+        RawError::Encode(EncodeError::Encoding {
+            format: "WebP",
+            message: format!("WebP encoding error: {e}"),
+        })
+    };
+    let dims = Dimensions::new(image.width(), image.height()).map_err(encoding_error)?;
+    let img = ImageRef::<Rgb8>::new(&data_8bit, dims).map_err(encoding_error)?;
+    encoder.encode_to_vec(img).map_err(encoding_error)
 }
 
 // ── AVIF ──────────────────────────────────────────────────────────────────────

@@ -6,5 +6,3 @@ pub(crate) mod bit_pump;
 // uses gamut-dng's internal (and public) lossless-JPEG implementation.
 #[cfg(any(feature = "arw-decode", feature = "cr2-decode", feature = "nef-decode"))]
 pub(crate) mod ljpeg;
-#[cfg(any(feature = "webp-decode", feature = "webp-encode"))]
-pub(crate) mod webp;

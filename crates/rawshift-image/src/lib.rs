@@ -15,15 +15,15 @@
 //! ground: image primitives (`ImageBuf`, the sealed pixel vocabulary), colour
 //! (CICP code points, ICC), container/IFD parsing, the metadata stack
 //! (EXIF/ICC/XMP), and the codecs for every migrated format — JPEG, PNG,
-//! JPEG XL, AVIF, HEIC, and DNG. rawshift adds what gamut deliberately does
+//! WebP, JPEG XL, AVIF, HEIC, and DNG. rawshift adds what gamut deliberately does
 //! not model: the camera/sensor domain (CFA containers, demosaicing, the RAW
 //! colour pipeline), vendor tag catalogues, and the high-level API.
 //!
 //! Hardware still-frame decode of HEVC (HEIC) and AV1 (AVIF) is provided by
 //! the `rawshift-hwdec` crate through the `hw`/`hw-*` features.
 //!
-//! The non-gamut backends that remain are either blocked upstream migrations
-//! (`libwebp` for WebP, the `tiff` crate for TIFF) or permanent exceptions
+//! The non-gamut backends that remain are either a blocked upstream migration
+//! (the `tiff` crate for TIFF) or permanent exceptions
 //! (`gif`, `resvg`, `zune-ppm`); see the workspace upstream-first policy.
 //!
 //! [gamut]: https://github.com/visualcommons/gamut
@@ -91,11 +91,10 @@
 //! 3. **Directions** — `jpeg-decode`, `jpeg-encode`, `arw-decode`, …
 //!    gamut-backed direction features pull their `gamut-*` dependency
 //!    directly — gamut is the backend, there is no implementation choice.
-//! 4. **Implementation aliases** — the six retained flags naming the
+//! 4. **Implementation aliases** — the four retained flags naming the
 //!    non-gamut backends: `gif-decode-gif` / `svg-decode-resvg` /
-//!    `ppm-decode-zune` (permanent exceptions) and `tiff-decode-tiff` /
-//!    `webp-decode-libwebp` / `webp-encode-libwebp` (blocked upstream
-//!    migrations).
+//!    `ppm-decode-zune` (permanent exceptions) and `tiff-decode-tiff` (blocked
+//!    upstream migration).
 //! 5. **Infrastructure** — `ifd-parser`, `exif`, `serde`, and the verified
 //!    hardware decode flags `hw` / `hw-videotoolbox` / `hw-vaapi` /
 //!    `hw-mediacodec` (see `docs/SUPPORT.md`).

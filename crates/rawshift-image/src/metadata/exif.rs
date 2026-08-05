@@ -49,6 +49,7 @@ pub struct ExifBuilder<'a> {
 
 impl<'a> ExifBuilder<'a> {
     /// Create a new ExifBuilder from ImageMetadata.
+    #[cfg_attr(not(any_standard_encode), allow(dead_code))]
     pub fn new(metadata: &'a ImageMetadata) -> Self {
         Self { metadata }
     }
@@ -260,8 +261,6 @@ impl<'a> ExifBuilder<'a> {
 pub enum ExifContainer {
     /// TIFF — the whole file is the TIFF stream.
     Tiff,
-    /// WebP — RIFF `EXIF` chunk.
-    WebP,
 }
 
 /// Parses EXIF metadata from image file bytes into an [`ImageMetadata`].
@@ -278,7 +277,6 @@ impl ExifParser {
     pub fn parse_from_bytes(file_data: &[u8], container: ExifContainer) -> ImageMetadata {
         let blob = match container {
             ExifContainer::Tiff => Some(file_data.to_vec()),
-            ExifContainer::WebP => extract_exif_from_webp(file_data),
         };
         match blob {
             Some(blob) => Self::parse_exif_blob(&blob),
@@ -568,37 +566,6 @@ fn exif_value_to_metadata(value: &Value) -> crate::core::metadata::MetadataValue
     }
 }
 
-// ── Container-side EXIF blob location ─────────────────────────────────────────
-//
-// These scanners only *locate* the EXIF payload inside a container; parsing is
-// gamut-exif's job. They migrate behind the gamut codec boundaries (codec-side
-// `MetadataBlock`) with the per-format codec migrations. (JPEG and PNG already
-// did: `gamut_jpeg::metadata` locates and strips the APP1/APP2 payloads, and
-// `gamut_png::PngDecoder::decode` surfaces the eXIf/iCCP/XMP chunk payloads.)
-
-/// Extract the payload of a WebP RIFF `EXIF` chunk.
-fn extract_exif_from_webp(data: &[u8]) -> Option<Vec<u8>> {
-    if data.get(..4) != Some(b"RIFF") || data.get(8..12) != Some(b"WEBP") {
-        return None;
-    }
-    let riff_len = u32::from_le_bytes(data.get(4..8)?.try_into().unwrap()) as usize;
-    let end = (8 + riff_len).min(data.len());
-    let mut pos = 12usize;
-    while let Some(header) = data.get(pos..pos + 8) {
-        if pos + 8 > end {
-            return None;
-        }
-        let chunk_type = &header[..4];
-        let len = u32::from_le_bytes(header[4..8].try_into().unwrap()) as usize;
-        let payload = data.get(pos + 8..pos + 8 + len)?;
-        if chunk_type == b"EXIF" {
-            return Some(payload.to_vec());
-        }
-        pos += 8 + len + (len & 1); // chunks are padded to even sizes
-    }
-    None
-}
-
 // (The AVIF `Exif`-item read path lives in `formats::avif` on gamut-avif's
 // item surface — the box-scanning reader that used to live here was replaced
 // in #33. The write path — `insert_item` splicing — remains in
@@ -752,32 +719,5 @@ mod tests {
             ExifParser::parse_exif_blob(b"not a tiff stream"),
             ImageMetadata::default()
         );
-        assert_eq!(
-            ExifParser::parse_from_bytes(b"\x00\x01\x02\x03", ExifContainer::WebP),
-            ImageMetadata::default()
-        );
-    }
-
-    #[test]
-    fn test_extract_from_webp_exif_chunk() {
-        let md = sample_metadata();
-        let tiff = ExifBuilder::new(&md).build_bytes().expect("bare tiff");
-
-        let mut chunks = Vec::new();
-        chunks.extend_from_slice(b"EXIF");
-        chunks.extend_from_slice(&(tiff.len() as u32).to_le_bytes());
-        chunks.extend_from_slice(&tiff);
-        if tiff.len() % 2 == 1 {
-            chunks.push(0);
-        }
-
-        let mut webp = Vec::new();
-        webp.extend_from_slice(b"RIFF");
-        webp.extend_from_slice(&((4 + chunks.len()) as u32).to_le_bytes());
-        webp.extend_from_slice(b"WEBP");
-        webp.extend_from_slice(&chunks);
-
-        let parsed = ExifParser::parse_from_bytes(&webp, ExifContainer::WebP);
-        assert_eq!(parsed.exif.exposure_time, Some(URational::new(1, 250)));
     }
 }
