@@ -9,6 +9,7 @@
 pub use rawshift_image_metadata::bridge;
 #[cfg(feature = "exif")]
 pub use rawshift_image_metadata::exif;
+#[allow(unused_imports)]
 pub use rawshift_image_metadata::icc;
 #[allow(unused_imports)]
 pub(crate) use rawshift_image_metadata::isobmff;
