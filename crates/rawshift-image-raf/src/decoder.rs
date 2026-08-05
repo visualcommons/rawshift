@@ -14,8 +14,8 @@
 
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, XTransPattern};
-use crate::error::{FormatError, RawError, RawResult};
+use rawshift_image_core::image::{CfaPattern, Dimensions, RawImage, Rect, XTransPattern};
+use rawshift_image_core::{FormatError, RawError, RawResult};
 use tracing::instrument;
 
 /// RAF magic bytes at the beginning of every Fujifilm RAF file.
@@ -270,9 +270,9 @@ impl<R: Read + Seek> RafFile<R> {
     }
 }
 
-impl<R: Read + Seek> crate::core::ExtractMetadata for RafFile<R> {
-    fn extract_metadata(&self) -> crate::core::ImageMetadata {
-        use crate::core::metadata::*;
+impl<R: Read + Seek> rawshift_image_core::ExtractMetadata for RafFile<R> {
+    fn extract_metadata(&self) -> rawshift_image_core::ImageMetadata {
+        use rawshift_image_core::metadata::*;
 
         let m = self.metadata.as_ref();
 

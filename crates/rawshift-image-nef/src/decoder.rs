@@ -10,9 +10,12 @@ use std::marker::PhantomData;
 
 use gamut_ifd::{Ifd, Value};
 
-use super::ifd::{self, tags};
-use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
-use crate::error::{FormatError, ParseError, RawError, RawResult};
+use rawshift_image_core::image::{
+    CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth,
+};
+use rawshift_image_core::{FormatError, ParseError, RawError, RawResult};
+use rawshift_image_ifd as ifd;
+use rawshift_image_ifd::tags;
 
 /// Metadata extracted from a Nikon NEF file.
 #[derive(Debug, Clone)]
@@ -328,7 +331,7 @@ impl<R: Read + Seek> NefFile<R> {
 
             // LJPEG compressed (6 = old JPEG/LJPEG, 34713 = Nikon LJPEG)
             6 | 34713 => {
-                use crate::codecs::ljpeg::LjpegDecoder;
+                use rawshift_image_ljpeg::LjpegDecoder;
 
                 let data = self.read_raw_data()?;
                 let mut decoder = LjpegDecoder::new();
@@ -367,9 +370,9 @@ impl<R: Read + Seek> NefFile<R> {
     }
 }
 
-impl<R: Read + Seek> crate::core::ExtractMetadata for NefFile<R> {
-    fn extract_metadata(&self) -> crate::core::ImageMetadata {
-        use crate::core::metadata::*;
+impl<R: Read + Seek> rawshift_image_core::ExtractMetadata for NefFile<R> {
+    fn extract_metadata(&self) -> rawshift_image_core::ImageMetadata {
+        use rawshift_image_core::metadata::*;
 
         let m = self.metadata.as_ref();
 

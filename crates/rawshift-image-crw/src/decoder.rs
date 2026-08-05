@@ -18,8 +18,10 @@
 
 use std::io::{Read, Seek};
 
-use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
-use crate::error::{FormatError, RawError, RawResult};
+use rawshift_image_core::image::{
+    CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth,
+};
+use rawshift_image_core::{FormatError, RawError, RawResult};
 
 // ── CIFF signature ────────────────────────────────────────────────────────────
 
@@ -217,9 +219,9 @@ pub fn is_crw(data: &[u8]) -> bool {
 
 // ── ExtractMetadata impl ──────────────────────────────────────────────────────
 
-impl<R: Read + Seek> crate::core::ExtractMetadata for CrwFile<R> {
-    fn extract_metadata(&self) -> crate::core::ImageMetadata {
-        use crate::core::metadata::*;
+impl<R: Read + Seek> rawshift_image_core::ExtractMetadata for CrwFile<R> {
+    fn extract_metadata(&self) -> rawshift_image_core::ImageMetadata {
+        use rawshift_image_core::metadata::*;
 
         let m = self.metadata.as_ref();
 

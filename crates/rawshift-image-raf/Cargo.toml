@@ -1,0 +1,17 @@
+[package]
+name = "rawshift-image-raf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Fujifilm RAF decoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true, features = ["raf-decode"] }
+tracing = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:tracing"]

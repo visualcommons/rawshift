@@ -25,6 +25,13 @@ rawshift-image-core = { workspace = true }
 rawshift-image-metadata = { workspace = true }
 rawshift-image-ifd = { workspace = true, optional = true }
 rawshift-image-ljpeg = { workspace = true, optional = true }
+rawshift-image-arw = { workspace = true, default-features = false }
+rawshift-image-cr2 = { workspace = true, default-features = false }
+rawshift-image-cr3 = { workspace = true, default-features = false }
+rawshift-image-crw = { workspace = true, default-features = false }
+rawshift-image-dng = { workspace = true, default-features = false }
+rawshift-image-nef = { workspace = true, default-features = false }
+rawshift-image-raf = { workspace = true, default-features = false }
 gamut-core     = { workspace = true }
 # gamut-icc backs the sRGB profile construction and validation in
 # `metadata/icc.rs`, which compiles unconditionally (the `IccProfile` type is
@@ -227,19 +234,19 @@ avif-encode = ["dep:gamut-avif", "exif", "rawshift-image-metadata/avif-encode"]
 heic-decode = ["dep:gamut-heic", "dep:gamut-isobmff", "exif"]
 svg-decode  = ["svg-decode-resvg"]
 ppm-decode  = ["ppm-decode-zune"]
-arw-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg"]
-cr2-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-core/cr2-decode"]
-cr3-decode  = ["ifd-parser", "rawshift-image-core/cr3-decode"]
-crw-decode  = ["rawshift-image-core/crw-decode"]
+arw-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-arw/decode"]
+cr2-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-core/cr2-decode", "rawshift-image-cr2/decode"]
+cr3-decode  = ["ifd-parser", "rawshift-image-core/cr3-decode", "rawshift-image-cr3/decode"]
+crw-decode  = ["rawshift-image-core/crw-decode", "rawshift-image-crw/decode"]
 # DNG decode is backed by gamut-dng (raw image, levels, camera profile; JPEG
 # XL tile decode is built into gamut-dng, so `jxl-decode` is no longer pulled).
 # `ifd-parser` is additionally pulled because format sniffing
 # (`RawFile::detect_format`) and the EXIF/GPS/thumbnail tree walk read the
 # container through gamut-ifd.
-dng-decode  = ["ifd-parser", "dep:gamut-dng"]
-dng-encode  = ["dep:gamut-dng"]
-nef-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-core/nef-decode"]
-raf-decode  = ["rawshift-image-core/raf-decode"]
+dng-decode  = ["ifd-parser", "dep:gamut-dng", "rawshift-image-dng/decode"]
+dng-encode  = ["dep:gamut-dng", "rawshift-image-dng/encode"]
+nef-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-core/nef-decode", "rawshift-image-nef/decode"]
+raf-decode  = ["rawshift-image-core/raf-decode", "rawshift-image-raf/decode"]
 
 # ── Tier 4: implementation features (six retained aliases only) ───────────────
 # The gamut migrations collapsed this tier for every gamut-backed format — the
@@ -272,7 +279,7 @@ ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
 # gamut-ifd TIFF/IFD structure engine (used by the migrated TIFF-based RAW
 # decoders and by format detection).
 ifd-parser    = ["dep:gamut-ifd", "dep:rawshift-image-ifd", "rawshift-image-metadata/ifd-parser"]
-serde         = ["dep:serde", "rawshift-core/serde", "rawshift-image-core/serde"]
+serde         = ["dep:serde", "rawshift-core/serde", "rawshift-image-core/serde", "rawshift-image-dng/serde"]
 # `zune-core` codec primitives (bit depth, colorspace, decoder/encoder option
 # builders). Pulled by the zune-backed PPM impl feature (`zune-ppm` is a
 # permanent exception to the gamut migration — see AGENTS.md).

@@ -19,7 +19,7 @@
 //! 2. `FixBadPixelsList` (ID 5) — replace specific known bad pixels
 //! 3. `GainMap` (ID 9) — spatially-varying lens-shading correction (critical for ProRAW)
 
-use crate::core::RgbImage;
+use rawshift_image_core::RgbImage;
 
 // ============================================================================
 // Opcode data structures

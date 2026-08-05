@@ -3,7 +3,7 @@
 //! Raw-image decoding (uncompressed, Deflate, lossless JPEG, and DNG 1.7
 //! JPEG XL — the iPhone ProRAW scheme) is backed by [`gamut_dng::DngDecoder`];
 //! the EXIF/GPS/thumbnail tree walk reuses the shared [`gamut_ifd`] helpers in
-//! [`super::ifd`]. DNG tag semantics that gamut-dng does not type yet
+//! [`rawshift_image_ifd`]. DNG tag semantics that gamut-dng does not type yet
 //! (NoiseProfile, ProfileToneCurve) are read from the decoder's verbatim
 //! `RawTag` extras.
 
@@ -13,10 +13,11 @@ use std::marker::PhantomData;
 use gamut_dng::{DecodedDng, DngDecoder, RawLevels, RawPhotometry, RawTag};
 use gamut_ifd::{Ifd, Value};
 
-use super::ifd::{self, tags};
-use crate::core::RgbImage;
-use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect};
-use crate::error::{RawError, RawResult};
+use rawshift_image_core::RgbImage;
+use rawshift_image_core::image::{CfaPattern, Dimensions, RawImage, Rect};
+use rawshift_image_core::{RawError, RawResult};
+use rawshift_image_ifd as ifd;
+use rawshift_image_ifd::tags;
 
 /// Metadata extracted from a DNG file.
 #[derive(Debug, Clone)]
@@ -79,11 +80,11 @@ pub struct DngMetadata {
     /// Profile tone curve
     pub profile_tone_curve: Option<Vec<f32>>,
     /// EXIF exposure/capture settings
-    pub exif: crate::core::metadata::ExifInfo,
+    pub exif: rawshift_image_core::metadata::ExifInfo,
     /// Date/time information
-    pub datetime: crate::core::metadata::DateTimeInfo,
+    pub datetime: rawshift_image_core::metadata::DateTimeInfo,
     /// GPS location data
-    pub gps: crate::core::metadata::GpsInfo,
+    pub gps: rawshift_image_core::metadata::GpsInfo,
     /// Lens make
     pub lens_make: Option<String>,
     /// Lens model
@@ -382,8 +383,7 @@ impl<R: Read + Seek> DngFile<R> {
         // (post-demosaic) data. This is where GainMap (lens shading
         // correction) lives for iPhone ProRAW.
         if !raw.opcode_list2().is_empty() {
-            let opcode_list =
-                crate::transforms::opcodes::OpcodeList::parse(&raw.opcode_list2().to_bytes());
+            let opcode_list = crate::opcodes::OpcodeList::parse(&raw.opcode_list2().to_bytes());
             opcode_list.apply_to_rgb(&mut image);
         }
 
@@ -564,9 +564,9 @@ fn flatten_ifds<'a>(ifds: &'a [Ifd], out: &mut Vec<&'a Ifd>) {
     }
 }
 
-impl<R: Read + Seek> crate::core::ExtractMetadata for DngFile<R> {
-    fn extract_metadata(&self) -> crate::core::ImageMetadata {
-        use crate::core::metadata::*;
+impl<R: Read + Seek> rawshift_image_core::ExtractMetadata for DngFile<R> {
+    fn extract_metadata(&self) -> rawshift_image_core::ImageMetadata {
+        use rawshift_image_core::metadata::*;
 
         let m = self.metadata.as_ref();
 

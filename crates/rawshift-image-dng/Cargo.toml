@@ -1,0 +1,23 @@
+[package]
+name = "rawshift-image-dng"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Adobe DNG decoding and encoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true }
+rawshift-image-ifd = { workspace = true, optional = true }
+gamut-dng = { workspace = true, optional = true }
+gamut-ifd = { workspace = true, optional = true, features = ["bigtiff"] }
+serde = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:rawshift-image-ifd", "dep:gamut-dng", "dep:gamut-ifd", "dep:tracing"]
+encode = ["dep:gamut-dng"]
+serde = ["dep:serde", "rawshift-image-core/serde"]

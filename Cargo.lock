@@ -1260,10 +1260,17 @@ dependencies = [
  "libwebp-sys",
  "rawshift-core",
  "rawshift-hwdec",
+ "rawshift-image-arw",
  "rawshift-image-core",
+ "rawshift-image-cr2",
+ "rawshift-image-cr3",
+ "rawshift-image-crw",
+ "rawshift-image-dng",
  "rawshift-image-ifd",
  "rawshift-image-ljpeg",
  "rawshift-image-metadata",
+ "rawshift-image-nef",
+ "rawshift-image-raf",
  "rayon",
  "resvg",
  "serde",
@@ -1278,6 +1285,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rawshift-image-arw"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "rawshift-image-ljpeg",
+ "tracing",
+]
+
+[[package]]
 name = "rawshift-image-core"
 version = "0.1.1"
 dependencies = [
@@ -1285,6 +1303,45 @@ dependencies = [
  "rawshift-core",
  "serde",
  "thiserror",
+]
+
+[[package]]
+name = "rawshift-image-cr2"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "rawshift-image-ljpeg",
+]
+
+[[package]]
+name = "rawshift-image-cr3"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "tracing",
+]
+
+[[package]]
+name = "rawshift-image-crw"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+]
+
+[[package]]
+name = "rawshift-image-dng"
+version = "0.1.1"
+dependencies = [
+ "gamut-dng",
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "serde",
+ "tracing",
 ]
 
 [[package]]
@@ -1314,6 +1371,24 @@ dependencies = [
  "gamut-metadata",
  "gamut-xmp",
  "rawshift-core",
+]
+
+[[package]]
+name = "rawshift-image-nef"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "rawshift-image-ljpeg",
+]
+
+[[package]]
+name = "rawshift-image-raf"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+ "tracing",
 ]
 
 [[package]]

@@ -9,6 +9,13 @@ members = [
     "crates/rawshift-image-metadata",
     "crates/rawshift-image-ifd",
     "crates/rawshift-image-ljpeg",
+    "crates/rawshift-image-arw",
+    "crates/rawshift-image-cr2",
+    "crates/rawshift-image-cr3",
+    "crates/rawshift-image-crw",
+    "crates/rawshift-image-dng",
+    "crates/rawshift-image-nef",
+    "crates/rawshift-image-raf",
     "crates/rawshift-video",
 ]
 
@@ -57,6 +64,13 @@ rawshift-image-core = { path = "crates/rawshift-image-core", version = "0.1.1" }
 rawshift-image-metadata = { path = "crates/rawshift-image-metadata", version = "0.1.1" }
 rawshift-image-ifd = { path = "crates/rawshift-image-ifd", version = "0.1.1" }
 rawshift-image-ljpeg = { path = "crates/rawshift-image-ljpeg", version = "0.1.1" }
+rawshift-image-arw = { path = "crates/rawshift-image-arw", version = "0.1.1", default-features = false }
+rawshift-image-cr2 = { path = "crates/rawshift-image-cr2", version = "0.1.1", default-features = false }
+rawshift-image-cr3 = { path = "crates/rawshift-image-cr3", version = "0.1.1", default-features = false }
+rawshift-image-crw = { path = "crates/rawshift-image-crw", version = "0.1.1", default-features = false }
+rawshift-image-dng = { path = "crates/rawshift-image-dng", version = "0.1.1", default-features = false }
+rawshift-image-nef = { path = "crates/rawshift-image-nef", version = "0.1.1", default-features = false }
+rawshift-image-raf = { path = "crates/rawshift-image-raf", version = "0.1.1", default-features = false }
 rawshift-video = { path = "crates/rawshift-video", version = "0.1.1" }
 
 # Profiles must live at the workspace root — Cargo ignores profiles declared in

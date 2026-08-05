@@ -1,0 +1,19 @@
+[package]
+name = "rawshift-image-nef"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Nikon NEF decoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true, features = ["nef-decode"] }
+rawshift-image-ifd = { workspace = true, optional = true }
+rawshift-image-ljpeg = { workspace = true, optional = true }
+gamut-ifd = { workspace = true, optional = true, features = ["bigtiff"] }
+
+[features]
+default = ["decode"]
+decode = ["dep:rawshift-image-ifd", "dep:rawshift-image-ljpeg", "dep:gamut-ifd"]

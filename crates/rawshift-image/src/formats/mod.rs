@@ -8,19 +8,31 @@
 //! backend inventory.
 
 #[cfg(feature = "arw-decode")]
-pub(crate) mod arw;
+pub(crate) mod arw {
+    pub use rawshift_image_arw::*;
+}
 #[cfg(feature = "avif-decode")]
 pub(crate) mod avif;
 #[cfg(feature = "cr2-decode")]
-pub(crate) mod cr2;
+pub(crate) mod cr2 {
+    pub use rawshift_image_cr2::*;
+}
 #[cfg(feature = "cr3-decode")]
-pub(crate) mod cr3;
+pub(crate) mod cr3 {
+    pub use rawshift_image_cr3::*;
+}
 #[cfg(feature = "crw-decode")]
-pub(crate) mod crw;
+pub(crate) mod crw {
+    pub use rawshift_image_crw::*;
+}
 #[cfg(feature = "dng-decode")]
-pub(crate) mod dng;
+pub(crate) mod dng {
+    pub use rawshift_image_dng::*;
+}
 #[cfg(feature = "dng-encode")]
-pub(crate) mod dng_export;
+pub(crate) mod dng_export {
+    pub use rawshift_image_dng::*;
+}
 mod encode;
 pub mod export;
 #[cfg(feature = "heic-decode")]
@@ -33,9 +45,13 @@ pub(crate) mod ifd {
     pub use rawshift_image_ifd::*;
 }
 #[cfg(feature = "nef-decode")]
-pub(crate) mod nef;
+pub(crate) mod nef {
+    pub use rawshift_image_nef::*;
+}
 #[cfg(feature = "raf-decode")]
-pub(crate) mod raf;
+pub(crate) mod raf {
+    pub use rawshift_image_raf::*;
+}
 pub mod registry;
 pub(crate) mod standard;
 

@@ -23,9 +23,12 @@ use std::marker::PhantomData;
 
 use gamut_ifd::{Ifd, Value};
 
-use super::ifd::{self, tags};
-use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
-use crate::error::{FormatError, ParseError, RawError, RawResult};
+use rawshift_image_core::image::{
+    CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth,
+};
+use rawshift_image_core::{FormatError, ParseError, RawError, RawResult};
+use rawshift_image_ifd as ifd;
+use rawshift_image_ifd::tags;
 
 /// Magic marker bytes: byte offset 8-10 in a CR2 file.
 /// Bytes 8-9 = "CR", byte 10 = 0x02 (CR2 version).
@@ -294,7 +297,7 @@ impl<R: Read + Seek> Cr2File<R> {
         )?;
 
         // Decode with LJPEG decoder
-        use crate::codecs::ljpeg::LjpegDecoder;
+        use rawshift_image_ljpeg::LjpegDecoder;
         let mut decoder = LjpegDecoder::new();
         decoder.set_dimensions(metadata.sensor_size.width, metadata.sensor_size.height);
 
@@ -350,9 +353,9 @@ pub fn is_cr2(data: &[u8]) -> bool {
         && data[CR2_MAGIC_OFFSET + 2] == CR2_MAGIC[2]
 }
 
-impl<R: Read + Seek> crate::core::ExtractMetadata for Cr2File<R> {
-    fn extract_metadata(&self) -> crate::core::ImageMetadata {
-        use crate::core::metadata::*;
+impl<R: Read + Seek> rawshift_image_core::ExtractMetadata for Cr2File<R> {
+    fn extract_metadata(&self) -> rawshift_image_core::ImageMetadata {
+        use rawshift_image_core::metadata::*;
 
         let m = self.metadata.as_ref();
 

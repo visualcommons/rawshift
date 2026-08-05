@@ -36,7 +36,10 @@ pub mod cfa;
 pub mod color;
 pub mod denoise;
 pub mod lens_correction;
-pub mod opcodes;
+#[cfg(feature = "dng-decode")]
+pub mod opcodes {
+    pub use rawshift_image_dng::opcodes::*;
+}
 pub mod orientation;
 pub mod simd;
 pub mod tonemap;

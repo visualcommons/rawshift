@@ -12,9 +12,9 @@ use std::path::Path;
 use gamut_dng::values::CalibrationIlluminant;
 use gamut_dng::{CameraProfile, DngEncoder, RawLevels};
 
-use crate::core::RgbImage;
-use crate::core::metadata::ImageMetadata;
-use crate::error::{RawError, RawResult};
+use rawshift_image_core::RgbImage;
+use rawshift_image_core::metadata::ImageMetadata;
+use rawshift_image_core::{RawError, RawResult};
 
 /// DNG encode configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -185,7 +185,7 @@ fn build_camera_profile(metadata: &ImageMetadata) -> RawResult<CameraProfile> {
 
 /// The EXIF capture settings gamut-dng can embed.
 fn build_exif_metadata(metadata: &ImageMetadata) -> gamut_dng::ExifMetadata {
-    let rational = |r: &crate::core::metadata::URational| (r.numerator, r.denominator);
+    let rational = |r: &rawshift_image_core::metadata::URational| (r.numerator, r.denominator);
     gamut_dng::ExifMetadata {
         exposure_time: metadata.exif.exposure_time.as_ref().map(rational),
         f_number: metadata.exif.f_number.as_ref().map(rational),
@@ -198,9 +198,9 @@ fn build_exif_metadata(metadata: &ImageMetadata) -> gamut_dng::ExifMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::RgbImage;
-    use crate::core::metadata::URational;
     use gamut_dng::{DngDecoder, RawPhotometry};
+    use rawshift_image_core::RgbImage;
+    use rawshift_image_core::metadata::URational;
 
     fn test_metadata() -> ImageMetadata {
         let mut metadata = ImageMetadata::default();

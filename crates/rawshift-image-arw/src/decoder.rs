@@ -4,16 +4,19 @@
 //! which are based on the TIFF container format with Sony-specific extensions.
 //!
 //! IFD structure walking is backed by [`gamut_ifd`]; Sony tag semantics stay
-//! here (see [`super::ifd::tags`]).
+//! here (see [`rawshift_image_ifd::tags`]).
 
 use std::io::{Read, Seek};
 use std::marker::PhantomData;
 
 use gamut_ifd::{ByteOrder, Ifd, IfdReader, Value, Variant};
 
-use super::ifd::{self, tags};
-use crate::core::image::{CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth};
-use crate::error::{FormatError, ParseError, RawError, RawResult};
+use rawshift_image_core::image::{
+    CfaPattern, Dimensions, RawImage, Rect, white_level_from_bit_depth,
+};
+use rawshift_image_core::{FormatError, ParseError, RawError, RawResult};
+use rawshift_image_ifd as ifd;
+use rawshift_image_ifd::tags;
 
 /// Metadata extracted from a Sony ARW file.
 #[derive(Debug, Clone)]
@@ -51,11 +54,11 @@ pub struct ArwMetadata {
     /// As Shot Neutral (converted from WB multipliers if found)
     pub as_shot_neutral: Option<[f64; 3]>,
     /// EXIF exposure/capture settings
-    pub exif: crate::core::metadata::ExifInfo,
+    pub exif: rawshift_image_core::metadata::ExifInfo,
     /// Date/time information
-    pub datetime: crate::core::metadata::DateTimeInfo,
+    pub datetime: rawshift_image_core::metadata::DateTimeInfo,
     /// GPS location data
-    pub gps: crate::core::metadata::GpsInfo,
+    pub gps: rawshift_image_core::metadata::GpsInfo,
     /// Lens make
     pub lens_make: Option<String>,
     /// Lens model
@@ -614,7 +617,7 @@ impl<R: Read + Seek> ArwFile<R> {
 
         // 7 = JPEG (Lossless for Sony ARW)
         if metadata.compression == 7 {
-            use crate::codecs::ljpeg::LjpegDecoder;
+            use rawshift_image_ljpeg::LjpegDecoder;
 
             let width = metadata.sensor_size.width as usize;
             let height = metadata.sensor_size.height as usize;
@@ -725,9 +728,9 @@ impl<R: Read + Seek> ArwFile<R> {
     }
 }
 
-impl<R: Read + Seek> crate::core::ExtractMetadata for ArwFile<R> {
-    fn extract_metadata(&self) -> crate::core::ImageMetadata {
-        use crate::core::metadata::*;
+impl<R: Read + Seek> rawshift_image_core::ExtractMetadata for ArwFile<R> {
+    fn extract_metadata(&self) -> rawshift_image_core::ImageMetadata {
+        use rawshift_image_core::metadata::*;
 
         let m = self.metadata.as_ref();
         let as_shot_neutral = m.and_then(|x| x.as_shot_neutral);
