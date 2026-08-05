@@ -1181,14 +1181,14 @@ dependencies = [
 
 [[package]]
 name = "rawshift"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "rawshift-image",
 ]
 
 [[package]]
 name = "rawshift-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-color",
  "gamut-core",
@@ -1198,7 +1198,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-hwdec"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-color",
  "libloading",
@@ -1207,7 +1207,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "clap",
  "criterion",
@@ -1266,7 +1266,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-arw"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-ifd",
  "rawshift-image-core",
@@ -1277,7 +1277,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-avif"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-avif",
  "gamut-color",
@@ -1291,7 +1291,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-core",
  "rawshift-core",
@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-cr2"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-ifd",
  "rawshift-image-core",
@@ -1312,7 +1312,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-cr3"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-ifd",
  "rawshift-image-core",
@@ -1322,14 +1322,14 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-crw"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "rawshift-image-core",
 ]
 
 [[package]]
 name = "rawshift-image-dng"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-dng",
  "gamut-ifd",
@@ -1341,7 +1341,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-gif"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gif",
  "rawshift-image-core",
@@ -1350,7 +1350,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-heic"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-color",
  "gamut-core",
@@ -1364,7 +1364,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-ifd"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-ifd",
  "rawshift-core",
@@ -1374,7 +1374,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-jpeg"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-core",
  "gamut-jpeg",
@@ -1386,7 +1386,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-jxl"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-core",
  "gamut-jxl 0.4.0",
@@ -1397,14 +1397,14 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-ljpeg"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "rawshift-image-core",
 ]
 
 [[package]]
 name = "rawshift-image-metadata"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-exif",
  "gamut-icc",
@@ -1416,7 +1416,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-nef"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-ifd",
  "rawshift-image-core",
@@ -1426,7 +1426,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-png"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-core",
  "gamut-png",
@@ -1437,7 +1437,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-ppm"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "rawshift-image-core",
  "serde",
@@ -1447,7 +1447,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-raf"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "rawshift-image-core",
  "tracing",
@@ -1455,7 +1455,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-svg"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "rawshift-image-core",
  "resvg",
@@ -1464,7 +1464,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-tiff"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "rawshift-image-core",
  "serde",
@@ -1473,7 +1473,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-image-webp"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gamut-core",
  "gamut-metadata",
@@ -1486,7 +1486,7 @@ dependencies = [
 
 [[package]]
 name = "rawshift-video"
-version = "0.1.1"
+version = "0.2.0"
 
 [[package]]
 name = "rayon"
