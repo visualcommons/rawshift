@@ -48,6 +48,13 @@
 
 #![deny(unsafe_op_in_unsafe_fn)]
 
+#[cfg(any(
+    hwdec_backend = "vaapi",
+    hwdec_backend = "mediacodec",
+    test
+))]
+mod bitstream;
+
 // The VAAPI platform backend: compiled only when build.rs selected it
 // (`vaapi` explicit flag, or `hw` on a linux-gnu target).
 #[cfg(hwdec_backend = "vaapi")]

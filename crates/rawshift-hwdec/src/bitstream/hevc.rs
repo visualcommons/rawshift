@@ -1,5 +1,5 @@
-//! HEVC still-picture header parsing for the VAAPI backend — **safe Rust
-//! only** (no `unsafe`; FFI stays in `sys.rs`/`mod.rs`).
+//! HEVC still-picture header parsing shared by hardware backends — **safe
+//! Rust only** (no `unsafe`; platform FFI stays in backend modules).
 //!
 //! ## Scope
 //!
@@ -23,7 +23,8 @@
 //! `slice_data()`) and the emulation-prevention-byte count VAAPI wants.
 
 use super::bits::{BitReader, PResult, ParseError, Rbsp, rbsp_from_nal_payload};
-use super::sys;
+#[cfg(hwdec_backend = "vaapi")]
+use crate::vaapi::sys;
 
 // ── NAL classification ──────────────────────────────────────────────────────
 
@@ -743,6 +744,7 @@ fn ceil_log2(x: u32) -> u32 {
 
 /// Uniform tile partition of `total` CTBs into `count` parts, as the
 /// `minus1` sizes VAAPI wants (H.265 §6.5.1 derivation).
+#[cfg(hwdec_backend = "vaapi")]
 fn uniform_partition_minus1(total: u32, count: u32) -> Vec<u16> {
     (0..count)
         .map(|i| (((i + 1) * total) / count - (i * total) / count - 1) as u16)
@@ -752,6 +754,7 @@ fn uniform_partition_minus1(total: u32, count: u32) -> Vec<u16> {
 /// Fill `VAPictureParameterBufferHEVC` for a still picture decoded into
 /// `surface`. `nut` is the slice NAL type; `st_rps_bits` comes from the
 /// first independent slice header.
+#[cfg(hwdec_backend = "vaapi")]
 pub fn build_pic_param(
     sps: &Sps,
     pps: &Pps,
@@ -894,6 +897,7 @@ pub fn build_pic_param(
 
 /// Fill `VASliceParameterBufferHEVC` for one coded slice NAL of
 /// `slice_data_size` bytes at offset 0 of its own data buffer.
+#[cfg(hwdec_backend = "vaapi")]
 pub fn build_slice_param(
     sh: &SliceHeader,
     pps: &Pps,

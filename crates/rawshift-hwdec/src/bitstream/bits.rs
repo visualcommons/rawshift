@@ -1,4 +1,4 @@
-//! Safe bitstream readers shared by the HEVC and AV1 header parsers.
+//! Safe bitstream readers shared by the HEVC and AV1 still-picture parsers.
 //!
 //! **Safe Rust only** — this module (like `hevc.rs` / `av1.rs`) contains no
 //! `unsafe`; all FFI stays in `sys.rs` and the call sites in `mod.rs`.
