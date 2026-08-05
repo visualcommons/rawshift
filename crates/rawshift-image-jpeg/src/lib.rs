@@ -1,7 +1,9 @@
 //! JPEG format support.
 #![forbid(unsafe_code)]
 
-use rawshift_image_core::{FormatError, FormatId, FormatSniffer, RawError, RawResult, RgbImage};
+#[cfg(feature = "decode")]
+use rawshift_image_core::FormatError;
+use rawshift_image_core::{FormatId, FormatSniffer, RawError, RawResult, RgbImage};
 
 /// JPEG decoder configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -73,4 +75,51 @@ fn blinn(value: u8, factor: u8) -> u8 {
 #[cfg(feature = "decode")]
 fn scale(value: u8) -> u16 {
     u16::from(value) * 257
+}
+
+#[cfg(feature = "encode")]
+impl rawshift_image_core::ImageEncoder for Jpeg {
+    type Options = ();
+    type Input = RgbImage;
+    fn encode_to_writer<W: std::io::Write>(
+        input: &Self::Input,
+        metadata: &rawshift_image_core::ImageMetadata,
+        _: &Self::Options,
+        mut writer: W,
+    ) -> RawResult<()> {
+        use gamut_core::{Dimensions, EncodeImage, ImageRef, Rgb8};
+        use gamut_jpeg::{ChromaSubsampling, JpegEncoder};
+        use rawshift_image_metadata::{exif::ExifBuilder, icc::IccProfile};
+        let error = |error: gamut_core::Error| {
+            RawError::Encode(rawshift_image_core::EncodeError::Encoding {
+                format: "JPEG",
+                message: error.to_string(),
+            })
+        };
+        let dimensions = Dimensions::new(input.width(), input.height()).map_err(error)?;
+        let samples: Vec<u8> = input
+            .data()
+            .iter()
+            .map(|value| (value >> 8) as u8)
+            .collect();
+        let image = ImageRef::<Rgb8>::new(&samples, dimensions).map_err(error)?;
+        let exif = ExifBuilder::new(metadata).build_bytes().ok();
+        let icc = IccProfile::srgb();
+        let mut encoder = JpegEncoder::new()
+            .with_quality(90)
+            .with_subsampling(ChromaSubsampling::Ycbcr420)
+            .with_icc_profile(icc.as_bytes());
+        if let Some(bytes) = exif.as_deref() {
+            encoder = encoder.with_exif(bytes);
+        }
+        if let Some(xmp) = metadata.xmp.as_deref()
+            && gamut_xmp::XmpMeta::from_packet(xmp).is_ok()
+        {
+            encoder = encoder.with_xmp(xmp);
+        }
+        let mut output = Vec::new();
+        encoder.encode_image(image, &mut output).map_err(error)?;
+        writer.write_all(&output)?;
+        Ok(())
+    }
 }

@@ -10,12 +10,14 @@ description = "JPEG decoding and encoding for rawshift"
 
 [dependencies]
 rawshift-image-core = { workspace = true }
+rawshift-image-metadata = { workspace = true, optional = true, features = ["exif"] }
 gamut-core = { workspace = true, optional = true }
 gamut-jpeg = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
+gamut-xmp = { workspace = true, optional = true }
 
 [features]
 default = ["decode"]
 decode = ["dep:gamut-core", "dep:gamut-jpeg"]
-encode = ["dep:gamut-core", "dep:gamut-jpeg"]
+encode = ["dep:gamut-core", "dep:gamut-jpeg", "dep:rawshift-image-metadata", "dep:gamut-xmp"]
 serde = ["dep:serde", "rawshift-image-core/serde"]

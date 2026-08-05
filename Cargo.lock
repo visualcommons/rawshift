@@ -1408,7 +1408,9 @@ version = "0.1.1"
 dependencies = [
  "gamut-core",
  "gamut-jpeg",
+ "gamut-xmp",
  "rawshift-image-core",
+ "rawshift-image-metadata",
  "serde",
 ]
 
@@ -1419,6 +1421,7 @@ dependencies = [
  "gamut-core",
  "gamut-jxl 0.4.0",
  "rawshift-image-core",
+ "rawshift-image-metadata",
  "serde",
 ]
 
@@ -1455,8 +1458,10 @@ dependencies = [
 name = "rawshift-image-png"
 version = "0.1.1"
 dependencies = [
+ "gamut-core",
  "gamut-png",
  "rawshift-image-core",
+ "rawshift-image-metadata",
  "serde",
 ]
 
@@ -1502,6 +1507,7 @@ version = "0.1.1"
 dependencies = [
  "libwebp-sys",
  "rawshift-image-core",
+ "rawshift-image-metadata",
  "serde",
 ]
 

@@ -10,11 +10,13 @@ description = "PNG decoding and encoding for rawshift"
 
 [dependencies]
 rawshift-image-core = { workspace = true }
+rawshift-image-metadata = { workspace = true, optional = true, features = ["exif"] }
+gamut-core = { workspace = true, optional = true }
 gamut-png = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 
 [features]
 default = ["decode"]
 decode = ["dep:gamut-png"]
-encode = ["dep:gamut-png"]
+encode = ["dep:gamut-png", "dep:gamut-core", "dep:rawshift-image-metadata"]
 serde = ["dep:serde", "rawshift-image-core/serde"]

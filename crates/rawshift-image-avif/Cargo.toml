@@ -10,7 +10,7 @@ description = "AVIF decoding for rawshift"
 
 [dependencies]
 rawshift-image-core = { workspace = true }
-rawshift-image-metadata = { workspace = true, features = ["exif"] }
+rawshift-image-metadata = { workspace = true, features = ["exif"], optional = true }
 gamut-avif = { workspace = true }
 gamut-core = { workspace = true }
 gamut-isobmff = { workspace = true }
@@ -19,7 +19,8 @@ serde = { workspace = true, optional = true }
 
 [features]
 default = ["decode"]
-decode = []
+decode = ["dep:rawshift-image-metadata"]
+encode = ["dep:rawshift-image-metadata", "rawshift-image-metadata/avif-encode"]
 serde = ["dep:serde", "rawshift-image-core/serde"]
 hw = ["dep:rawshift-hwdec", "rawshift-hwdec/hw", "rawshift-image-core/hw-planes"]
 hw-videotoolbox = ["hw", "rawshift-hwdec/videotoolbox"]

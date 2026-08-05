@@ -10,11 +10,12 @@ description = "WebP decoding and encoding for rawshift"
 
 [dependencies]
 rawshift-image-core = { workspace = true }
+rawshift-image-metadata = { workspace = true, optional = true, features = ["exif"] }
 libwebp-sys = { version = "0.14", optional = true }
 serde = { workspace = true, optional = true }
 
 [features]
 default = ["decode"]
 decode = ["dep:libwebp-sys"]
-encode = ["dep:libwebp-sys"]
+encode = ["dep:libwebp-sys", "dep:rawshift-image-metadata"]
 serde = ["dep:serde", "rawshift-image-core/serde"]

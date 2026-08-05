@@ -1,7 +1,9 @@
 //! PNG format support.
 #![forbid(unsafe_code)]
 
-use rawshift_image_core::{FormatError, FormatId, FormatSniffer, RawError, RawResult, RgbImage};
+#[cfg(feature = "decode")]
+use rawshift_image_core::FormatError;
+use rawshift_image_core::{FormatId, FormatSniffer, RawError, RawResult, RgbImage};
 
 /// Hostile-input resource limits for PNG decoding.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -113,4 +115,44 @@ fn decoder(config: &PngDecodeConfig) -> gamut_png::PngDecoder {
 #[cfg(feature = "decode")]
 fn scale(value: u8) -> u16 {
     u16::from(value) * 257
+}
+
+#[cfg(feature = "encode")]
+impl rawshift_image_core::ImageEncoder for Png {
+    type Options = ();
+    type Input = RgbImage;
+    fn encode_to_writer<W: std::io::Write>(
+        input: &Self::Input,
+        metadata: &rawshift_image_core::ImageMetadata,
+        _: &Self::Options,
+        mut writer: W,
+    ) -> RawResult<()> {
+        use gamut_core::{Dimensions, EncodeImage, ImageRef, Rgb16};
+        use rawshift_image_metadata::{exif::ExifBuilder, icc::IccProfile};
+        let error = |error: gamut_core::Error| {
+            RawError::Encode(rawshift_image_core::EncodeError::Encoding {
+                format: "PNG",
+                message: error.to_string(),
+            })
+        };
+        let dimensions = Dimensions::new(input.width(), input.height()).map_err(error)?;
+        let image = ImageRef::<Rgb16>::new(input.data(), dimensions).map_err(error)?;
+        let icc = IccProfile::srgb();
+        let mut encoder =
+            gamut_png::PngEncoder::new().with_icc_profile("ICC Profile", icc.as_bytes());
+        if let Ok(exif) = ExifBuilder::new(metadata).build_bytes() {
+            encoder = encoder.with_exif(&exif);
+        }
+        if let Some(xmp) = metadata
+            .xmp
+            .as_deref()
+            .and_then(|value| std::str::from_utf8(value).ok())
+        {
+            encoder = encoder.with_xmp(xmp);
+        }
+        let mut output = Vec::new();
+        encoder.encode_image(image, &mut output).map_err(error)?;
+        writer.write_all(&output)?;
+        Ok(())
+    }
 }

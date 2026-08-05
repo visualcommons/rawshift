@@ -235,7 +235,7 @@ avif-decode = ["dep:gamut-avif", "dep:gamut-isobmff", "exif", "rawshift-image-av
 # lossless or lossy; 10/12-bit output is pending visualcommons/gamut#251.
 # `exif` supplies the ExifBuilder and the `gamut-xmp` validation used when
 # splicing EXIF/ICC/XMP items into the encoded container.
-avif-encode = ["dep:gamut-avif", "exif", "rawshift-image-metadata/avif-encode"]
+avif-encode = ["dep:gamut-avif", "exif", "rawshift-image-metadata/avif-encode", "rawshift-image-avif/encode"]
 # HEIC decode is backed directly by gamut-heic (no tier-4 layer): container
 # parsing, metadata, and auxiliary-image enumeration always work; pixel decode
 # additionally needs a hardware HEVC decoder (`hw`/`hw-*`, see below) and
