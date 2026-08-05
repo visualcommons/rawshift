@@ -546,6 +546,12 @@ impl WorkerState {
                 .codec
                 .flush()
                 .map_err(|e| PlatformFailure::new("flush", e))?;
+            // The NDK contract requires AMediaCodec_start after every flush,
+            // including for this synchronous, buffer-input decoder.
+            session
+                .codec
+                .start()
+                .map_err(|e| PlatformFailure::new("restart-after-flush", e))?;
             session.drain_images()?;
         } else {
             self.discard_session();
