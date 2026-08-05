@@ -1,6 +1,6 @@
 //! Safe wrappers around libwebp FFI for WebP encoding, decoding, and muxing.
 
-use std::ffi::c_int;
+use std::ffi::{c_char, c_int};
 use std::os::raw::c_void;
 use std::ptr;
 use std::slice;
@@ -161,7 +161,7 @@ pub fn mux_webp(
                 bytes: data.as_ptr(),
                 size: data.len(),
             };
-            let rc = WebPMuxSetChunk(mux, b"EXIF".as_ptr() as *const i8, &chunk_data, 1);
+            let rc = WebPMuxSetChunk(mux, b"EXIF".as_ptr() as *const c_char, &chunk_data, 1);
             if rc != WebPMuxError::WEBP_MUX_OK {
                 WebPMuxDelete(mux);
                 return Err(format!("WebPMuxSetChunk(EXIF) failed: {:?}", rc));
@@ -174,7 +174,7 @@ pub fn mux_webp(
                 bytes: data.as_ptr(),
                 size: data.len(),
             };
-            let rc = WebPMuxSetChunk(mux, b"ICCP".as_ptr() as *const i8, &chunk_data, 1);
+            let rc = WebPMuxSetChunk(mux, b"ICCP".as_ptr() as *const c_char, &chunk_data, 1);
             if rc != WebPMuxError::WEBP_MUX_OK {
                 WebPMuxDelete(mux);
                 return Err(format!("WebPMuxSetChunk(ICCP) failed: {:?}", rc));
@@ -187,7 +187,7 @@ pub fn mux_webp(
                 bytes: data.as_ptr(),
                 size: data.len(),
             };
-            let rc = WebPMuxSetChunk(mux, b"XMP ".as_ptr() as *const i8, &chunk_data, 1);
+            let rc = WebPMuxSetChunk(mux, b"XMP ".as_ptr() as *const c_char, &chunk_data, 1);
             if rc != WebPMuxError::WEBP_MUX_OK {
                 WebPMuxDelete(mux);
                 return Err(format!("WebPMuxSetChunk(XMP) failed: {:?}", rc));
