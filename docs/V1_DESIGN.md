@@ -14,9 +14,11 @@ gamut is consumed as versioned crates.io dependencies managed in the workspace
 ```
 rawshift/                      facade — features: image (default), serde, hw, hw-*, full
 ├── crates/rawshift-core       #![forbid(unsafe_code)]; deps: gamut-core, gamut-color, serde(opt)
-├── crates/rawshift-image      safe except processing/ + transforms/ hot paths;
-│                              deps: rawshift-core, rawshift-hwdec(opt), gamut codec/metadata crates,
-│                              gif, resvg, zune-ppm (permanent exceptions), rayon
+├── crates/rawshift-image-core shared image/error/capability contracts
+├── crates/rawshift-image      compatibility aggregator plus processing, transforms, and camera data
+├── crates/rawshift-image-*    one publishable leaf per format (ARW through WebP)
+├── crates/rawshift-image-{metadata,ifd,ljpeg}
+│                              focused support shared by the format leaves
 ├── crates/rawshift-hwdec      all platform FFI; hardware still-frame decode of HEVC + AV1
 │                              (VideoToolbox / libva / NDK MediaCodec)
 └── crates/rawshift-video      parked placeholder — excluded from publish set + facade
@@ -32,7 +34,7 @@ Modules: `geometry`, `sensor`, `color`, `codec`, `metadata`.
 | `Size` | deleted → re-export `gamut_core::Dimensions` |
 | `Point`, `Rect` | kept (`Rect { origin: Point, size: Dimensions }`) |
 | `RawImage`(+Builder), `CfaPattern`, `XTransPattern`, `white_level_from_bit_depth` | kept unchanged (sensor domain); bridge to `gamut_dng` types lives in rawshift-image |
-| `RgbImage` | deleted from core → rawshift-image wrapper over `ImageBuf<Rgb16>` |
+| `RgbImage` | deleted from rawshift-core → rawshift-image-core wrapper over `ImageBuf<Rgb16>` |
 | `pixel.rs` (`Sample`/`FromF32`/`Rgb<S>`/`Rgba<S>`) | deleted → re-export gamut-core `Sample`/`Pixel` markers; f32 stays transform-internal scratch |
 | `ColorSpace` | deleted → new `ColorDescription` (CICP primaries+transfer pair; consts `SRGB`, `LINEAR_SRGB` (pipeline working space), `DISPLAY_P3`, `REC2020`, `UNSPECIFIED`; ICC-authoritative spaces such as Adobe RGB map to `UNSPECIFIED` with the preserved ICC profile as the authority); manual serde via CICP code points until gamut derives land |
 | `BitDepth` | deleted → re-export `gamut_color::BitDepth` (gated on upstream adding `Sixteen`) |

@@ -1,0 +1,20 @@
+[package]
+name = "rawshift-image-ppm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "PPM and Netpbm decoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true }
+zune-core = { version = "0.5", optional = true }
+zune-ppm = { version = "0.5", optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:zune-core", "dep:zune-ppm"]
+serde = ["dep:serde", "rawshift-image-core/serde"]

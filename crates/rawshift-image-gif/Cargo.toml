@@ -1,0 +1,19 @@
+[package]
+name = "rawshift-image-gif"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "GIF decoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true }
+gif = { version = "0.13", optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:gif"]
+serde = ["dep:serde", "rawshift-image-core/serde"]

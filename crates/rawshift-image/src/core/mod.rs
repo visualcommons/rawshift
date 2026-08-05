@@ -7,13 +7,11 @@
 //! validated `ImageBuf<Rgb16>`. [`IccProfile`] is additionally surfaced here
 //! from the internal `metadata` module.
 
-mod rgb_image;
-
 pub use rawshift_core::*;
-pub use rgb_image::RgbImage;
+pub use rawshift_image_core::RgbImage;
 
 // Re-export IccProfile from the internal metadata module so it remains
 // publicly accessible under `core` as before the workspace split.
 // Its internals are built on `gamut_icc` (metadata-stack migration, #19);
 // the wrapper type stays so the container-append API keeps its home.
-pub use crate::metadata::icc::IccProfile;
+pub use rawshift_image_metadata::icc::IccProfile;

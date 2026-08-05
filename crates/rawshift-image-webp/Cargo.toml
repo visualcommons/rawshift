@@ -1,0 +1,24 @@
+[package]
+name = "rawshift-image-webp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "WebP decoding and encoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true }
+rawshift-image-metadata = { workspace = true, optional = true, features = ["exif"] }
+gamut-core = { workspace = true, optional = true }
+gamut-metadata = { workspace = true, optional = true }
+gamut-webp = { workspace = true, optional = true }
+gamut-xmp = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:gamut-core", "dep:gamut-metadata", "dep:gamut-webp", "dep:rawshift-image-metadata"]
+encode = ["dep:gamut-core", "dep:gamut-metadata", "dep:gamut-webp", "dep:gamut-xmp", "dep:rawshift-image-metadata"]
+serde = ["dep:serde", "rawshift-image-core/serde"]

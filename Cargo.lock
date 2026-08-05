@@ -1230,6 +1230,27 @@ dependencies = [
  "gif",
  "rawshift-core",
  "rawshift-hwdec",
+ "rawshift-image-arw",
+ "rawshift-image-avif",
+ "rawshift-image-core",
+ "rawshift-image-cr2",
+ "rawshift-image-cr3",
+ "rawshift-image-crw",
+ "rawshift-image-dng",
+ "rawshift-image-gif",
+ "rawshift-image-heic",
+ "rawshift-image-ifd",
+ "rawshift-image-jpeg",
+ "rawshift-image-jxl",
+ "rawshift-image-ljpeg",
+ "rawshift-image-metadata",
+ "rawshift-image-nef",
+ "rawshift-image-png",
+ "rawshift-image-ppm",
+ "rawshift-image-raf",
+ "rawshift-image-svg",
+ "rawshift-image-tiff",
+ "rawshift-image-webp",
  "rayon",
  "resvg",
  "serde",
@@ -1241,6 +1262,226 @@ dependencies = [
  "tracing-subscriber",
  "zune-core 0.5.1",
  "zune-ppm",
+]
+
+[[package]]
+name = "rawshift-image-arw"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "rawshift-image-ljpeg",
+ "tracing",
+]
+
+[[package]]
+name = "rawshift-image-avif"
+version = "0.1.1"
+dependencies = [
+ "gamut-avif",
+ "gamut-color",
+ "gamut-core",
+ "gamut-isobmff",
+ "rawshift-hwdec",
+ "rawshift-image-core",
+ "rawshift-image-metadata",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-core"
+version = "0.1.1"
+dependencies = [
+ "gamut-core",
+ "rawshift-core",
+ "rawshift-hwdec",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "rawshift-image-cr2"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "rawshift-image-ljpeg",
+]
+
+[[package]]
+name = "rawshift-image-cr3"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "tracing",
+]
+
+[[package]]
+name = "rawshift-image-crw"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+]
+
+[[package]]
+name = "rawshift-image-dng"
+version = "0.1.1"
+dependencies = [
+ "gamut-dng",
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "serde",
+ "tracing",
+]
+
+[[package]]
+name = "rawshift-image-gif"
+version = "0.1.1"
+dependencies = [
+ "gif",
+ "rawshift-image-core",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-heic"
+version = "0.1.1"
+dependencies = [
+ "gamut-color",
+ "gamut-core",
+ "gamut-heic",
+ "gamut-isobmff",
+ "rawshift-hwdec",
+ "rawshift-image-core",
+ "rawshift-image-metadata",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-ifd"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-core",
+ "rawshift-image-core",
+ "tracing",
+]
+
+[[package]]
+name = "rawshift-image-jpeg"
+version = "0.1.1"
+dependencies = [
+ "gamut-core",
+ "gamut-jpeg",
+ "gamut-xmp",
+ "rawshift-image-core",
+ "rawshift-image-metadata",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-jxl"
+version = "0.1.1"
+dependencies = [
+ "gamut-core",
+ "gamut-jxl 0.4.0",
+ "rawshift-image-core",
+ "rawshift-image-metadata",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-ljpeg"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+]
+
+[[package]]
+name = "rawshift-image-metadata"
+version = "0.1.1"
+dependencies = [
+ "gamut-exif",
+ "gamut-icc",
+ "gamut-ifd",
+ "gamut-metadata",
+ "gamut-xmp",
+ "rawshift-core",
+]
+
+[[package]]
+name = "rawshift-image-nef"
+version = "0.1.1"
+dependencies = [
+ "gamut-ifd",
+ "rawshift-image-core",
+ "rawshift-image-ifd",
+ "rawshift-image-ljpeg",
+]
+
+[[package]]
+name = "rawshift-image-png"
+version = "0.1.1"
+dependencies = [
+ "gamut-core",
+ "gamut-png",
+ "rawshift-image-core",
+ "rawshift-image-metadata",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-ppm"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+ "serde",
+ "zune-core 0.5.1",
+ "zune-ppm",
+]
+
+[[package]]
+name = "rawshift-image-raf"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+ "tracing",
+]
+
+[[package]]
+name = "rawshift-image-svg"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+ "resvg",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-tiff"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+ "serde",
+ "tiff",
+]
+
+[[package]]
+name = "rawshift-image-webp"
+version = "0.1.1"
+dependencies = [
+ "gamut-core",
+ "gamut-metadata",
+ "gamut-webp",
+ "gamut-xmp",
+ "rawshift-image-core",
+ "rawshift-image-metadata",
+ "serde",
 ]
 
 [[package]]

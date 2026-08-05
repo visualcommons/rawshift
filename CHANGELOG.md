@@ -18,6 +18,15 @@ dependency is a registry package. 0.x source compatibility is a non-goal (see
 
 All entries below are **breaking**, grouped by area.
 
+#### Package boundaries
+
+- Image formats now live in 17 independently publishable
+  `rawshift-image-*` leaf crates. `rawshift-image` remains a source-compatible
+  feature facade and owns processing, transforms, and camera data.
+- `rawshift-image-core` provides the canonical image/error types and open
+  format capability traits; metadata, TIFF/IFD helpers, and lossless JPEG are
+  isolated in focused support crates.
+
 #### Core types (`rawshift-core`)
 
 - Generic primitives are gamut re-exports; only the sensor domain stays

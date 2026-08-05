@@ -21,6 +21,27 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rawshift-core  = { workspace = true }
+rawshift-image-core = { workspace = true }
+rawshift-image-metadata = { workspace = true }
+rawshift-image-ifd = { workspace = true, optional = true }
+rawshift-image-ljpeg = { workspace = true, optional = true }
+rawshift-image-arw = { workspace = true, default-features = false }
+rawshift-image-avif = { workspace = true, default-features = false }
+rawshift-image-cr2 = { workspace = true, default-features = false }
+rawshift-image-cr3 = { workspace = true, default-features = false }
+rawshift-image-crw = { workspace = true, default-features = false }
+rawshift-image-dng = { workspace = true, default-features = false }
+rawshift-image-nef = { workspace = true, default-features = false }
+rawshift-image-raf = { workspace = true, default-features = false }
+rawshift-image-heic = { workspace = true, default-features = false }
+rawshift-image-gif = { workspace = true, default-features = false }
+rawshift-image-jpeg = { workspace = true, default-features = false }
+rawshift-image-jxl = { workspace = true, default-features = false }
+rawshift-image-png = { workspace = true, default-features = false }
+rawshift-image-ppm = { workspace = true, default-features = false }
+rawshift-image-svg = { workspace = true, default-features = false }
+rawshift-image-tiff = { workspace = true, default-features = false }
+rawshift-image-webp = { workspace = true, default-features = false }
 gamut-core     = { workspace = true }
 # gamut-icc backs the sRGB profile construction and validation in
 # `metadata/icc.rs`, which compiles unconditionally (the `IccProfile` type is
@@ -173,30 +194,30 @@ raf  = ["raf-decode"]
 # Decode covers baseline + progressive streams (grayscale/YCbCr/RGB/CMYK/YCCK);
 # encode writes baseline or progressive 8-bit DCT JPEG. `exif` supplies the
 # EXIF builder/parser for the APP1 segment gamut-jpeg reads and writes.
-jpeg-decode = ["dep:gamut-jpeg", "exif"]
-jpeg-encode = ["dep:gamut-jpeg", "exif"]
+jpeg-decode = ["dep:gamut-jpeg", "exif", "rawshift-image-jpeg/decode"]
+jpeg-encode = ["dep:gamut-jpeg", "exif", "rawshift-image-jpeg/encode"]
 # PNG is backed directly by gamut-png (no tier-4 layer): like JPEG and the RAW
 # direction features, each half has a single gamut-backed implementation, so
 # the format-direction feature itself pulls the dependency. Decode covers
 # every PNG colour type and bit depth (incl. Adam7 interlace) with
 # hostile-input resource guards, and surfaces eXIf/iCCP/XMP chunk metadata;
 # `exif` supplies the parser that maps the eXIf payload into `ImageMetadata`.
-png-decode  = ["dep:gamut-png", "exif"]
+png-decode  = ["dep:gamut-png", "exif", "rawshift-image-png/decode"]
 # Encode: `exif` supplies the ExifBuilder used to serialise the eXIf chunk
 # payload.
-png-encode  = ["dep:gamut-png", "exif"]
+png-encode  = ["dep:gamut-png", "exif", "rawshift-image-png/encode"]
 # WebP is backed directly by gamut-webp (pure Rust VP8/VP8L plus RIFF
 # EXIF/XMP/ICC metadata in both directions).
-webp-decode = ["dep:gamut-webp", "exif"]
-webp-encode = ["dep:gamut-webp", "exif"]
+webp-decode = ["dep:gamut-webp", "exif", "rawshift-image-webp/decode"]
+webp-encode = ["dep:gamut-webp", "exif", "rawshift-image-webp/encode"]
 # JXL is backed directly by gamut-jxl (no tier-4 layer): like PNG and
 # the RAW direction features, each half has a single gamut-backed
 # implementation, so the format-direction feature itself pulls the dependency.
 # Decode wraps the pure-Rust jxl-rs decoder; encode wraps the reference libjxl
 # (statically built and linked by gamut-jxl-sys — cmake + C++ toolchain).
 # `exif` supplies the ExifBuilder used for the container `Exif` box on encode.
-jxl-decode  = ["dep:gamut-jxl", "gamut-jxl/decode"]
-jxl-encode  = ["dep:gamut-jxl", "gamut-jxl/encode", "exif"]
+jxl-decode  = ["dep:gamut-jxl", "gamut-jxl/decode", "rawshift-image-jxl/decode"]
+jxl-encode  = ["dep:gamut-jxl", "gamut-jxl/encode", "exif", "rawshift-image-jxl/encode"]
 gif-decode  = ["gif-decode-gif"]
 tiff-decode = ["tiff-decode-tiff"]
 # AVIF decode is backed directly by gamut-avif (no tier-4 layer): container
@@ -208,7 +229,7 @@ tiff-decode = ["tiff-decode-tiff"]
 # (visualcommons/gamut#259). `exif` supplies the parser for the container's
 # Exif item; `gamut-isobmff` surfaces in the ICC-extraction path
 # (`AvifItem::colour()`).
-avif-decode = ["dep:gamut-avif", "dep:gamut-isobmff", "exif"]
+avif-decode = ["dep:gamut-avif", "dep:gamut-isobmff", "exif", "rawshift-image-avif/decode"]
 # AVIF encode is backed directly by gamut-avif (no tier-4 layer): like
 # PNG and the RAW direction features, it has a single gamut-backed
 # implementation, so the format-direction feature itself pulls the dependency.
@@ -216,28 +237,28 @@ avif-decode = ["dep:gamut-avif", "dep:gamut-isobmff", "exif"]
 # lossless or lossy; 10/12-bit output is pending visualcommons/gamut#251.
 # `exif` supplies the ExifBuilder and the `gamut-xmp` validation used when
 # splicing EXIF/ICC/XMP items into the encoded container.
-avif-encode = ["dep:gamut-avif", "exif"]
+avif-encode = ["dep:gamut-avif", "exif", "rawshift-image-metadata/avif-encode", "rawshift-image-avif/encode"]
 # HEIC decode is backed directly by gamut-heic (no tier-4 layer): container
 # parsing, metadata, and auxiliary-image enumeration always work; pixel decode
 # additionally needs a hardware HEVC decoder (`hw`/`hw-*`, see below) and
 # reports `RawError::HwDecoderUnavailable` without one. `exif` supplies the
 # parser for the container's Exif item.
-heic-decode = ["dep:gamut-heic", "dep:gamut-isobmff", "exif"]
+heic-decode = ["dep:gamut-heic", "dep:gamut-isobmff", "exif", "rawshift-image-heic/decode"]
 svg-decode  = ["svg-decode-resvg"]
 ppm-decode  = ["ppm-decode-zune"]
-arw-decode  = ["ifd-parser"]
-cr2-decode  = ["ifd-parser"]
-cr3-decode  = ["ifd-parser"]
-crw-decode  = []
+arw-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-arw/decode"]
+cr2-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-core/cr2-decode", "rawshift-image-cr2/decode"]
+cr3-decode  = ["ifd-parser", "rawshift-image-core/cr3-decode", "rawshift-image-cr3/decode"]
+crw-decode  = ["rawshift-image-core/crw-decode", "rawshift-image-crw/decode"]
 # DNG decode is backed by gamut-dng (raw image, levels, camera profile; JPEG
 # XL tile decode is built into gamut-dng, so `jxl-decode` is no longer pulled).
 # `ifd-parser` is additionally pulled because format sniffing
 # (`RawFile::detect_format`) and the EXIF/GPS/thumbnail tree walk read the
 # container through gamut-ifd.
-dng-decode  = ["ifd-parser", "dep:gamut-dng"]
-dng-encode  = ["dep:gamut-dng"]
-nef-decode  = ["ifd-parser"]
-raf-decode  = []
+dng-decode  = ["ifd-parser", "dep:gamut-dng", "rawshift-image-dng/decode"]
+dng-encode  = ["dep:gamut-dng", "rawshift-image-dng/encode"]
+nef-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-core/nef-decode", "rawshift-image-nef/decode"]
+raf-decode  = ["rawshift-image-core/raf-decode", "rawshift-image-raf/decode"]
 
 # ── Tier 4: implementation features (four retained aliases only) ──────────────
 # The gamut migrations collapsed this tier for every gamut-backed format — the
@@ -255,16 +276,16 @@ raf-decode  = []
 # Each also enables its tier-3 direction feature, so it can be selected
 # standalone. When a blocked migration unblocks, its alias dissolves into the
 # direction feature exactly like the gamut-backed formats above.
-gif-decode-gif       = ["gif-decode", "dep:gif"]
-tiff-decode-tiff     = ["tiff-decode", "dep:tiff", "exif"]
-svg-decode-resvg     = ["svg-decode", "dep:resvg"]
-ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
+gif-decode-gif       = ["gif-decode", "dep:gif", "rawshift-image-gif/decode"]
+tiff-decode-tiff     = ["tiff-decode", "dep:tiff", "exif", "rawshift-image-tiff/decode"]
+svg-decode-resvg     = ["svg-decode", "dep:resvg", "rawshift-image-svg/decode"]
+ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime", "rawshift-image-ppm/decode"]
 
 # ── Tier 5: infrastructure / linking features ─────────────────────────────────
 # gamut-ifd TIFF/IFD structure engine (used by the migrated TIFF-based RAW
 # decoders and by format detection).
-ifd-parser    = ["dep:gamut-ifd"]
-serde         = ["dep:serde", "rawshift-core/serde"]
+ifd-parser    = ["dep:gamut-ifd", "dep:rawshift-image-ifd", "rawshift-image-metadata/ifd-parser"]
+serde         = ["dep:serde", "rawshift-core/serde", "rawshift-image-core/serde", "rawshift-image-dng/serde", "rawshift-image-avif/serde", "rawshift-image-gif/serde", "rawshift-image-heic/serde", "rawshift-image-jpeg/serde", "rawshift-image-jxl/serde", "rawshift-image-png/serde", "rawshift-image-ppm/serde", "rawshift-image-svg/serde", "rawshift-image-tiff/serde", "rawshift-image-webp/serde"]
 # `zune-core` codec primitives (bit depth, colorspace, decoder/encoder option
 # builders). Pulled by the zune-backed PPM impl feature (`zune-ppm` is a
 # permanent exception to the gamut migration — see AGENTS.md).
@@ -273,7 +294,7 @@ zune-runtime  = ["dep:zune-core"]
 # blob model, `gamut-metadata` + `gamut-xmp` for the unified-model bridge).
 # Pulled by format impl features that parse embedded EXIF on decode or write it
 # on encode.
-exif          = ["dep:gamut-exif", "dep:gamut-metadata", "dep:gamut-xmp"]
+exif          = ["dep:gamut-exif", "dep:gamut-metadata", "dep:gamut-xmp", "rawshift-image-metadata/exif"]
 # Hardware still-frame decode (HEVC for HEIC; AV1 for AVIF). These are
 # **verified** feature flags — see docs/SUPPORT.md for the permanent
 # target/API matrix:
@@ -283,10 +304,10 @@ exif          = ["dep:gamut-exif", "dep:gamut-metadata", "dep:gamut-xmp"]
 #   `hw-*` — pin one explicit backend; `compile_error!` on any other target.
 # Without any of them, `heic`/`avif` are valid container/metadata-only builds
 # whose pixel decode returns `RawError::HwDecoderUnavailable`.
-hw              = ["dep:rawshift-hwdec", "rawshift-hwdec/hw"]
-hw-videotoolbox = ["hw", "rawshift-hwdec/videotoolbox"]
-hw-vaapi        = ["hw", "rawshift-hwdec/vaapi"]
-hw-mediacodec   = ["hw", "rawshift-hwdec/mediacodec"]
+hw              = ["dep:rawshift-hwdec", "rawshift-hwdec/hw", "rawshift-image-avif/hw", "rawshift-image-heic/hw"]
+hw-videotoolbox = ["hw", "rawshift-hwdec/videotoolbox", "rawshift-image-avif/hw-videotoolbox", "rawshift-image-heic/hw-videotoolbox"]
+hw-vaapi        = ["hw", "rawshift-hwdec/vaapi", "rawshift-image-avif/hw-vaapi", "rawshift-image-heic/hw-vaapi"]
+hw-mediacodec   = ["hw", "rawshift-hwdec/mediacodec", "rawshift-image-avif/hw-mediacodec", "rawshift-image-heic/hw-mediacodec"]
 
 [[bench]]
 name = "decode"

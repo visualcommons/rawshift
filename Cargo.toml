@@ -5,6 +5,27 @@ members = [
     "crates/rawshift-core",
     "crates/rawshift-hwdec",
     "crates/rawshift-image",
+    "crates/rawshift-image-core",
+    "crates/rawshift-image-metadata",
+    "crates/rawshift-image-ifd",
+    "crates/rawshift-image-ljpeg",
+    "crates/rawshift-image-arw",
+    "crates/rawshift-image-avif",
+    "crates/rawshift-image-cr2",
+    "crates/rawshift-image-cr3",
+    "crates/rawshift-image-crw",
+    "crates/rawshift-image-dng",
+    "crates/rawshift-image-nef",
+    "crates/rawshift-image-raf",
+    "crates/rawshift-image-heic",
+    "crates/rawshift-image-gif",
+    "crates/rawshift-image-jpeg",
+    "crates/rawshift-image-jxl",
+    "crates/rawshift-image-png",
+    "crates/rawshift-image-ppm",
+    "crates/rawshift-image-svg",
+    "crates/rawshift-image-tiff",
+    "crates/rawshift-image-webp",
     "crates/rawshift-video",
 ]
 
@@ -50,6 +71,27 @@ serde     = { version = "1.0", features = ["derive"] }
 rawshift-core  = { path = "crates/rawshift-core", version = "0.1.1" }
 rawshift-hwdec = { path = "crates/rawshift-hwdec", version = "0.1.1" }
 rawshift-image = { path = "crates/rawshift-image", version = "0.1.1" }
+rawshift-image-core = { path = "crates/rawshift-image-core", version = "0.1.1" }
+rawshift-image-metadata = { path = "crates/rawshift-image-metadata", version = "0.1.1" }
+rawshift-image-ifd = { path = "crates/rawshift-image-ifd", version = "0.1.1" }
+rawshift-image-ljpeg = { path = "crates/rawshift-image-ljpeg", version = "0.1.1" }
+rawshift-image-arw = { path = "crates/rawshift-image-arw", version = "0.1.1", default-features = false }
+rawshift-image-avif = { path = "crates/rawshift-image-avif", version = "0.1.1", default-features = false }
+rawshift-image-cr2 = { path = "crates/rawshift-image-cr2", version = "0.1.1", default-features = false }
+rawshift-image-cr3 = { path = "crates/rawshift-image-cr3", version = "0.1.1", default-features = false }
+rawshift-image-crw = { path = "crates/rawshift-image-crw", version = "0.1.1", default-features = false }
+rawshift-image-dng = { path = "crates/rawshift-image-dng", version = "0.1.1", default-features = false }
+rawshift-image-nef = { path = "crates/rawshift-image-nef", version = "0.1.1", default-features = false }
+rawshift-image-raf = { path = "crates/rawshift-image-raf", version = "0.1.1", default-features = false }
+rawshift-image-heic = { path = "crates/rawshift-image-heic", version = "0.1.1", default-features = false }
+rawshift-image-gif = { path = "crates/rawshift-image-gif", version = "0.1.1", default-features = false }
+rawshift-image-jpeg = { path = "crates/rawshift-image-jpeg", version = "0.1.1", default-features = false }
+rawshift-image-jxl = { path = "crates/rawshift-image-jxl", version = "0.1.1", default-features = false }
+rawshift-image-png = { path = "crates/rawshift-image-png", version = "0.1.1", default-features = false }
+rawshift-image-ppm = { path = "crates/rawshift-image-ppm", version = "0.1.1", default-features = false }
+rawshift-image-svg = { path = "crates/rawshift-image-svg", version = "0.1.1", default-features = false }
+rawshift-image-tiff = { path = "crates/rawshift-image-tiff", version = "0.1.1", default-features = false }
+rawshift-image-webp = { path = "crates/rawshift-image-webp", version = "0.1.1", default-features = false }
 rawshift-video = { path = "crates/rawshift-video", version = "0.1.1" }
 
 # Profiles must live at the workspace root — Cargo ignores profiles declared in

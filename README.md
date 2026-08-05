@@ -74,6 +74,8 @@ rawshift is a Cargo workspace:
 | ---------------- | ---------------------------------------------------------------------------------------------------------------- |
 | [`rawshift`](./crates/rawshift)                       | Facade. Re-exports `rawshift-image` behind the coarse `image` feature. Most consumers depend on this.            |
 | [`rawshift-image`](./crates/rawshift-image/README.md) | Still-image decoding, RAW processing, and encoding. Carries the full per-format feature system.                  |
+| `rawshift-image-*` format crates                     | Independently usable format leaves (`jpeg`, `png`, `dng`, `arw`, and others) behind shared `rawshift-image-core` contracts. |
+| `rawshift-image-{metadata,ifd,ljpeg}`                 | Focused support crates shared by format leaves; applications normally use them transitively.                    |
 | [`rawshift-video`](./crates/rawshift-video/README.md) | Video support — parked and unpublished for v1 (see [Video](#video)).                                             |
 | [`rawshift-core`](./crates/rawshift-core/README.md)   | Shared types — geometry, codec descriptors, the metadata model. Charter is documented on the crate.              |
 

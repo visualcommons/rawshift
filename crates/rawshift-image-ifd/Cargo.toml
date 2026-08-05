@@ -1,0 +1,18 @@
+[package]
+name = "rawshift-image-ifd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Shared IFD helpers for rawshift RAW format crates"
+documentation = "https://docs.rs/rawshift-image-ifd"
+keywords = ["raw", "image", "ifd", "tiff"]
+categories = ["multimedia::images", "parser-implementations"]
+
+[dependencies]
+rawshift-core = { workspace = true }
+rawshift-image-core = { workspace = true }
+gamut-ifd = { workspace = true, features = ["bigtiff"] }
+tracing = { workspace = true }

@@ -10,6 +10,13 @@ depending on `rawshift-image` directly. Depend on this crate directly only when
 you need fine-grained control — individual formats, alternative codec backends,
 or an explicit hardware-decode backend pin (`hw-*`).
 
+Format implementations live in independently publishable `rawshift-image-*`
+leaf crates. This crate is the compatibility aggregator: its existing features
+and APIs delegate to those leaves, while processing, transforms, camera data,
+and the end-to-end RAW development pipeline remain here. Leaf crates share the
+types and `FormatSniffer`/`ImageDecoder`/`ImageEncoder` contracts from
+`rawshift-image-core`.
+
 ## Format Support
 
 | Format       | Decoding                                                                                 | Encoding                                                                                         | Notes                                     |

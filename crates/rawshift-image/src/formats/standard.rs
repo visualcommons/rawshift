@@ -3,19 +3,6 @@
 //! This module provides decoders for common non-RAW image formats that decode
 //! directly to RGB pixel data stored in an [`RgbImage`].
 
-// `Cursor` is used only by the reader-based backends (gif / tiff).
-#[cfg(any(feature = "gif-decode", feature = "tiff-decode"))]
-use std::io::Cursor;
-
-#[cfg(feature = "zune-runtime")]
-use zune_core::bytestream::ZCursor;
-#[cfg(feature = "zune-runtime")]
-use zune_core::colorspace::ColorSpace;
-#[cfg(feature = "zune-runtime")]
-use zune_core::options::DecoderOptions;
-#[cfg(feature = "zune-runtime")]
-use zune_core::result::DecodingResult;
-
 use crate::core::CodecId;
 use crate::core::{Dimensions, RgbImage};
 use crate::error::{FormatError, RawError, RawResult};
@@ -255,397 +242,57 @@ pub fn detect_standard_format(data: &[u8]) -> Option<StandardFormat> {
     }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/// Scale an 8-bit sample to 16-bit by duplicating the byte in both halves.
-/// This is equivalent to `v * 257` and ensures that 255 maps to 65535.
-///
-/// Unused when only the JXL decoder is compiled in — gamut-jxl scales
-/// internally — hence the feature-precise `allow(dead_code)`.
-#[inline(always)]
-#[cfg_attr(
-    not(any(
-        feature = "gif-decode",
-        feature = "jpeg-decode",
-        feature = "png-decode",
-        feature = "webp-decode",
-        feature = "tiff-decode",
-        feature = "ppm-decode",
-    )),
-    allow(dead_code)
-)]
-fn u8_to_u16(v: u8) -> u16 {
-    (v as u16) * 257
+#[cfg(test)]
+#[inline]
+fn u8_to_u16(value: u8) -> u16 {
+    u16::from(value) * 257
 }
 
 // ── GIF ──────────────────────────────────────────────────────────────────────
 
 #[cfg(feature = "gif-decode")]
 fn decode_gif(data: &[u8]) -> RawResult<RgbImage> {
-    use gif::{ColorOutput, DecodeOptions};
-
-    let mut opts = DecodeOptions::new();
-    opts.set_color_output(ColorOutput::RGBA);
-    let mut decoder = opts.read_info(Cursor::new(data)).map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "GIF",
-            message: e.to_string(),
-        })
-    })?;
-
-    let canvas_width = decoder.width() as u32;
-    let canvas_height = decoder.height() as u32;
-
-    let frame = decoder
-        .read_next_frame()
-        .map_err(|e| {
-            RawError::Format(FormatError::ImageDecode {
-                format: "GIF",
-                message: e.to_string(),
-            })
-        })?
-        .ok_or_else(|| {
-            RawError::Format(FormatError::ImageDecode {
-                format: "GIF",
-                message: "no frames in GIF".to_string(),
-            })
-        })?;
-
-    let frame_width = frame.width as usize;
-    let frame_height = frame.height as usize;
-    let frame_left = frame.left as usize;
-    let frame_top = frame.top as usize;
-
-    // Allocate a black canvas and composite the frame (RGBA → RGB, drop alpha).
-    let mut out = vec![0u16; (canvas_width as usize) * (canvas_height as usize) * 3];
-
-    let buf = &frame.buffer[..];
-    // With ColorOutput::RGBA the buffer contains 4 bytes per pixel.
-    let expected_rgba = frame_width * frame_height * 4;
-    if buf.len() < expected_rgba {
-        return Err(RawError::Format(FormatError::ImageDecode {
-            format: "GIF",
-            message: format!(
-                "frame buffer too small: got {} bytes, expected {} ({}x{}x4)",
-                buf.len(),
-                expected_rgba,
-                frame_width,
-                frame_height,
-            ),
-        }));
-    }
-
-    for row in 0..frame_height {
-        let canvas_y = frame_top + row;
-        if canvas_y >= canvas_height as usize {
-            break;
-        }
-        for col in 0..frame_width {
-            let canvas_x = frame_left + col;
-            if canvas_x >= canvas_width as usize {
-                continue;
-            }
-            let src = (row * frame_width + col) * 4;
-            let dst = (canvas_y * canvas_width as usize + canvas_x) * 3;
-            out[dst] = u8_to_u16(buf[src]);
-            out[dst + 1] = u8_to_u16(buf[src + 1]);
-            out[dst + 2] = u8_to_u16(buf[src + 2]);
-            // Alpha channel (buf[src + 3]) is intentionally dropped.
-        }
-    }
-
-    RgbImage::new(canvas_width, canvas_height, out)
+    use rawshift_image_core::ImageDecoder;
+    rawshift_image_gif::Gif::decode(data, &Default::default())
 }
 
-// ── JPEG ─────────────────────────────────────────────────────────────────────
-
-/// `(v * k) / 255` with correct rounding — the multiplicative K application
-/// used for CMYK→RGB (borrowed from stb via zune-jpeg, kept for bit-exact
-/// parity with the previous backend).
-#[cfg(feature = "jpeg-decode")]
-#[inline]
-fn blinn_8x8(v: u8, k: u8) -> u8 {
-    let t = i32::from(v) * i32::from(k) + 128;
-    ((t + (t >> 8)) >> 8) as u8
-}
+// ── JPEG ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 #[cfg(feature = "jpeg-decode")]
-fn decode_jpeg(data: &[u8], _cfg: &JpegDecodeConfig) -> RawResult<RgbImage> {
-    use gamut_core::{Cmyk8, DecodeImage, ImageBuf, Rgb8};
-    use gamut_jpeg::JpegDecoder;
-
-    let jpeg_err = |e: gamut_core::Error| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "JPEG",
-            message: e.to_string(),
-        })
-    };
-
-    // gamut-jpeg presents four-component (Adobe CMYK/YCCK) streams only as
-    // `Cmyk8`; everything else — grayscale (replicated), YCbCr, RGB — decodes
-    // directly as `Rgb8`. The header-only `info` read selects the path.
-    let info = gamut_jpeg::info(data).map_err(jpeg_err)?;
-    if info.components == 4 {
-        let decoded: ImageBuf<Cmyk8> = JpegDecoder::new().decode_image(data).map_err(jpeg_err)?;
-        let dims = decoded.dimensions();
-        // CMYK→RGB in the Adobe-inverted convention (matching libjpeg and the
-        // previous zune-jpeg backend): R = C·K/255, G = M·K/255, B = Y·K/255
-        // on the stored sample values.
-        let data_u16: Vec<u16> = decoded
-            .as_samples()
-            .chunks_exact(4)
-            .flat_map(|px| {
-                [
-                    u8_to_u16(blinn_8x8(px[0], px[3])),
-                    u8_to_u16(blinn_8x8(px[1], px[3])),
-                    u8_to_u16(blinn_8x8(px[2], px[3])),
-                ]
-            })
-            .collect();
-        return RgbImage::new(dims.width, dims.height, data_u16);
-    }
-
-    let decoded: ImageBuf<Rgb8> = JpegDecoder::new().decode_image(data).map_err(jpeg_err)?;
-    let dims = decoded.dimensions();
-    let data_u16: Vec<u16> = decoded.as_samples().iter().map(|&v| u8_to_u16(v)).collect();
-    RgbImage::new(dims.width, dims.height, data_u16)
-}
-
-// ── PNG ──────────────────────────────────────────────────────────────────────
-
-/// Builds a `gamut_png::PngDecoder` from a [`PngDecodeConfig`], applying only
-/// the guards the caller overrode (a `None` keeps gamut's default).
-#[cfg(feature = "png-decode")]
-fn build_png_decoder(cfg: &PngDecodeConfig) -> gamut_png::PngDecoder {
-    // The spec's own dimension bound (§11.2.1): width/height are 1..=2³¹−1.
-    // Used when only one of the two dimension caps is overridden.
-    const SPEC_MAX_DIMENSION: u32 = i32::MAX as u32;
-
-    let mut decoder = gamut_png::PngDecoder::new();
-    if cfg.max_width.is_some() || cfg.max_height.is_some() {
-        decoder = decoder.with_max_dimensions(
-            cfg.max_width.unwrap_or(SPEC_MAX_DIMENSION),
-            cfg.max_height.unwrap_or(SPEC_MAX_DIMENSION),
-        );
-    }
-    if let Some(bytes) = cfg.max_image_bytes {
-        decoder = decoder.with_max_image_bytes(bytes);
-    }
-    if let Some(bytes) = cfg.max_metadata_bytes {
-        decoder = decoder.with_max_metadata_bytes(bytes);
-    }
-    decoder
+fn decode_jpeg(data: &[u8], cfg: &JpegDecodeConfig) -> RawResult<RgbImage> {
+    rawshift_image_jpeg::decode(data, cfg)
 }
 
 #[cfg(feature = "png-decode")]
 fn decode_png(data: &[u8], cfg: &PngDecodeConfig) -> RawResult<RgbImage> {
-    use gamut_png::PngImage;
-
-    // gamut-png's rich decode returns the pixels in the file's native layout
-    // (every colour type and bit depth, palettes carried alongside indices),
-    // which is then normalised to interleaved RGB u16 here: 16-bit samples
-    // pass through natively, 8-bit samples scale by 257, greyscale replicates
-    // across the channels, palettes expand, and alpha/transparency is dropped
-    // — matching every other standard decoder in this module. The typed
-    // `DecodeImage` impls are not used because they (correctly) refuse the
-    // lossy alpha drop.
-    let decoded = build_png_decoder(cfg).decode(data).map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "PNG",
-            message: e.to_string(),
-        })
-    })?;
-
-    let (w, h) = (decoded.header.width, decoded.header.height);
-    let data_u16: Vec<u16> = match decoded.image {
-        PngImage::Gray8(img) => img
-            .as_samples()
-            .iter()
-            .flat_map(|&v| [u8_to_u16(v); 3])
-            .collect(),
-        PngImage::Gray16(img) => img.as_samples().iter().flat_map(|&v| [v; 3]).collect(),
-        PngImage::GrayAlpha8(img) => img
-            .as_samples()
-            .chunks_exact(2)
-            .flat_map(|px| [u8_to_u16(px[0]); 3])
-            .collect(),
-        PngImage::GrayAlpha16(img) => img
-            .as_samples()
-            .chunks_exact(2)
-            .flat_map(|px| [px[0]; 3])
-            .collect(),
-        PngImage::Rgb8(img) => img.as_samples().iter().map(|&v| u8_to_u16(v)).collect(),
-        PngImage::Rgb16(img) => img.into_samples(),
-        PngImage::Rgba8(img) => img
-            .as_samples()
-            .chunks_exact(4)
-            .flat_map(|px| [u8_to_u16(px[0]), u8_to_u16(px[1]), u8_to_u16(px[2])])
-            .collect(),
-        PngImage::Rgba16(img) => img
-            .as_samples()
-            .chunks_exact(4)
-            .flat_map(|px| [px[0], px[1], px[2]])
-            .collect(),
-        PngImage::Indexed8(img) => {
-            // The decoder validated every index against the palette, so the
-            // lookup cannot fail; a defensive default keeps this panic-free.
-            // Per-entry tRNS alpha is dropped like every other alpha channel.
-            let palette = decoded.palette.ok_or_else(|| {
-                RawError::Format(FormatError::ImageDecode {
-                    format: "PNG",
-                    message: "indexed PNG without a palette".to_string(),
-                })
-            })?;
-            img.as_samples()
-                .iter()
-                .flat_map(|&idx| {
-                    let [r, g, b] = palette.rgb(idx).unwrap_or_default();
-                    [u8_to_u16(r), u8_to_u16(g), u8_to_u16(b)]
-                })
-                .collect()
-        }
-    };
-
-    RgbImage::new(w, h, data_u16)
+    rawshift_image_png::decode(data, cfg)
 }
 
-// ── WebP ─────────────────────────────────────────────────────────────────────
+// ── WebP ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 #[cfg(feature = "webp-decode")]
 fn decode_webp(data: &[u8]) -> RawResult<RgbImage> {
-    use gamut_core::{DecodeImage, ImageBuf, Rgb8};
-    use gamut_webp::WebpDecoder;
-
-    let decoded: ImageBuf<Rgb8> = WebpDecoder::new().decode_image(data).map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "WebP",
-            message: e.to_string(),
-        })
-    })?;
-    let dims = decoded.dimensions();
-    let data_u16 = decoded
-        .as_samples()
-        .iter()
-        .map(|&value| u8_to_u16(value))
-        .collect();
-    RgbImage::new(dims.width, dims.height, data_u16)
+    use rawshift_image_core::ImageDecoder;
+    rawshift_image_webp::WebP::decode(data, &Default::default())
 }
 
 // ── JXL ──────────────────────────────────────────────────────────────────────
 
 #[cfg(feature = "jxl-decode")]
 fn decode_jxl(data: &[u8]) -> RawResult<RgbImage> {
-    use gamut_core::{DecodeImage, ImageBuf, Rgb16};
-    use gamut_jxl::JxlDecoder;
-
-    // Requesting Rgb16 lets the decoder normalise every stream layout itself:
-    // grayscale expands to RGB, an alpha channel is dropped, and integer
-    // samples are scaled to full-range 16-bit (matching `u8_to_u16` for 8-bit
-    // sources). Animated and premultiplied-alpha streams are rejected upstream.
-    let decoded: ImageBuf<Rgb16> = JxlDecoder::new().decode_image(data).map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "JXL",
-            message: format!("{e}"),
-        })
-    })?;
-
-    let dims = decoded.dimensions();
-    RgbImage::new(dims.width, dims.height, decoded.into_samples())
+    use rawshift_image_core::ImageDecoder;
+    rawshift_image_jxl::Jxl::decode(data, &Default::default())
 }
 
 // ── TIFF ─────────────────────────────────────────────────────────────────────
 
 #[cfg(feature = "tiff-decode")]
 fn decode_tiff(data: &[u8]) -> RawResult<RgbImage> {
-    use tiff::ColorType;
-    use tiff::decoder::{Decoder, DecodingResult};
-
-    let cursor = Cursor::new(data);
-    let mut decoder = Decoder::new(cursor).map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "TIFF",
-            message: format!("{e}"),
-        })
-    })?;
-
-    let (w, h) = decoder.dimensions().map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "TIFF",
-            message: format!("{e}"),
-        })
-    })?;
-
-    let color_type = decoder.colortype().map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "TIFF",
-            message: format!("{e}"),
-        })
-    })?;
-
-    let result = decoder.read_image().map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "TIFF",
-            message: format!("{e}"),
-        })
-    })?;
-
-    // Extract raw samples as u16 values.
-    let samples_u16: Vec<u16> = match result {
-        DecodingResult::U8(px) => px.iter().map(|&v| u8_to_u16(v)).collect(),
-        DecodingResult::U16(px) => px,
-        DecodingResult::U32(px) => px.iter().map(|&v| (v >> 16) as u16).collect(),
-        DecodingResult::F32(px) => px
-            .iter()
-            .map(|&v| (v.clamp(0.0, 1.0) * 65535.0) as u16)
-            .collect(),
-        _ => {
-            return Err(RawError::Format(FormatError::ImageDecode {
-                format: "TIFF",
-                message: format!("unsupported TIFF sample type for color type {color_type:?}"),
-            }));
-        }
-    };
-
-    // Convert to interleaved RGB u16 based on the color type.
-    let data_u16: Vec<u16> = match color_type {
-        ColorType::RGB(_) => samples_u16,
-        ColorType::RGBA(_) => samples_u16
-            .chunks_exact(4)
-            .flat_map(|px| [px[0], px[1], px[2]])
-            .collect(),
-        ColorType::Gray(_) => samples_u16.iter().flat_map(|&v| [v, v, v]).collect(),
-        ColorType::GrayA(_) => samples_u16
-            .chunks_exact(2)
-            .flat_map(|px| [px[0], px[0], px[0]])
-            .collect(),
-        ColorType::CMYK(_) => {
-            // Simple CMYK→RGB: R = (1-C)*(1-K), G = (1-M)*(1-K), B = (1-Y)*(1-K)
-            samples_u16
-                .chunks_exact(4)
-                .flat_map(|px| {
-                    let c = px[0] as f64 / 65535.0;
-                    let m = px[1] as f64 / 65535.0;
-                    let y = px[2] as f64 / 65535.0;
-                    let k = px[3] as f64 / 65535.0;
-                    let r = ((1.0 - c) * (1.0 - k) * 65535.0) as u16;
-                    let g = ((1.0 - m) * (1.0 - k) * 65535.0) as u16;
-                    let b = ((1.0 - y) * (1.0 - k) * 65535.0) as u16;
-                    [r, g, b]
-                })
-                .collect()
-        }
-        _ => {
-            return Err(RawError::Format(FormatError::ImageDecode {
-                format: "TIFF",
-                message: format!("unsupported TIFF color type: {color_type:?}"),
-            }));
-        }
-    };
-
-    RgbImage::new(w, h, data_u16)
+    use rawshift_image_core::ImageDecoder;
+    rawshift_image_tiff::Tiff::decode(data, &Default::default())
 }
 
-// ── AVIF ─────────────────────────────────────────────────────────────────────
+// ── AVIF ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// Decode an AVIF file: gamut-avif parses the container and drives the
 /// decode pipeline; the AV1 codestream is decoded by a rawshift-hwdec
@@ -686,57 +333,19 @@ fn decode_heic(_data: &[u8]) -> RawResult<RgbImage> {
 
 #[cfg(feature = "svg-decode")]
 fn decode_svg(data: &[u8], cfg: &ResvgDecodeConfig) -> RawResult<RgbImage> {
-    use resvg::{tiny_skia, usvg};
-
-    let options = usvg::Options {
-        dpi: cfg.dpi,
-        ..usvg::Options::default()
-    };
-    let tree = usvg::Tree::from_data(data, &options).map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "SVG",
-            message: e.to_string(),
-        })
-    })?;
-
-    let pixmap_size = tree.size().to_int_size();
-    let width = pixmap_size.width();
-    let height = pixmap_size.height();
-
-    let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or_else(|| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "SVG",
-            message: "Failed to create pixmap".to_string(),
-        })
-    })?;
-
-    resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
-
-    // pixmap contains RGBA u8 data; convert to RGB u16
-    let rgba = pixmap.data();
-    let data_u16: Vec<u16> = rgba
-        .chunks_exact(4)
-        .flat_map(|chunk| {
-            [
-                chunk[0] as u16 * 257, // R
-                chunk[1] as u16 * 257, // G
-                chunk[2] as u16 * 257, // B
-            ]
-        })
-        .collect();
-
-    RgbImage::new(width, height, data_u16)
+    use rawshift_image_core::ImageDecoder;
+    rawshift_image_svg::Svg::decode(data, cfg)
 }
 
 #[cfg(not(feature = "svg-decode"))]
 fn decode_svg(_data: &[u8], _cfg: &ResvgDecodeConfig) -> RawResult<RgbImage> {
     Err(RawError::Format(FormatError::ImageDecode {
         format: "SVG",
-        message: "SVG support requires the 'svg' feature flag".to_string(),
+        message: "SVG support requires the 'svg' feature flag".to_owned(),
     }))
 }
 
-// ── APV ──────────────────────────────────────────────────────────────────────
+// ── APV ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 fn decode_apv(_data: &[u8]) -> RawResult<RgbImage> {
     // APV (All-intra Predictive Video codec) is an open format developed by Samsung.
@@ -752,109 +361,16 @@ fn decode_apv(_data: &[u8]) -> RawResult<RgbImage> {
 // ── PPM ──────────────────────────────────────────────────────────────────────
 
 #[cfg(feature = "ppm-decode")]
-fn decode_ppm(data: &[u8], _cfg: &ZunePpmDecodeConfig) -> RawResult<RgbImage> {
-    let cursor = ZCursor::new(data);
-    let mut decoder = zune_ppm::PPMDecoder::new_with_options(cursor, DecoderOptions::default());
-
-    let result = decoder.decode().map_err(|e| {
-        RawError::Format(FormatError::ImageDecode {
-            format: "PPM",
-            message: format!("{e:?}"),
-        })
-    })?;
-
-    let (w, h) = decoder
-        .dimensions()
-        .map(|(w, h)| (w as u32, h as u32))
-        .ok_or_else(|| {
-            RawError::Format(FormatError::ImageDecode {
-                format: "PPM",
-                message: "could not read image dimensions after decode".to_string(),
-            })
-        })?;
-
-    let colorspace = decoder.colorspace().unwrap_or(ColorSpace::RGB);
-    let n = colorspace.num_components();
-
-    // Convert raw samples to Vec<u16> (PFM yields f32 normalised to 0..1).
-    let samples_u16: Vec<u16> = match result {
-        DecodingResult::U8(px) => px.iter().map(|&v| u8_to_u16(v)).collect(),
-        DecodingResult::U16(px) => px,
-        DecodingResult::F32(px) => px
-            .iter()
-            .map(|&v| (v.clamp(0.0, 1.0) * 65535.0) as u16)
-            .collect(),
-        _ => {
-            return Err(RawError::Format(FormatError::ImageDecode {
-                format: "PPM",
-                message: "unexpected pixel depth in decoded result".to_string(),
-            }));
-        }
-    };
-
-    // Convert any colorspace to packed RGB u16.
-    let data_u16: Vec<u16> = match colorspace {
-        ColorSpace::RGB => samples_u16,
-        ColorSpace::RGBA => samples_u16
-            .chunks_exact(n)
-            .flat_map(|px| [px[0], px[1], px[2]])
-            .collect(),
-        ColorSpace::Luma => samples_u16.iter().flat_map(|&v| [v, v, v]).collect(),
-        ColorSpace::LumaA => samples_u16
-            .chunks_exact(n)
-            .flat_map(|px| [px[0], px[0], px[0]])
-            .collect(),
-        _ => {
-            return Err(RawError::Format(FormatError::ImageDecode {
-                format: "PPM",
-                message: format!("unsupported PPM colorspace: {colorspace:?}"),
-            }));
-        }
-    };
-
-    RgbImage::new(w, h, data_u16)
+fn decode_ppm(data: &[u8], cfg: &ZunePpmDecodeConfig) -> RawResult<RgbImage> {
+    use rawshift_image_core::ImageDecoder;
+    rawshift_image_ppm::Ppm::decode(data, cfg)
 }
 
-// ── Decoder implementation selection ──────────────────────────────────────────
+// ── Decoder implementation selection ──────────────────────────────────────────────────────────────────────────────────
 
-/// Per-implementation configuration for the `gamut-png` PNG decoder.
-///
-/// Every knob is a hostile-input resource guard; `None` keeps gamut's default.
-/// CRC verification of critical chunks and spec conformance are always on —
-/// they are not configurable (ancillary chunks with bad CRCs are skipped per
-/// PNG §13.1, never errors).
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PngDecodeConfig {
-    /// Reject images wider than this, in pixels, before any allocation.
-    /// `None` keeps the PNG spec maximum (2³¹ − 1).
-    pub max_width: Option<u32>,
-    /// Reject images taller than this, in pixels, before any allocation.
-    /// `None` keeps the PNG spec maximum (2³¹ − 1).
-    pub max_height: Option<u32>,
-    /// Cap on the decoded sample buffer, in bytes — the guard that bounds
-    /// peak memory against zlib bombs. `None` keeps gamut's default (64 MiB).
-    pub max_image_bytes: Option<usize>,
-    /// Cumulative cap on inflated compressed-metadata payloads (iCCP, zTXt,
-    /// compressed iTXt). Payloads past the budget are skipped, not errors.
-    /// `None` keeps gamut's default (16 MiB).
-    pub max_metadata_bytes: Option<usize>,
-}
+pub use rawshift_image_png::PngDecodeConfig;
 
-/// Per-implementation configuration for the `resvg` SVG renderer.
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ResvgDecodeConfig {
-    /// Dots-per-inch used to resolve physical units (`mm`, `cm`, `in`) in the
-    /// SVG. Default: `96.0`.
-    pub dpi: f32,
-}
-
-impl Default for ResvgDecodeConfig {
-    fn default() -> Self {
-        Self { dpi: 96.0 }
-    }
-}
+pub use rawshift_image_svg::ResvgDecodeConfig;
 
 /// Macro to define an implementation config type that currently exposes no
 /// tunable parameters. The type is a stable home for future backend-specific
@@ -873,14 +389,14 @@ macro_rules! empty_decode_config {
     };
 }
 
-empty_decode_config!(JpegDecodeConfig, "gamut-jpeg");
-empty_decode_config!(WebpDecodeConfig, "gamut-webp");
-empty_decode_config!(JxlDecodeConfig, "gamut-jxl");
-empty_decode_config!(GifDecodeConfig, "gif");
-empty_decode_config!(TiffDecodeConfig, "tiff");
+pub use rawshift_image_gif::GifDecodeConfig;
+pub use rawshift_image_jpeg::JpegDecodeConfig;
+pub use rawshift_image_jxl::JxlDecodeConfig;
+pub use rawshift_image_tiff::TiffDecodeConfig;
+pub use rawshift_image_webp::WebpDecodeConfig;
 empty_decode_config!(AvifDecodeConfig, "gamut-avif + rawshift-hwdec");
 empty_decode_config!(HeicDecodeConfig, "gamut-heic + rawshift-hwdec");
-empty_decode_config!(ZunePpmDecodeConfig, "zune-ppm");
+pub use rawshift_image_ppm::ZunePpmDecodeConfig;
 
 /// Selects the format a standard image is decoded as, and carries that
 /// format's decoder configuration.
@@ -1592,25 +1108,7 @@ pub fn read_standard_image_metadata(
     any(feature = "webp-decode", feature = "webp-encode")
 ))]
 fn read_webp_metadata(data: &[u8]) -> crate::core::metadata::ImageMetadata {
-    use gamut_metadata::{Metadata, MetadataBlock};
-
-    let Ok(meta) = gamut_webp::metadata(data) else {
-        return crate::core::metadata::ImageMetadata::default();
-    };
-    let mut blocks = Vec::with_capacity(3);
-    if let Some(exif) = meta.exif.as_deref() {
-        blocks.push(MetadataBlock::Exif(exif));
-    }
-    if let Some(xmp) = meta.xmp.as_deref() {
-        blocks.push(MetadataBlock::Xmp(xmp));
-    }
-    if let Some(icc) = meta.icc.as_deref() {
-        blocks.push(MetadataBlock::Icc(icc));
-    }
-    let Ok(model) = Metadata::from_blocks(&blocks) else {
-        return crate::core::metadata::ImageMetadata::default();
-    };
-    crate::metadata::bridge::from_gamut(&model)
+    rawshift_image_webp::read_metadata(data)
 }
 
 /// Extract EXIF / ICC / XMP from a JPEG's APP segments via `gamut-jpeg`.

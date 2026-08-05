@@ -101,7 +101,6 @@
 //!
 //! See the "Feature Flags" section of the README for the full hierarchy.
 
-pub(crate) mod codecs;
 pub mod core;
 pub mod data;
 pub mod error;
