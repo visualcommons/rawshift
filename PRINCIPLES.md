@@ -7,12 +7,13 @@
 ## Safety Boundaries
 
 - `crates/rawshift-core`: `#![forbid(unsafe_code)]`.
-- `crates/rawshift-image/src/formats`: Safe Rust is strictly required.
+- `crates/rawshift-image-*`: Safe Rust is strictly required, except the
+  isolated `rawshift-image-webp` libwebp FFI module, whose public API is safe.
 - `crates/rawshift-image/src/data`: Safe Rust is strictly required.
 - `crates/rawshift-image/src/metadata`: Safe Rust is strictly required.
 - `crates/rawshift-image/src/processing`: Unsafe Rust is acceptable as long as it is constrained to hot paths.
 - `crates/rawshift-image/src/transforms`: Unsafe Rust is acceptable as long as it is constrained to hot paths.
-- `crates/rawshift-hwdec`: Unsafe FFI is permitted — `#![deny(unsafe_op_in_unsafe_fn)]`, every public item is a safe wrapper, every unsafe block documents its invariants. No platform unsafe lives anywhere else.
+- `crates/rawshift-hwdec`: Unsafe platform FFI is permitted — `#![deny(unsafe_op_in_unsafe_fn)]`, every public item is a safe wrapper, every unsafe block documents its invariants.
 - `**/**`: TBD
 
 ## Testing Strategy
