@@ -8,8 +8,8 @@
 use rawshift_image::core::RgbImage;
 use rawshift_image::core::metadata::ImageMetadata;
 use rawshift_image::formats::export::{
-    BitDepth, CommonEncodeOptions, EncodeOptions, JpegEncodeConfig, LibwebpEncodeConfig,
-    MetadataEmbedOptions, PngEncodeConfig, WebPMode,
+    BitDepth, CommonEncodeOptions, EncodeOptions, JpegEncodeConfig, MetadataEmbedOptions,
+    PngEncodeConfig, WebPMode, WebpEncodeConfig,
 };
 use rawshift_image::formats::{encode_rgb_image, encode_rgb_image_to_vec};
 use std::fs;
@@ -264,10 +264,10 @@ mod jpeg_tests {
 mod webp_tests {
     use super::*;
 
-    fn webp(exif: bool, icc: bool, xmp: bool) -> LibwebpEncodeConfig {
-        LibwebpEncodeConfig {
+    fn webp(exif: bool, icc: bool, xmp: bool) -> WebpEncodeConfig {
+        WebpEncodeConfig {
             common: common(exif, icc, xmp),
-            ..LibwebpEncodeConfig::lossy()
+            ..WebpEncodeConfig::lossy()
         }
     }
 
@@ -342,8 +342,10 @@ mod webp_tests {
         let img = synthetic_image();
         let path = temp_path("export_xmp.webp");
 
+        let mut xmp = gamut_xmp::XmpMeta::new();
+        xmp.set_text(gamut_xmp::WellKnownNs::Xmp.uri(), "CreatorTool", "rawshift");
         let meta = ImageMetadata {
-            xmp: Some(b"<x:xmpmeta>test</x:xmpmeta>".to_vec()),
+            xmp: Some(xmp.to_packet()),
             ..Default::default()
         };
 
@@ -354,6 +356,42 @@ mod webp_tests {
         assert!(webp_has_xmp(&data), "WebP should contain XMP metadata");
 
         fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_webp_metadata_round_trip_through_gamut_bridge() {
+        use rawshift_image::core::metadata::{CameraInfo, ExifInfo};
+        use rawshift_image::formats::{StandardFormat, read_standard_image_metadata};
+
+        let mut xmp = gamut_xmp::XmpMeta::new();
+        xmp.set_text(gamut_xmp::WellKnownNs::Xmp.uri(), "CreatorTool", "rawshift");
+        let metadata = ImageMetadata {
+            camera: CameraInfo {
+                make: "Visual Commons".into(),
+                model: "WebP bridge".into(),
+                ..Default::default()
+            },
+            exif: ExifInfo {
+                iso: Some(320),
+                ..Default::default()
+            },
+            xmp: Some(xmp.to_packet()),
+            ..Default::default()
+        };
+        let encoded = encode_rgb_image_to_vec(
+            &synthetic_image(),
+            &metadata,
+            &EncodeOptions::WebP(webp(true, true, true)),
+        )
+        .expect("encode WebP metadata");
+
+        let decoded = read_standard_image_metadata(&encoded, StandardFormat::WebP);
+        assert_eq!(decoded.camera.make, metadata.camera.make);
+        assert_eq!(decoded.camera.model, metadata.camera.model);
+        assert_eq!(decoded.exif.iso, Some(320));
+        assert!(decoded.exif_raw.is_some());
+        assert!(decoded.icc_profile.is_some());
+        assert!(decoded.xmp.is_some());
     }
 
     #[test]
@@ -384,9 +422,9 @@ mod webp_tests {
         let img = RgbImage::new(64, 64, data).expect("valid RGB buffer");
 
         let mut low = webp(false, false, false);
-        low.quality = 10.0;
+        low.quality = 10;
         let mut high = webp(false, false, false);
-        high.quality = 95.0;
+        high.quality = 95;
 
         let low =
             encode_rgb_image_to_vec(&img, &ImageMetadata::default(), &EncodeOptions::WebP(low))
@@ -875,23 +913,22 @@ mod encode_options_tests {
 
     #[test]
     fn test_webp_config_defaults() {
-        let cfg = LibwebpEncodeConfig::default();
+        let cfg = WebpEncodeConfig::default();
         assert_eq!(cfg.mode, WebPMode::Lossy, "WebP default mode is Lossy");
-        assert!((cfg.quality - 75.0).abs() < f32::EPSILON);
-        assert_eq!(cfg.method, 4);
-        assert_eq!(cfg.near_lossless, 100);
+        assert_eq!(cfg.quality, 75);
     }
 
     #[test]
     fn test_webp_named_constructors() {
-        assert_eq!(LibwebpEncodeConfig::lossy().mode, WebPMode::Lossy);
-        assert_eq!(LibwebpEncodeConfig::lossless().mode, WebPMode::Lossless);
+        assert_eq!(WebpEncodeConfig::lossy().mode, WebPMode::Lossy);
+        assert_eq!(WebpEncodeConfig::lossless().mode, WebPMode::Lossless);
     }
 
     #[test]
     fn test_format_and_codec_id() {
         assert_eq!(EncodeOptions::png().format(), OutputFormat::Png);
         assert_eq!(EncodeOptions::jpeg().codec_id().id, "jpeg/gamut");
+        assert_eq!(EncodeOptions::webp_lossy().codec_id().id, "webp/gamut");
     }
 }
 
@@ -974,9 +1011,26 @@ mod in_memory_tests {
         let encoders = available_encoders();
         assert!(!encoders.is_empty(), "default build has encoders");
         assert!(encoders.iter().all(|c| c.id.id.contains('/')));
+        let webp_encoder = encoders
+            .iter()
+            .find(|codec| codec.id.id == "webp/gamut")
+            .expect("gamut WebP encoder");
+        assert_eq!(webp_encoder.version, "0.3");
 
         let decoders = available_decoders();
         assert!(!decoders.is_empty(), "default build has decoders");
+        let webp_decoder = decoders
+            .iter()
+            .find(|codec| codec.id.id == "webp/gamut")
+            .expect("gamut WebP decoder");
+        assert_eq!(webp_decoder.version, "0.3");
+        assert_eq!(
+            rawshift_image::formats::DecodeOptions::default_for(StandardFormat::WebP)
+                .expect("default WebP decoder")
+                .codec_id()
+                .id,
+            "webp/gamut"
+        );
     }
 
     #[test]

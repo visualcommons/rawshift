@@ -75,6 +75,14 @@ All entries below are **breaking**, grouped by area.
   CRCs always enforced). Encode: `ZunePngEncodeConfig` → `PngEncodeConfig`
   (compression level, filter strategy, `auto_reduce`); output bytes change
   (properly compressed). Codec id `png/gamut` both ways.
+- **WebP** → gamut-webp 0.3.1 both directions, replacing the in-repo
+  `libwebp-sys` FFI wrapper with pure-Rust VP8/VP8L and RIFF handling.
+  `WebpDecodeConfig` and `WebpEncodeConfig` replace the libwebp-named config
+  types; encode quality is now `u8` (`0..=100`), and the libwebp-specific
+  `method`/`near_lossless` knobs are removed. `EncodeError::WebP` is removed;
+  codec id is `webp/gamut` and registry version is `0.3`. EXIF/XMP/ICC now
+  flow through gamut-webp and the gamut-metadata bridge, replacing the manual
+  WebP EXIF scanner.
 - **JPEG XL** → gamut-jxl. Decode replaces `jxl-oxide` (pure Rust);
   `decode_jxl_partial` is removed until truncated-stream decode lands
   upstream (gamut#256); animated and premultiplied-alpha streams are now
@@ -113,8 +121,7 @@ All entries below are **breaking**, grouped by area.
   `DecodeOptions::WebpLibwebp`/`SvgResvg`/`PpmZune` →
   `WebP`/`Svg`/`Ppm`, and `EncodeOptions::PngGamut`/`WebpLibwebp` →
   `Png`/`WebP`. Backend names survive only in the config struct names of the
-  un-migrated/exception backends (`LibwebpDecodeConfig`,
-  `LibwebpEncodeConfig`, `TiffDecodeConfig`, `GifDecodeConfig`,
+  un-migrated/exception backends (`TiffDecodeConfig`, `GifDecodeConfig`,
   `ResvgDecodeConfig`, `ZunePpmDecodeConfig`). The never-wired "planned
   backend" config structs (`LibjpegTurboEncodeConfig`, `MozjpegEncodeConfig`,
   `SvtAv1EncodeConfig`) are deleted — alternative encoder backends contradict
@@ -129,9 +136,9 @@ All entries below are **breaking**, grouped by area.
   `container-embed`, `tiff-parser` (replaced by `ifd-parser` over gamut-ifd),
   `heic-vendored`, and every `*-vendored` linking flag. Retained tier-4
   aliases: `gif-decode-gif`/`svg-decode-resvg`/`ppm-decode-zune` (permanent
-  exceptions) and `tiff-decode-tiff`/`webp-decode-libwebp`/
-  `webp-encode-libwebp` (blocked migrations: gamut#299/#300 via rawshift#22,
-  gamut#302 via rawshift#24).
+  exceptions) and `tiff-decode-tiff` (blocked migration: gamut#299/#300 via
+  rawshift#22). The migrated `webp-decode-libwebp` and
+  `webp-encode-libwebp` aliases are removed.
 - `--all-features` is no longer a valid build invocation by design: the
   hardware backend pins (`hw-videotoolbox`/`hw-vaapi`/`hw-mediacodec`) are
   mutually exclusive verified feature flags. Use `--features full`.
@@ -183,9 +190,9 @@ hung off them:
   `image` (with its dav1d subtree leaving the lockfile), and the direct
   `jpegxl-src` dependency (it remains only as gamut-jxl-sys's own pinned
   build-dependency). `zune-core`/`zune-ppm` stay — PPM is a permanent
-  exception; `libwebp-sys` and `tiff` stay pending their blocked upstream
-  migrations (rawshift#24, rawshift#22); `gif` and `resvg` are permanent
-  exceptions.
+  exception; `tiff` stays pending its blocked upstream migration
+  (rawshift#22); `gif` and `resvg` are permanent exceptions. `libwebp-sys`
+  and the in-repo unsafe WebP wrapper are removed in favor of gamut-webp.
 - *(deps, metadata/containers)* `little_exif`, `img-parts`, `binrw` — with
   the whole in-repo binrw TIFF layer: the `tiff/` module and its public
   `TiffParser`/`TiffWriter`/`TiffValue`/`TiffTag` API.
@@ -193,7 +200,8 @@ hung off them:
   in-repo libjxl bindgen glue, and the `bindgen`/`cc`/`cmake`/`pkg-config`
   build-dependencies.
 - *(image)* `decode_jxl_partial` (until gamut#256); the hand-rolled JPEG
-  APP1 and PNG eXIf scanners; `ExifContainer::Jpeg`/`Png`/`Avif` read paths;
+  APP1, PNG eXIf, and WebP RIFF EXIF scanners;
+  `ExifContainer::Jpeg`/`Png`/`WebP`/`Avif` read paths;
   the never-implemented "planned backend" encode config structs.
 
 ### Fixed

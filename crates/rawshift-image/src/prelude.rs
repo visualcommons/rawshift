@@ -47,16 +47,17 @@ pub use crate::error::{
 // formats — encode option system
 pub use crate::formats::export::{
     AvifEncodeConfig, BitDepth, CommonEncodeOptions, EncodeOptions, JpegDensity, JpegDensityUnit,
-    JpegEncodeConfig, JpegSubsampling, JxlEncodeConfig, LibwebpEncodeConfig, MetadataEmbedOptions,
-    OutputFormat, PngCompressionLevel, PngEncodeConfig, PngFilterStrategy, PngFilterType, WebPMode,
+    JpegEncodeConfig, JpegSubsampling, JxlEncodeConfig, MetadataEmbedOptions, OutputFormat,
+    PngCompressionLevel, PngEncodeConfig, PngFilterStrategy, PngFilterType, WebPMode,
+    WebpEncodeConfig,
 };
 // formats — decoders, format detection, encode/decode entry points
 pub use crate::formats::{
     AvifDecodeConfig, DecodeOptions, GifDecodeConfig, HeicDecodeConfig, ImageProbe,
-    JpegDecodeConfig, JxlDecodeConfig, LibwebpDecodeConfig, PngDecodeConfig, ResvgDecodeConfig,
-    StandardFormat, TiffDecodeConfig, ZunePpmDecodeConfig, available_decoders, available_encoders,
-    decode_standard_image, decode_standard_image_with, detect_standard_format, encode_rgb_image,
-    encode_rgb_image_to_vec, encode_rgb_image_to_writer, probe_standard_image,
+    JpegDecodeConfig, JxlDecodeConfig, PngDecodeConfig, ResvgDecodeConfig, StandardFormat,
+    TiffDecodeConfig, WebpDecodeConfig, ZunePpmDecodeConfig, available_decoders,
+    available_encoders, decode_standard_image, decode_standard_image_with, detect_standard_format,
+    encode_rgb_image, encode_rgb_image_to_vec, encode_rgb_image_to_writer, probe_standard_image,
     read_standard_image_metadata,
 };
 

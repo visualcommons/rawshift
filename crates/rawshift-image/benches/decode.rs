@@ -2,7 +2,7 @@
 //!
 //! Covers three layers:
 //! - RAW data-structure primitives (creation, pixel access),
-//! - the gamut-backed standard codecs (JPEG/PNG encode + decode round-trips
+//! - the gamut-backed standard codecs (JPEG/PNG/WebP encode + decode round-trips
 //!   on a synthetic image — the going-forward per-format regression baseline
 //!   after the gamut migration),
 //! - hardware HEIC/AVIF still decode (`hw` feature). The hardware benches
@@ -62,6 +62,7 @@ fn bench_pixel_access(c: &mut Criterion) {
 #[cfg(any(
     all(feature = "jpeg-decode", feature = "jpeg-encode"),
     all(feature = "png-decode", feature = "png-encode"),
+    all(feature = "webp-decode", feature = "webp-encode"),
 ))]
 fn synthetic_rgb(width: u32, height: u32) -> rawshift_image::core::RgbImage {
     let mut data = Vec::with_capacity((width * height * 3) as usize);
@@ -121,6 +122,29 @@ fn bench_png_codec(c: &mut Criterion) {
 
 #[cfg(not(all(feature = "png-decode", feature = "png-encode")))]
 fn bench_png_codec(_c: &mut Criterion) {}
+
+#[cfg(all(feature = "webp-decode", feature = "webp-encode"))]
+fn bench_webp_codec(c: &mut Criterion) {
+    use rawshift_image::core::metadata::ImageMetadata;
+    use rawshift_image::formats::export::EncodeOptions;
+    use rawshift_image::formats::{StandardFormat, decode_standard_image, encode_rgb_image_to_vec};
+
+    let image = synthetic_rgb(512, 512);
+    let metadata = ImageMetadata::default();
+    let opts = EncodeOptions::webp_lossy();
+
+    c.bench_function("webp_encode_512x512", |b| {
+        b.iter(|| encode_rgb_image_to_vec(&image, &metadata, &opts).expect("encode WebP"));
+    });
+
+    let bytes = encode_rgb_image_to_vec(&image, &metadata, &opts).expect("encode WebP");
+    c.bench_function("webp_decode_512x512", |b| {
+        b.iter(|| decode_standard_image(&bytes, StandardFormat::WebP).expect("decode WebP"));
+    });
+}
+
+#[cfg(not(all(feature = "webp-decode", feature = "webp-encode")))]
+fn bench_webp_codec(_c: &mut Criterion) {}
 
 // ── Hardware HEIC/AVIF decode (`hw` feature) ─────────────────────────────────
 
@@ -256,6 +280,7 @@ criterion_group!(
     bench_pixel_access,
     bench_jpeg_codec,
     bench_png_codec,
+    bench_webp_codec,
     bench_heic_hw_decode,
     bench_avif_hw_decode
 );

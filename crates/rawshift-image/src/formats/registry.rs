@@ -44,8 +44,8 @@ pub fn available_encoders() -> Vec<CodecInfo> {
     ));
     #[cfg(feature = "webp-encode")]
     encoders.push(CodecInfo::new(
-        CodecId::new("webp/libwebp"),
-        "0.14",
+        CodecId::new("webp/gamut"),
+        "0.3",
         CodecDirection::Encode,
     ));
     // Version tracks the gamut-avif crate. Hand-maintained — update together
@@ -97,8 +97,8 @@ pub fn available_decoders() -> Vec<CodecInfo> {
     ));
     #[cfg(feature = "webp-decode")]
     decoders.push(CodecInfo::new(
-        CodecId::new("webp/libwebp"),
-        "0.14",
+        CodecId::new("webp/gamut"),
+        "0.3",
         CodecDirection::Decode,
     ));
     // Version tracks the gamut-jxl crate (pure-Rust jxl-rs decode).

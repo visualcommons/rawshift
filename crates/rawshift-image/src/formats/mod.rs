@@ -47,8 +47,8 @@ pub use heic::{HeicAuxImage, HeicAuxKind, HeicFile, heic_hw_decode_available};
 pub use registry::{available_decoders, available_encoders};
 pub use standard::{
     AvifDecodeConfig, DecodeOptions, GifDecodeConfig, HeicDecodeConfig, ImageProbe,
-    JpegDecodeConfig, JxlDecodeConfig, LibwebpDecodeConfig, PngDecodeConfig, ResvgDecodeConfig,
-    StandardFormat, TiffDecodeConfig, ZunePpmDecodeConfig, decode_standard_image,
+    JpegDecodeConfig, JxlDecodeConfig, PngDecodeConfig, ResvgDecodeConfig, StandardFormat,
+    TiffDecodeConfig, WebpDecodeConfig, ZunePpmDecodeConfig, decode_standard_image,
     decode_standard_image_with, detect_standard_format, probe_standard_image,
     read_standard_image_metadata,
 };
