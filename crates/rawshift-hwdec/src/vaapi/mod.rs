@@ -43,11 +43,11 @@ use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::sync::OnceLock;
 
+use crate::bitstream::{av1, bits, hevc};
 use crate::{
     CodecConfig, ColorRange, DecodedFrame, HwBackend, HwCodec, HwDecodeError, HwStillDecoder,
     PixelFormat, Plane, StillDecodeRequest,
 };
-use crate::bitstream::{av1, bits, hevc};
 
 // ── Public backend surface (called from lib.rs) ─────────────────────────────
 

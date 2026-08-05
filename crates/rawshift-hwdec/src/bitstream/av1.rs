@@ -1,3 +1,4 @@
+#![cfg_attr(not(hwdec_backend = "vaapi"), allow(dead_code))]
 //! AV1 still-picture parsing shared by hardware backends — **safe Rust only**
 //! (no `unsafe`; platform FFI stays in backend modules).
 //!
@@ -1520,6 +1521,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(hwdec_backend = "vaapi")]
     fn pic_param_maps_seq_and_frame_fields() {
         let pic = parse_still_picture(&[], AV1_64X64_LIBAOM).unwrap();
         let p = build_pic_param(&pic, 5, sys::VA_INVALID_SURFACE).unwrap();

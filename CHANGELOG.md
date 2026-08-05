@@ -70,6 +70,11 @@ All entries below are **breaking**, grouped by area.
 
 #### Per-codec migrations (`rawshift-image`)
 
+- **Android hardware decode** now implements the fixed MediaCodec backend for
+  HEVC/HEIC and AV1/AVIF on API 29+. Applications initialize it once with the
+  process `JavaVM`; hardware, non-alias components are runtime-probed. Output
+  is dense I420, or strict P010 on API 33+ with no silent downconversion.
+
 - **JPEG** → gamut-jpeg (pure Rust, baseline + progressive both ways).
   Decode replaces `zune-jpeg` (CMYK/YCCK conversion bit-identical); encode
   replaces `jpeg-encoder` **and** the vendored jpegli stack with one

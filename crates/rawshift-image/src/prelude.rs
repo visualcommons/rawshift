@@ -22,6 +22,9 @@
 //!   `apply_white_balance_raw`, `apply_color_matrix`, `apply_tone_reproduction`,
 //!   `apply_tonemap`, `compute_camera_to_srgb`, `ColorSpaceTransform`, and more.
 
+#[cfg(all(target_os = "android", feature = "hw"))]
+pub use crate::{AndroidHwDecodeInitError, AndroidJavaVm, initialize_android_hw_decode};
+
 // core
 pub use crate::core::image::{CfaPattern, RawImage, Rect, XTransPattern};
 pub use crate::core::metadata::{
