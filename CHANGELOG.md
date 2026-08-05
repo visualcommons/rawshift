@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/visualcommons/rawshift/compare/v0.1.1...v0.2.0) - 2026-08-05
+
+### Added
+
+- *(api)* [**breaking**] finalize the v1 image API surface; consolidated CHANGELOG
+- *(hwdec,heic)* [**breaking**] create rawshift-hwdec; rebuild HEIC on gamut-heic; drop libheif-rs
+- *(avif)* [**breaking**] AVIF decode via gamut-avif container + hardware AV1; drop the image crate
+- *(avif)* [**breaking**] migrate AVIF encode to gamut-avif; delete libaom and ravif
+- *(core)* [**breaking**] replace generic primitives with gamut re-exports, keep sensor types
+- *(image)* add libaom as an optional AVIF encoder backend
+- *(image)* expose leaf encoder contracts
+- *(png)* [**breaking**] migrate PNG decode to gamut-png; drop zune-png
+- *(jpeg)* [**breaking**] migrate JPEG to gamut-jpeg; delete jpegli stack and img-parts
+- *(hwdec)* VAAPI backend — HEVC Main/Main10 + AV1 still decode over dlopen'd libva
+- *(jxl)* [**breaking**] migrate JXL to gamut-jxl; drop jxl-oxide, zune-jpegxl, and the libjxl glue
+- *(png)* [**breaking**] migrate PNG encode to gamut-png
+- *(dng)* [**breaking**] migrate DNG decode/encode to gamut-dng; delete the binrw TIFF layer
+- *(formats)* [**breaking**] migrate ARW/CR2/NEF/CR3 IFD walking to gamut-ifd
+- *(metadata)* [**breaking**] migrate metadata stack to gamut-exif/gamut-icc/gamut-xmp
+- *(deps)* add gamut as pinned git dependency and raise MSRV to 1.92
+
+### Fixed
+
+- *(image)* allow metadata shim in hw-only builds
+- *(image)* complete extracted feature boundaries
+
+### Other
+
+- merge origin/master into format crate refactor
+- *(image)* document format crate boundaries
+- Merge branch 'master' of github.com:justin13888/rawshift
+- migrate gamut dependencies from git pin to crates.io versions
+- *(features,ci)* [**breaking**] consolidate the post-migration feature tree; add compile-boundary CI
+- Merge pull request #40 from justin13888/17-add-gamut-pinned-git-dependency
+- *(video)* park rawshift-video as an unpublished placeholder for v1
+- add v1 design doc, permanent support matrix, and gamut policy
+- Revise Scope section and add key priorities
+- Update README with project status and scope
+- update GitHub org references from justin13888 to visualcommons
+- *(image)* extract standard decoder crates
+- *(image)* extract AVIF and HEIC crates
+- *(image)* extract RAW format crates
+- *(image-core)* add shared format contracts
+- *(tests,bench)* fixtures and benchmark final pass for the gamut migration
+- Merge branch 'master' into avif-libaom-encoder
+
 v1 is the gamut migration release: rawshift's generic ground — image
 primitives, colour, containers, metadata, and the migrated codecs — now comes
 from the published [gamut](https://github.com/visualcommons/gamut) crates.
