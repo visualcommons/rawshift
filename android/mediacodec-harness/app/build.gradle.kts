@@ -2,6 +2,11 @@ plugins {
     id("com.android.application")
 }
 
+abstract class BuildRustTask : Exec() {
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+}
+
 android {
     namespace = "org.visualcommons.rawshift.harness"
     compileSdk = 36
@@ -19,11 +24,9 @@ android {
         }
     }
 
-    sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("rust-jni-libs"))
 }
 
-val buildRust by tasks.registering(Exec::class) {
-    val output = layout.buildDirectory.dir("rust-jni-libs/arm64-v8a")
+val buildRust by tasks.registering(BuildRustTask::class) {
     inputs.files(
         fileTree("../../..") {
             include("Cargo.toml", "Cargo.lock")
@@ -31,18 +34,26 @@ val buildRust by tasks.registering(Exec::class) {
             include("crates/rawshift-hwdec/Cargo.toml")
             include("android/mediacodec-harness/native/**")
             include("android/mediacodec-harness/fixtures/data/**")
+            exclude("android/mediacodec-harness/native/target/**")
         }
     )
-    outputs.dir(output)
-    commandLine(
-        "bash",
-        rootProject.file("build-rust.sh").absolutePath,
-        output.get().asFile.absolutePath,
-    )
+    outputDirectory.set(layout.buildDirectory.dir("rust-jni-libs"))
+    doFirst {
+        commandLine(
+            "bash",
+            rootProject.file("build-rust.sh").absolutePath,
+            outputDirectory.get().dir("arm64-v8a").asFile.absolutePath,
+        )
+    }
 }
 
-tasks.named("preBuild").configure {
-    dependsOn(buildRust)
+androidComponents {
+    onVariants { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(
+            buildRust,
+            BuildRustTask::outputDirectory,
+        )
+    }
 }
 
 dependencies {
