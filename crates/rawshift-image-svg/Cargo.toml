@@ -1,0 +1,19 @@
+[package]
+name = "rawshift-image-svg"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SVG rasterization for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true }
+resvg = { version = "0.44", optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:resvg"]
+serde = ["dep:serde", "rawshift-image-core/serde"]

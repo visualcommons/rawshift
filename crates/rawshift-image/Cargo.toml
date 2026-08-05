@@ -34,6 +34,14 @@ rawshift-image-dng = { workspace = true, default-features = false }
 rawshift-image-nef = { workspace = true, default-features = false }
 rawshift-image-raf = { workspace = true, default-features = false }
 rawshift-image-heic = { workspace = true, default-features = false }
+rawshift-image-gif = { workspace = true, default-features = false }
+rawshift-image-jpeg = { workspace = true, default-features = false }
+rawshift-image-jxl = { workspace = true, default-features = false }
+rawshift-image-png = { workspace = true, default-features = false }
+rawshift-image-ppm = { workspace = true, default-features = false }
+rawshift-image-svg = { workspace = true, default-features = false }
+rawshift-image-tiff = { workspace = true, default-features = false }
+rawshift-image-webp = { workspace = true, default-features = false }
 gamut-core     = { workspace = true }
 # gamut-icc backs the sRGB profile construction and validation in
 # `metadata/icc.rs`, which compiles unconditionally (the `IccProfile` type is
@@ -186,18 +194,18 @@ raf  = ["raf-decode"]
 # Decode covers baseline + progressive streams (grayscale/YCbCr/RGB/CMYK/YCCK);
 # encode writes baseline or progressive 8-bit DCT JPEG. `exif` supplies the
 # EXIF builder/parser for the APP1 segment gamut-jpeg reads and writes.
-jpeg-decode = ["dep:gamut-jpeg", "exif"]
-jpeg-encode = ["dep:gamut-jpeg", "exif"]
+jpeg-decode = ["dep:gamut-jpeg", "exif", "rawshift-image-jpeg/decode"]
+jpeg-encode = ["dep:gamut-jpeg", "exif", "rawshift-image-jpeg/encode"]
 # PNG is backed directly by gamut-png (no tier-4 layer): like JPEG and the RAW
 # direction features, each half has a single gamut-backed implementation, so
 # the format-direction feature itself pulls the dependency. Decode covers
 # every PNG colour type and bit depth (incl. Adam7 interlace) with
 # hostile-input resource guards, and surfaces eXIf/iCCP/XMP chunk metadata;
 # `exif` supplies the parser that maps the eXIf payload into `ImageMetadata`.
-png-decode  = ["dep:gamut-png", "exif"]
+png-decode  = ["dep:gamut-png", "exif", "rawshift-image-png/decode"]
 # Encode: `exif` supplies the ExifBuilder used to serialise the eXIf chunk
 # payload.
-png-encode  = ["dep:gamut-png", "exif"]
+png-encode  = ["dep:gamut-png", "exif", "rawshift-image-png/encode"]
 webp-decode = ["webp-decode-libwebp"]
 webp-encode = ["webp-encode-libwebp"]
 # JXL is backed directly by gamut-jxl (no tier-4 layer): like PNG and
@@ -206,8 +214,8 @@ webp-encode = ["webp-encode-libwebp"]
 # Decode wraps the pure-Rust jxl-rs decoder; encode wraps the reference libjxl
 # (statically built and linked by gamut-jxl-sys — cmake + C++ toolchain).
 # `exif` supplies the ExifBuilder used for the container `Exif` box on encode.
-jxl-decode  = ["dep:gamut-jxl", "gamut-jxl/decode"]
-jxl-encode  = ["dep:gamut-jxl", "gamut-jxl/encode", "exif"]
+jxl-decode  = ["dep:gamut-jxl", "gamut-jxl/decode", "rawshift-image-jxl/decode"]
+jxl-encode  = ["dep:gamut-jxl", "gamut-jxl/encode", "exif", "rawshift-image-jxl/encode"]
 gif-decode  = ["gif-decode-gif"]
 tiff-decode = ["tiff-decode-tiff"]
 # AVIF decode is backed directly by gamut-avif (no tier-4 layer): container
@@ -270,18 +278,18 @@ raf-decode  = ["rawshift-image-core/raf-decode", "rawshift-image-raf/decode"]
 # Each also enables its tier-3 direction feature, so it can be selected
 # standalone. When a blocked migration unblocks, its alias dissolves into the
 # direction feature exactly like the gamut-backed formats above.
-webp-decode-libwebp  = ["webp-decode", "dep:libwebp-sys", "exif"]
-webp-encode-libwebp  = ["webp-encode", "dep:libwebp-sys", "exif"]
-gif-decode-gif       = ["gif-decode", "dep:gif"]
-tiff-decode-tiff     = ["tiff-decode", "dep:tiff", "exif"]
-svg-decode-resvg     = ["svg-decode", "dep:resvg"]
-ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
+webp-decode-libwebp  = ["webp-decode", "dep:libwebp-sys", "exif", "rawshift-image-webp/decode"]
+webp-encode-libwebp  = ["webp-encode", "dep:libwebp-sys", "exif", "rawshift-image-webp/encode"]
+gif-decode-gif       = ["gif-decode", "dep:gif", "rawshift-image-gif/decode"]
+tiff-decode-tiff     = ["tiff-decode", "dep:tiff", "exif", "rawshift-image-tiff/decode"]
+svg-decode-resvg     = ["svg-decode", "dep:resvg", "rawshift-image-svg/decode"]
+ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime", "rawshift-image-ppm/decode"]
 
 # ── Tier 5: infrastructure / linking features ─────────────────────────────────
 # gamut-ifd TIFF/IFD structure engine (used by the migrated TIFF-based RAW
 # decoders and by format detection).
 ifd-parser    = ["dep:gamut-ifd", "dep:rawshift-image-ifd", "rawshift-image-metadata/ifd-parser"]
-serde         = ["dep:serde", "rawshift-core/serde", "rawshift-image-core/serde", "rawshift-image-dng/serde", "rawshift-image-avif/serde", "rawshift-image-heic/serde"]
+serde         = ["dep:serde", "rawshift-core/serde", "rawshift-image-core/serde", "rawshift-image-dng/serde", "rawshift-image-avif/serde", "rawshift-image-gif/serde", "rawshift-image-heic/serde", "rawshift-image-jpeg/serde", "rawshift-image-jxl/serde", "rawshift-image-png/serde", "rawshift-image-ppm/serde", "rawshift-image-svg/serde", "rawshift-image-tiff/serde", "rawshift-image-webp/serde"]
 # `zune-core` codec primitives (bit depth, colorspace, decoder/encoder option
 # builders). Pulled by the zune-backed PPM impl feature (`zune-ppm` is a
 # permanent exception to the gamut migration — see AGENTS.md).

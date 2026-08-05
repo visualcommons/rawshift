@@ -1,0 +1,20 @@
+[package]
+name = "rawshift-image-png"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "PNG decoding and encoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true }
+gamut-png = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:gamut-png"]
+encode = ["dep:gamut-png"]
+serde = ["dep:serde", "rawshift-image-core/serde"]

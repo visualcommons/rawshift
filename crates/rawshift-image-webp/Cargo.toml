@@ -1,0 +1,20 @@
+[package]
+name = "rawshift-image-webp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "WebP decoding and encoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true }
+libwebp-sys = { version = "0.14", optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:libwebp-sys"]
+encode = ["dep:libwebp-sys"]
+serde = ["dep:serde", "rawshift-image-core/serde"]

@@ -1,0 +1,21 @@
+[package]
+name = "rawshift-image-jpeg"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "JPEG decoding and encoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true }
+gamut-core = { workspace = true, optional = true }
+gamut-jpeg = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:gamut-core", "dep:gamut-jpeg"]
+encode = ["dep:gamut-core", "dep:gamut-jpeg"]
+serde = ["dep:serde", "rawshift-image-core/serde"]

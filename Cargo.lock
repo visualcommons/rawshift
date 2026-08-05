@@ -1267,12 +1267,20 @@ dependencies = [
  "rawshift-image-cr3",
  "rawshift-image-crw",
  "rawshift-image-dng",
+ "rawshift-image-gif",
  "rawshift-image-heic",
  "rawshift-image-ifd",
+ "rawshift-image-jpeg",
+ "rawshift-image-jxl",
  "rawshift-image-ljpeg",
  "rawshift-image-metadata",
  "rawshift-image-nef",
+ "rawshift-image-png",
+ "rawshift-image-ppm",
  "rawshift-image-raf",
+ "rawshift-image-svg",
+ "rawshift-image-tiff",
+ "rawshift-image-webp",
  "rayon",
  "resvg",
  "serde",
@@ -1362,6 +1370,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rawshift-image-gif"
+version = "0.1.1"
+dependencies = [
+ "gif",
+ "rawshift-image-core",
+ "serde",
+]
+
+[[package]]
 name = "rawshift-image-heic"
 version = "0.1.1"
 dependencies = [
@@ -1383,6 +1400,26 @@ dependencies = [
  "rawshift-core",
  "rawshift-image-core",
  "tracing",
+]
+
+[[package]]
+name = "rawshift-image-jpeg"
+version = "0.1.1"
+dependencies = [
+ "gamut-core",
+ "gamut-jpeg",
+ "rawshift-image-core",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-jxl"
+version = "0.1.1"
+dependencies = [
+ "gamut-core",
+ "gamut-jxl 0.4.0",
+ "rawshift-image-core",
+ "serde",
 ]
 
 [[package]]
@@ -1415,11 +1452,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "rawshift-image-png"
+version = "0.1.1"
+dependencies = [
+ "gamut-png",
+ "rawshift-image-core",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-ppm"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+ "serde",
+ "zune-core 0.5.1",
+ "zune-ppm",
+]
+
+[[package]]
 name = "rawshift-image-raf"
 version = "0.1.1"
 dependencies = [
  "rawshift-image-core",
  "tracing",
+]
+
+[[package]]
+name = "rawshift-image-svg"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+ "resvg",
+ "serde",
+]
+
+[[package]]
+name = "rawshift-image-tiff"
+version = "0.1.1"
+dependencies = [
+ "rawshift-image-core",
+ "serde",
+ "tiff",
+]
+
+[[package]]
+name = "rawshift-image-webp"
+version = "0.1.1"
+dependencies = [
+ "libwebp-sys",
+ "rawshift-image-core",
+ "serde",
 ]
 
 [[package]]

@@ -7,4 +7,6 @@ pub(crate) mod ljpeg {
     pub use rawshift_image_ljpeg::*;
 }
 #[cfg(any(feature = "webp-decode", feature = "webp-encode"))]
-pub(crate) mod webp;
+pub(crate) mod webp {
+    pub use rawshift_image_webp::*;
+}

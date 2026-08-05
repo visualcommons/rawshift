@@ -1,0 +1,21 @@
+[package]
+name = "rawshift-image-jxl"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "JPEG XL decoding and encoding for rawshift"
+
+[dependencies]
+rawshift-image-core = { workspace = true }
+gamut-core = { workspace = true, optional = true }
+gamut-jxl = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["decode"]
+decode = ["dep:gamut-core", "dep:gamut-jxl", "gamut-jxl/decode"]
+encode = ["dep:gamut-core", "dep:gamut-jxl", "gamut-jxl/encode"]
+serde = ["dep:serde", "rawshift-image-core/serde"]
