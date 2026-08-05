@@ -3,7 +3,9 @@
 
 #[cfg(feature = "decode")]
 use rawshift_image_core::FormatError;
-use rawshift_image_core::{FormatId, FormatSniffer, RawError, RawResult, RgbImage};
+use rawshift_image_core::{FormatId, FormatSniffer};
+#[cfg(any(feature = "decode", feature = "encode"))]
+use rawshift_image_core::{RawError, RawResult, RgbImage};
 
 /// JPEG decoder configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
