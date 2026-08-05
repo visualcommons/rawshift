@@ -44,6 +44,7 @@ gamut-metadata = { workspace = true, optional = true }
 # guards) and encode (PngEncoder: 8/16-bit RGB, DEFLATE level + filter
 # strategy + lossless auto-reduce, and eXIf/iCCP/XMP-iTXt chunk embedding).
 gamut-png      = { workspace = true, optional = true }
+gamut-webp     = { workspace = true, optional = true }
 # gamut-avif backs both AVIF halves. Encode: AvifEncoder (8-bit RGB, lossless
 # or lossy AV1 intra at identity 4:4:4 — pure Rust, no C toolchain); 10/12-bit
 # and alpha encode are pending upstream (visualcommons/gamut#251). Decode:

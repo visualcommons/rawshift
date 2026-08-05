@@ -33,6 +33,7 @@ gamut-jpeg = "0.1.0"
 # `jxl-decode` / `jxl-encode` features select the halves explicitly.
 gamut-jxl = { version = "0.4.0", default-features = false }
 gamut-png = "0.1.0"
+gamut-webp = "0.3.1"
 gamut-avif = "1.1.0"
 gamut-heic = "0.2.2"
 # Dev-only in rawshift-image: constructs synthetic HEIF containers for the
