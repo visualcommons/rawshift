@@ -18,7 +18,7 @@ use crate::RawResult;
 use crate::RgbImage;
 
 /// Copy an 8-bit plane into `u16` samples, honouring the row stride.
-pub(crate) fn read_plane_8(plane: &Plane, width: usize, rows: usize) -> Vec<u16> {
+pub fn read_plane_8(plane: &Plane, width: usize, rows: usize) -> Vec<u16> {
     let mut out = Vec::with_capacity(width * rows);
     for row in 0..rows {
         let start = row * plane.stride;
@@ -32,7 +32,7 @@ pub(crate) fn read_plane_8(plane: &Plane, width: usize, rows: usize) -> Vec<u16>
 }
 
 /// Split an 8-bit interleaved CbCr plane into separate Cb/Cr samples.
-pub(crate) fn deinterleave_8(plane: &Plane, width: usize, rows: usize) -> (Vec<u16>, Vec<u16>) {
+pub fn deinterleave_8(plane: &Plane, width: usize, rows: usize) -> (Vec<u16>, Vec<u16>) {
     let mut cb = Vec::with_capacity(width * rows);
     let mut cr = Vec::with_capacity(width * rows);
     for row in 0..rows {
@@ -48,7 +48,7 @@ pub(crate) fn deinterleave_8(plane: &Plane, width: usize, rows: usize) -> (Vec<u
 /// Copy a 16-bit-word plane into `u16` samples: little-endian words,
 /// shifted down by `shift` (P010 keeps the value in the high bits) and
 /// masked to `bit_depth`.
-pub(crate) fn read_plane_16(
+pub fn read_plane_16(
     plane: &Plane,
     width: usize,
     rows: usize,
@@ -67,7 +67,7 @@ pub(crate) fn read_plane_16(
 }
 
 /// Split a 16-bit-word interleaved CbCr plane into Cb/Cr samples.
-pub(crate) fn deinterleave_16(
+pub fn deinterleave_16(
     plane: &Plane,
     width: usize,
     rows: usize,
@@ -99,9 +99,7 @@ fn sample_mask(bit_depth: u8) -> u16 {
 /// Convert a gamut presentation output (8-bit RGBA, transforms applied) to
 /// rawshift's 16-bit [`RgbImage`]: alpha dropped, samples scaled by `*257`
 /// (exact at both endpoints).
-pub(crate) fn rgba8_to_rgb_image(
-    rgba: &gamut_core::ImageBuf<gamut_core::Rgba8>,
-) -> RawResult<RgbImage> {
+pub fn rgba8_to_rgb_image(rgba: &gamut_core::ImageBuf<gamut_core::Rgba8>) -> RawResult<RgbImage> {
     let (width, height) = (rgba.width(), rgba.height());
     let samples = rgba.as_samples();
     let mut rgb = Vec::with_capacity(width as usize * height as usize * 3);

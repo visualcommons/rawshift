@@ -28,7 +28,7 @@ impl rawshift_image_core::FormatSniffer for Dng {
             let Ok(ifd) = reader.read_ifd(reader.first_ifd_offset()) else {
                 return false;
             };
-            return ifd.entry(rawshift_image_ifd::tags::DNG_VERSION).is_some();
+            ifd.entry(rawshift_image_ifd::tags::DNG_VERSION).is_some()
         }
         #[cfg(not(feature = "decode"))]
         {

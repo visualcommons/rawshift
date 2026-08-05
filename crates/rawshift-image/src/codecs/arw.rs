@@ -1,1 +1,0 @@
-//! Sony ARW specific functionality

@@ -294,9 +294,9 @@ fn encode_webp(
     metadata: &ImageMetadata,
     cfg: &super::export::LibwebpEncodeConfig,
 ) -> RawResult<Vec<u8>> {
-    use crate::codecs::webp::{build_webp_config, encode_webp_rgb, mux_webp};
     use crate::metadata::exif::ExifBuilder;
     use crate::metadata::icc::IccProfile;
+    use rawshift_image_webp::{build_webp_config, encode_webp_rgb, mux_webp};
 
     check_8bit_backend(cfg.common.bit_depth, "WebP")?;
 
