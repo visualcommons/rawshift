@@ -16,6 +16,7 @@ rawshift-core = { workspace = true }
 gamut-core = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, optional = true }
+rawshift-hwdec = { workspace = true, optional = true }
 
 [features]
 serde = ["dep:serde", "rawshift-core/serde"]
@@ -24,3 +25,4 @@ cr3-decode = []
 crw-decode = []
 nef-decode = []
 raf-decode = []
+hw-planes = ["dep:rawshift-hwdec"]

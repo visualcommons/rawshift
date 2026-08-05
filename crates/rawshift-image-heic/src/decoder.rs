@@ -25,10 +25,10 @@
 use gamut_heic::{HeifContainer, HeifImage, HeifItem};
 use gamut_isobmff::ColourInformation;
 
-use crate::core::RgbImage;
-use crate::core::metadata::{ImageMetadata, MetadataKey, MetadataNamespace, MetadataValue};
-use crate::error::{FormatError, RawError, RawResult};
-use crate::metadata::exif::ExifParser;
+use rawshift_image_core::RgbImage;
+use rawshift_image_core::metadata::{ImageMetadata, MetadataKey, MetadataNamespace, MetadataValue};
+use rawshift_image_core::{FormatError, RawError, RawResult};
+use rawshift_image_metadata::exif::ExifParser;
 
 /// The codec name reported in [`RawError::HwDecoderUnavailable`].
 const HEVC: &str = "HEVC";
@@ -379,9 +379,9 @@ fn metadata_from_image(image: &HeifImage) -> ImageMetadata {
 // ── decoded-frame presentation ───────────────────────────────────────────────
 
 // gamut-heic RGBA8 output → rawshift 16-bit `RgbImage` (shared with the AVIF
-// adapter — see `super::hw_planes`).
+// adapter — see `rawshift_image_core::hw_planes`).
 #[cfg(feature = "hw")]
-use super::hw_planes::rgba8_to_rgb_image;
+use rawshift_image_core::hw_planes::rgba8_to_rgb_image;
 
 // ── rawshift-hwdec adapter ───────────────────────────────────────────────────
 
@@ -404,8 +404,10 @@ mod hw {
         PixelFormat, StillDecodeRequest,
     };
 
-    use super::super::hw_planes::{deinterleave_8, deinterleave_16, read_plane_8, read_plane_16};
-    use crate::error::{FormatError, RawError};
+    use rawshift_image_core::hw_planes::{
+        deinterleave_8, deinterleave_16, read_plane_8, read_plane_16,
+    };
+    use rawshift_image_core::{FormatError, RawError};
 
     /// A [`HevcDecoder`] over a hardware [`HwStillDecoder`].
     ///

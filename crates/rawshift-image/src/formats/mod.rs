@@ -12,7 +12,9 @@ pub(crate) mod arw {
     pub use rawshift_image_arw::*;
 }
 #[cfg(feature = "avif-decode")]
-pub(crate) mod avif;
+pub(crate) mod avif {
+    pub use rawshift_image_avif::*;
+}
 #[cfg(feature = "cr2-decode")]
 pub(crate) mod cr2 {
     pub use rawshift_image_cr2::*;
@@ -36,10 +38,9 @@ pub(crate) mod dng_export {
 mod encode;
 pub mod export;
 #[cfg(feature = "heic-decode")]
-pub(crate) mod heic;
-// Plane-lifting helpers shared by the HEIC and AVIF hardware adapters.
-#[cfg(all(feature = "hw", any(feature = "heic-decode", feature = "avif-decode")))]
-pub(crate) mod hw_planes;
+pub(crate) mod heic {
+    pub use rawshift_image_heic::*;
+}
 #[cfg(feature = "ifd-parser")]
 pub(crate) mod ifd {
     pub use rawshift_image_ifd::*;

@@ -2,6 +2,9 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+#[cfg(feature = "hw-planes")]
+#[doc(hidden)]
+pub mod hw_planes;
 mod rgb_image;
 
 use std::io::Write;

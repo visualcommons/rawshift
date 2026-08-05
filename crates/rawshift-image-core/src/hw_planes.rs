@@ -14,8 +14,8 @@
 
 use rawshift_hwdec::Plane;
 
-use crate::core::RgbImage;
-use crate::error::RawResult;
+use crate::RawResult;
+use crate::RgbImage;
 
 /// Copy an 8-bit plane into `u16` samples, honouring the row stride.
 pub(crate) fn read_plane_8(plane: &Plane, width: usize, rows: usize) -> Vec<u16> {

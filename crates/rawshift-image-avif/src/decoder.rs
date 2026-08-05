@@ -33,10 +33,10 @@
 use gamut_avif::{AvifContainer, AvifImage, AvifItem};
 use gamut_isobmff::ColourInformation;
 
-use crate::core::RgbImage;
-use crate::core::metadata::{ImageMetadata, MetadataKey, MetadataNamespace, MetadataValue};
-use crate::error::{FormatError, RawError, RawResult};
-use crate::metadata::exif::ExifParser;
+use rawshift_image_core::RgbImage;
+use rawshift_image_core::metadata::{ImageMetadata, MetadataKey, MetadataNamespace, MetadataValue};
+use rawshift_image_core::{FormatError, RawError, RawResult};
+use rawshift_image_metadata::exif::ExifParser;
 
 /// The codec name reported in [`RawError::HwDecoderUnavailable`].
 const AV1: &str = "AV1";
@@ -189,7 +189,7 @@ impl AvifFile {
         };
         let mut adapter = hw::HwAv1Adapter::new(decoder);
         match self.image.decode_item_rgba8(id, &mut adapter) {
-            Ok(rgba) => super::hw_planes::rgba8_to_rgb_image(&rgba),
+            Ok(rgba) => rawshift_image_core::hw_planes::rgba8_to_rgb_image(&rgba),
             Err(source) => Err(adapter.into_raw_error(source)),
         }
     }
@@ -408,8 +408,10 @@ mod hw {
         PixelFormat, StillDecodeRequest,
     };
 
-    use super::super::hw_planes::{deinterleave_8, deinterleave_16, read_plane_8, read_plane_16};
-    use crate::error::{FormatError, RawError};
+    use rawshift_image_core::hw_planes::{
+        deinterleave_8, deinterleave_16, read_plane_8, read_plane_16,
+    };
+    use rawshift_image_core::{FormatError, RawError};
 
     /// An [`Av1StillDecoder`] over a hardware [`HwStillDecoder`].
     ///

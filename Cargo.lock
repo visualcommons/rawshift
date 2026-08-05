@@ -1261,11 +1261,13 @@ dependencies = [
  "rawshift-core",
  "rawshift-hwdec",
  "rawshift-image-arw",
+ "rawshift-image-avif",
  "rawshift-image-core",
  "rawshift-image-cr2",
  "rawshift-image-cr3",
  "rawshift-image-crw",
  "rawshift-image-dng",
+ "rawshift-image-heic",
  "rawshift-image-ifd",
  "rawshift-image-ljpeg",
  "rawshift-image-metadata",
@@ -1296,11 +1298,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rawshift-image-avif"
+version = "0.1.1"
+dependencies = [
+ "gamut-avif",
+ "gamut-color",
+ "gamut-core",
+ "gamut-isobmff",
+ "rawshift-hwdec",
+ "rawshift-image-core",
+ "rawshift-image-metadata",
+ "serde",
+]
+
+[[package]]
 name = "rawshift-image-core"
 version = "0.1.1"
 dependencies = [
  "gamut-core",
  "rawshift-core",
+ "rawshift-hwdec",
  "serde",
  "thiserror",
 ]
@@ -1342,6 +1359,20 @@ dependencies = [
  "rawshift-image-ifd",
  "serde",
  "tracing",
+]
+
+[[package]]
+name = "rawshift-image-heic"
+version = "0.1.1"
+dependencies = [
+ "gamut-color",
+ "gamut-core",
+ "gamut-heic",
+ "gamut-isobmff",
+ "rawshift-hwdec",
+ "rawshift-image-core",
+ "rawshift-image-metadata",
+ "serde",
 ]
 
 [[package]]

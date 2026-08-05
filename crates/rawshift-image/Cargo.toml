@@ -26,12 +26,14 @@ rawshift-image-metadata = { workspace = true }
 rawshift-image-ifd = { workspace = true, optional = true }
 rawshift-image-ljpeg = { workspace = true, optional = true }
 rawshift-image-arw = { workspace = true, default-features = false }
+rawshift-image-avif = { workspace = true, default-features = false }
 rawshift-image-cr2 = { workspace = true, default-features = false }
 rawshift-image-cr3 = { workspace = true, default-features = false }
 rawshift-image-crw = { workspace = true, default-features = false }
 rawshift-image-dng = { workspace = true, default-features = false }
 rawshift-image-nef = { workspace = true, default-features = false }
 rawshift-image-raf = { workspace = true, default-features = false }
+rawshift-image-heic = { workspace = true, default-features = false }
 gamut-core     = { workspace = true }
 # gamut-icc backs the sRGB profile construction and validation in
 # `metadata/icc.rs`, which compiles unconditionally (the `IccProfile` type is
@@ -217,7 +219,7 @@ tiff-decode = ["tiff-decode-tiff"]
 # (visualcommons/gamut#259). `exif` supplies the parser for the container's
 # Exif item; `gamut-isobmff` surfaces in the ICC-extraction path
 # (`AvifItem::colour()`).
-avif-decode = ["dep:gamut-avif", "dep:gamut-isobmff", "exif"]
+avif-decode = ["dep:gamut-avif", "dep:gamut-isobmff", "exif", "rawshift-image-avif/decode"]
 # AVIF encode is backed directly by gamut-avif (no tier-4 layer): like
 # PNG and the RAW direction features, it has a single gamut-backed
 # implementation, so the format-direction feature itself pulls the dependency.
@@ -231,7 +233,7 @@ avif-encode = ["dep:gamut-avif", "exif", "rawshift-image-metadata/avif-encode"]
 # additionally needs a hardware HEVC decoder (`hw`/`hw-*`, see below) and
 # reports `RawError::HwDecoderUnavailable` without one. `exif` supplies the
 # parser for the container's Exif item.
-heic-decode = ["dep:gamut-heic", "dep:gamut-isobmff", "exif"]
+heic-decode = ["dep:gamut-heic", "dep:gamut-isobmff", "exif", "rawshift-image-heic/decode"]
 svg-decode  = ["svg-decode-resvg"]
 ppm-decode  = ["ppm-decode-zune"]
 arw-decode  = ["ifd-parser", "dep:rawshift-image-ljpeg", "rawshift-image-arw/decode"]
@@ -279,7 +281,7 @@ ppm-decode-zune      = ["ppm-decode", "dep:zune-ppm", "zune-runtime"]
 # gamut-ifd TIFF/IFD structure engine (used by the migrated TIFF-based RAW
 # decoders and by format detection).
 ifd-parser    = ["dep:gamut-ifd", "dep:rawshift-image-ifd", "rawshift-image-metadata/ifd-parser"]
-serde         = ["dep:serde", "rawshift-core/serde", "rawshift-image-core/serde", "rawshift-image-dng/serde"]
+serde         = ["dep:serde", "rawshift-core/serde", "rawshift-image-core/serde", "rawshift-image-dng/serde", "rawshift-image-avif/serde", "rawshift-image-heic/serde"]
 # `zune-core` codec primitives (bit depth, colorspace, decoder/encoder option
 # builders). Pulled by the zune-backed PPM impl feature (`zune-ppm` is a
 # permanent exception to the gamut migration — see AGENTS.md).
@@ -298,10 +300,10 @@ exif          = ["dep:gamut-exif", "dep:gamut-metadata", "dep:gamut-xmp", "rawsh
 #   `hw-*` — pin one explicit backend; `compile_error!` on any other target.
 # Without any of them, `heic`/`avif` are valid container/metadata-only builds
 # whose pixel decode returns `RawError::HwDecoderUnavailable`.
-hw              = ["dep:rawshift-hwdec", "rawshift-hwdec/hw"]
-hw-videotoolbox = ["hw", "rawshift-hwdec/videotoolbox"]
-hw-vaapi        = ["hw", "rawshift-hwdec/vaapi"]
-hw-mediacodec   = ["hw", "rawshift-hwdec/mediacodec"]
+hw              = ["dep:rawshift-hwdec", "rawshift-hwdec/hw", "rawshift-image-avif/hw", "rawshift-image-heic/hw"]
+hw-videotoolbox = ["hw", "rawshift-hwdec/videotoolbox", "rawshift-image-avif/hw-videotoolbox", "rawshift-image-heic/hw-videotoolbox"]
+hw-vaapi        = ["hw", "rawshift-hwdec/vaapi", "rawshift-image-avif/hw-vaapi", "rawshift-image-heic/hw-vaapi"]
+hw-mediacodec   = ["hw", "rawshift-hwdec/mediacodec", "rawshift-image-avif/hw-mediacodec", "rawshift-image-heic/hw-mediacodec"]
 
 [[bench]]
 name = "decode"
