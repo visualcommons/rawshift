@@ -189,7 +189,13 @@ cargo test --features=arw --test ifd_decoder_tests
 cargo test --features=dng --test dng_check
 cargo test --features=heic --test heic_aux
 
-# Hardware decode (compiled with `hw`; skips gracefully without a GPU)
+# Hardware decode (compiled with `hw`; skips gracefully without a decoder).
+# Prefer the `just` target: it also runs the backend's own device tests and
+# prints what was actually exercised, which matters because these tests skip
+# silently when no hardware decoder is present.
+just test-hw
+
+# ...or the end-to-end half on its own:
 cargo test --features=full --test heic_hw_decode --test avif_hw_decode
 
 # With specific features

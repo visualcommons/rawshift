@@ -153,7 +153,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.92.0"
-          targets: aarch64-apple-darwin,x86_64-unknown-linux-musl
+          targets: aarch64-apple-darwin,aarch64-apple-ios,x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@v2
       - name: Invalid combos must fail with the compile_error text
         run: |
@@ -186,6 +186,10 @@ jobs:
           # backend where one exists and compiles the no-backend stub (with a
           # build-script warning) where none does (musl).
           cargo check -p rawshift-image --no-default-features --features hw --target aarch64-apple-darwin
+          # iOS is a tier-1 build target (docs/SUPPORT.md); the VideoToolbox
+          # backend cfg-gates the macOS-only decoder-specification keys, so
+          # this is what proves that gating compiles.
+          cargo check -p rawshift-image --no-default-features --features hw --target aarch64-apple-ios
           cargo check -p rawshift-image --no-default-features --features hw --target x86_64-unknown-linux-musl
 
   # ── `full` on tier-1 targets (issue #34) ────────────────────────────────────

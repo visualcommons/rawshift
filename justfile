@@ -51,6 +51,24 @@ test-features features:
 test-all:
     cargo test --workspace --features rawshift-image/full
 
+# Run the hardware decode tests against this machine's real decoder.
+#
+# CI cannot do this — GitHub runners have no dependable hardware decode block,
+# and every hardware test skips silently without one, so a CI job would be
+# green without decoding anything. This is the maintainer's pre-release gate
+# instead; see "Pre-release hardware verification" in DEVELOPMENT.md.
+#
+# Needs ffmpeg (bitstream fixtures) and, for the end-to-end HEIC test,
+# heif-enc. macOS: `brew install ffmpeg libheif libavif`.
+# Prints a summary; tests that skip say so on stderr, so read the output rather
+# than trusting the exit code alone.
+test-hw:
+    @echo "== backend probe + hardware decode tests =="
+    cargo test -p rawshift-hwdec --features hw -- --nocapture --test-threads=1
+    @echo "== end-to-end HEIC/AVIF pixel decode =="
+    cargo test -p rawshift-image --features full \
+        --test heic_hw_decode --test avif_hw_decode -- --nocapture
+
 # Generate docs for the whole workspace
 doc:
     cargo doc --workspace --no-deps --open

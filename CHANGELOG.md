@@ -164,6 +164,20 @@ All entries below are **breaking**, grouped by area.
   `HwStillDecoder`, `decoder()`/`backend()`/`available_codecs()`), verified
   feature flags (`hw` portable; `videotoolbox`/`vaapi`/`mediacodec`
   `compile_error!` on foreign targets), and all platform FFI confined to it.
+- *(hwdec)* VideoToolbox hardware decode backend (macOS/iOS): HEVC
+  Main/Main10 and AV1 Profile 0 still pictures to NV12/P010 through
+  `VTDecompressionSession`, over the linked system frameworks. HEVC takes its
+  `hvcC` parameter sets with the length-prefixed payload passed through
+  unchanged; AV1 takes its `av1C` config atom. Availability is probed per
+  codec with `VTIsHardwareDecodeSupported`, so `available_codecs()` omits
+  `Av1` on hardware without an AV1 decode block (before M3 / A17 Pro) while
+  HEVC keeps working. Sessions are hardware-pinned on macOS and retried once
+  without that requirement, because Apple's HEVC block refuses pictures below
+  roughly 64x64 and HEIF thumbnails are routinely 32x32. HEIC and AVIF pixel
+  decode in `rawshift-image` work end-to-end on Apple hardware through this
+  backend. Bindings are the `objc2-*` framework crates
+  (`default-features = false`); the rationale for generated bindings here and
+  a hand-written `sys.rs` for VAAPI is recorded in the crate README.
 - *(hwdec)* VAAPI hardware decode backend (linux-gnu): HEVC Main/Main10 and
   AV1 Profile 0 still pictures to NV12/P010, libva dlopen'd at runtime —
   absence of libva or a render node degrades to `decoder() == None`, never a

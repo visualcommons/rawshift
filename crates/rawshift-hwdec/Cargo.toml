@@ -30,6 +30,56 @@ thiserror   = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 libloading = "0.8"
 
+# VideoToolbox/CoreMedia/CoreVideo are always-present Apple system frameworks,
+# so unlike libva they are linked normally rather than dlopen'd. The `objc2-*`
+# framework crates are the maintained, generated bindings for them (MSRV 1.71,
+# Zlib OR Apache-2.0 OR MIT) and carry the `#[link(kind = "framework")]`
+# attributes, so build.rs needs no link directives. They also give us
+# `CFRetained<T>` RAII instead of hand-rolled CFRetain/CFRelease pairs — the
+# reason this backend uses generated bindings where the VAAPI one hand-writes
+# `sys.rs` (see the module docs in src/videotoolbox/mod.rs).
+#
+# `default-features = false` throughout: the default feature sets pull in the
+# Objective-C runtime, Metal, OpenGL and CoreAudio, none of which a still-frame
+# decode touches. Only the granular per-header features below are enabled.
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+objc2-video-toolbox = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "bitflags",
+    "VTBase",
+    "VTErrors",
+    "VTDecompressionSession",
+    "VTDecompressionProperties",
+    "objc2-core-media",
+    "objc2-core-video",
+] }
+objc2-core-media = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "bitflags",
+    "CMBase",
+    "CMTime",
+    "CMBlockBuffer",
+    "CMFormatDescription",
+    "CMSampleBuffer",
+] }
+objc2-core-video = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "bitflags",
+    "CVBase",
+    "CVReturn",
+    "CVBuffer",
+    "CVImageBuffer",
+    "CVPixelBuffer",
+] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "CFBase",
+    "CFString",
+    "CFData",
+    "CFNumber",
+    "CFDictionary",
+] }
+
 [features]
 # Verified backend feature flags — see docs/SUPPORT.md for the permanent
 # target/API matrix. Each explicit backend flag hard-fails the compile
@@ -39,11 +89,12 @@ libloading = "0.8"
 # (windows-msvc, linux-musl, wasm) emits a build-script warning and compiles
 # the no-backend stub.
 #
-# Backends implemented: VAAPI (linux-gnu; dlopen'd libva, HEVC Main/Main10 +
-# AV1 Profile 0 still pictures). VideoToolbox / MediaCodec land as separate
-# issues; builds without a selected backend compile the no-backend stub —
-# `decoder()` returns `None`, `backend()` returns `None`, and
-# `available_codecs()` is empty.
+# Backends implemented: VideoToolbox (macOS/iOS; linked system frameworks,
+# hardware-only via VTIsHardwareDecodeSupported) and VAAPI (linux-gnu;
+# dlopen'd libva), both for HEVC Main/Main10 + AV1 Profile 0 still pictures.
+# MediaCodec lands as a separate issue; builds without a selected backend
+# compile the no-backend stub — `decoder()` returns `None`, `backend()`
+# returns `None`, and `available_codecs()` is empty.
 videotoolbox = []
 vaapi        = []
 mediacodec   = []

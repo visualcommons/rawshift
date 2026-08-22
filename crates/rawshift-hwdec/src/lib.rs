@@ -10,11 +10,12 @@
 //! Per `PRINCIPLES.md`, **all** platform FFI for hardware decode lives in this
 //! crate and nowhere else: `#![deny(unsafe_op_in_unsafe_fn)]`, every public
 //! item is safe, and every `unsafe` block documents its invariants inside the
-//! platform backend module that owns it. The **VAAPI backend** (linux-gnu,
-//! dlopen'd libva — see the `vaapi` module) is implemented; VideoToolbox and
-//! MediaCodec land as separate issues. On targets/builds with no backend
-//! every entry point reports "no decoder" — [`decoder`] returns `None`,
-//! [`backend`] returns `None`, and [`available_codecs`] is empty.
+//! platform backend module that owns it. The **VideoToolbox backend**
+//! (macOS/iOS, linked system frameworks, hardware-only) and the **VAAPI
+//! backend** (linux-gnu, dlopen'd libva) are implemented; MediaCodec lands as
+//! a separate issue. On targets/builds with no backend every entry point
+//! reports "no decoder" — [`decoder`] returns `None`, [`backend`] returns
+//! `None`, and [`available_codecs`] is empty.
 //!
 //! On NVIDIA GPUs the VAAPI backend works through the maintained
 //! [`nvidia-vaapi-driver`](https://github.com/elFarto/nvidia-vaapi-driver)
@@ -47,6 +48,19 @@
 //! [`docs/SUPPORT.md`]: https://github.com/visualcommons/rawshift/blob/master/docs/SUPPORT.md
 
 #![deny(unsafe_op_in_unsafe_fn)]
+
+#[cfg(any(
+    hwdec_backend = "vaapi",
+    hwdec_backend = "videotoolbox",
+    hwdec_backend = "mediacodec",
+    test
+))]
+mod bitstream;
+
+// The VideoToolbox platform backend: compiled only when build.rs selected it
+// (`videotoolbox` explicit flag, or `hw` on a macOS/iOS target).
+#[cfg(hwdec_backend = "videotoolbox")]
+mod videotoolbox;
 
 // The VAAPI platform backend: compiled only when build.rs selected it
 // (`vaapi` explicit flag, or `hw` on a linux-gnu target).
@@ -475,19 +489,29 @@ pub enum HwDecodeError {
 /// Returns a decoder for `codec`, or `None` when no compiled-in backend can
 /// decode it at runtime.
 ///
+/// With the VideoToolbox backend compiled in (`videotoolbox`, or `hw` on
+/// macOS/iOS), this answers from `VTIsHardwareDecodeSupported` — so AV1 is
+/// reported only on hardware that actually has an AV1 decode block (M3 /
+/// A17 Pro and later), while HEVC keeps working on older machines.
+///
 /// With the VAAPI backend compiled in (`vaapi`, or `hw` on linux-gnu), this
 /// dlopens libva on first use and answers from the driver's actual
 /// profile/entrypoint list; missing libraries, render nodes, or driver
 /// support all degrade to `None` (never a link or startup failure).
-/// VideoToolbox and MediaCodec land as separate issues; without a backend
-/// this returns `None` everywhere.
+///
+/// MediaCodec lands as a separate issue; without a backend this returns
+/// `None` everywhere.
 #[must_use]
 pub fn decoder(codec: HwCodec) -> Option<Box<dyn HwStillDecoder>> {
+    #[cfg(hwdec_backend = "videotoolbox")]
+    {
+        videotoolbox::decoder(codec)
+    }
     #[cfg(hwdec_backend = "vaapi")]
     {
         vaapi::decoder(codec)
     }
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(not(any(hwdec_backend = "videotoolbox", hwdec_backend = "vaapi")))]
     {
         let _ = codec;
         None
@@ -497,32 +521,42 @@ pub fn decoder(codec: HwCodec) -> Option<Box<dyn HwStillDecoder>> {
 /// The platform backend compiled into this build and usable at runtime, or
 /// `None`.
 ///
-/// Reports `Some` only when the runtime probe succeeds (e.g. VAAPI's dlopen
+/// Reports `Some` only when the runtime probe succeeds (e.g. VideoToolbox
+/// reporting hardware decode for at least one codec, or VAAPI's dlopen
 /// finding a driver with at least one supported codec at the VLD entry
 /// point).
 #[must_use]
 pub fn backend() -> Option<HwBackend> {
+    #[cfg(hwdec_backend = "videotoolbox")]
+    {
+        videotoolbox::backend()
+    }
     #[cfg(hwdec_backend = "vaapi")]
     {
         vaapi::backend()
     }
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(not(any(hwdec_backend = "videotoolbox", hwdec_backend = "vaapi")))]
     {
         None
     }
 }
 
 /// The codecs [`decoder`] can currently return a decoder for, per the
-/// runtime probe (e.g. `vaQueryConfigProfiles` for VAAPI).
+/// runtime probe (`VTIsHardwareDecodeSupported` for VideoToolbox,
+/// `vaQueryConfigProfiles` for VAAPI).
 ///
 /// Empty when no backend is compiled in or usable.
 #[must_use]
 pub fn available_codecs() -> &'static [HwCodec] {
+    #[cfg(hwdec_backend = "videotoolbox")]
+    {
+        videotoolbox::available_codecs()
+    }
     #[cfg(hwdec_backend = "vaapi")]
     {
         vaapi::available_codecs()
     }
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(not(any(hwdec_backend = "videotoolbox", hwdec_backend = "vaapi")))]
     {
         &[]
     }
@@ -534,14 +568,14 @@ mod tests {
 
     // ── stub behaviour (builds with no selected backend) ────────────────────
 
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(not(any(hwdec_backend = "videotoolbox", hwdec_backend = "vaapi")))]
     #[test]
     fn stub_has_no_decoder_for_any_codec() {
         assert!(decoder(HwCodec::Hevc).is_none());
         assert!(decoder(HwCodec::Av1).is_none());
     }
 
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(not(any(hwdec_backend = "videotoolbox", hwdec_backend = "vaapi")))]
     #[test]
     fn stub_reports_no_backend_and_no_codecs() {
         assert_eq!(backend(), None);
