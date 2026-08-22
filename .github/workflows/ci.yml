@@ -280,4 +280,12 @@ jobs:
       - name: Run Miri on unit tests
         run: cargo +nightly miri test -p rawshift-core -p rawshift-image --lib -- --skip tiff --skip dng --skip arw --skip export
         env:
-          MIRIFLAGS: -Zmiri-disable-isolation
+          # Tree Borrows, not the default Stacked Borrows: rayon's crossbeam-epoch
+          # reclamation list retags a `*const Entry` into a `*const Local`
+          # (crossbeam-epoch internal.rs `element_of`) in a way Stacked Borrows
+          # rejects outright, so *every* rayon-parallel test — the demosaic and
+          # transform hot paths this job exists to check — aborted before Miri
+          # reached any rawshift code. Tree Borrows accepts it, restoring cover.
+          # `ignore-leaks`: rayon's global pool is never joined, so its workers
+          # outlive main and Miri's exit-time leak check fires on that alone.
+          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-tree-borrows -Zmiri-ignore-leaks
