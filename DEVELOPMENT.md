@@ -69,6 +69,41 @@ the new version.
 > `master` before the PR is cut. To run CI on Release PRs, switch the workflow
 > to a GitHub App token / PAT via the action's `token:` input.
 
+### Pre-release hardware verification
+
+**CI does not test hardware decode, and cannot.** Hosted runners have no
+dependable hardware decode block, and every hardware test in this repo skips
+gracefully when no decoder is present — so a CI job would report green without
+having decoded anything. CI covers the compile boundaries only (see the
+`compile-boundaries` job for the feature × target matrix).
+
+That makes hardware decode the one part of `rawshift` whose regressions are
+invisible on `master`. The backstop is a manual gate:
+
+> **Before merging a Release PR, a maintainer must run `just test-hw` on at
+> least one machine per hardware backend that changed since the last release,
+> and record the result in the Release PR.** A change to `rawshift-hwdec` that
+> has not been run against real hardware is not releasable.
+
+```sh
+just test-hw
+```
+
+Read the output rather than trusting the exit code: tests that skip say so on
+stderr, and a run where everything skipped verifies nothing. A good run names
+the backend and the codecs it exercised, e.g. `VideoToolbox probe: available
+codecs: [Hevc, Av1]`.
+
+| Backend | Platform | What a run needs |
+| --- | --- | --- |
+| VideoToolbox | macOS (Apple silicon; AV1 needs M3 / A17 Pro or later) | `brew install ffmpeg libheif libavif` |
+| VAAPI | Linux (gnu) with an Intel/AMD GPU, or NVIDIA via `nvidia-vaapi-driver` | `ffmpeg`, a `/dev/dri/renderD*` node |
+| MediaCodec | Android device or emulator, API 29+ | see the backend's own harness |
+
+Codecs the machine cannot decode skip rather than fail — an Apple machine
+older than M3 has no AV1 block, and that is expected, not a regression. What
+must not happen is a *listed* codec failing to decode.
+
 ## One-time setup (bootstrap)
 
 crates.io trusted publishing **cannot create a brand-new crate** — a Trusted
