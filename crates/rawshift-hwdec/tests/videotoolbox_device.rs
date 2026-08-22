@@ -464,7 +464,50 @@ fn videotoolbox_reuses_one_session_across_many_decodes() {
     eprintln!("VideoToolbox session reuse: 64 decodes produced identical frames");
 }
 
-// ── (g) colour range ────────────────────────────────────────────────────────
+// ── (g) mixed geometry through one decoder ──────────────────────────────────
+
+/// A decoder is opened per codec, not per picture, so one can be handed
+/// pictures of different sizes — a HEIF file's primary image and its thumbnail
+/// are exactly that. This drives the session cache's second path, where the
+/// configuration record differs and the decoder is asked whether it can accept
+/// the new format description before the session is rebuilt.
+#[test]
+fn videotoolbox_decodes_mixed_geometry_through_one_decoder() {
+    let Some((big_hvcc, big_payload)) = generate_hevc("128x96", "yuv420p", None, "mixed_big")
+    else {
+        return;
+    };
+    let Some((small_hvcc, small_payload)) = generate_hevc("64x64", "yuv420p", None, "mixed_small")
+    else {
+        return;
+    };
+    let Some(mut decoder) = device_or_skip(HwCodec::Hevc) else {
+        return;
+    };
+    let decode = |decoder: &mut Box<dyn HwStillDecoder>, hvcc: &[u8], payload: &[u8]| {
+        decoder
+            .decode_still(&StillDecodeRequest {
+                config: CodecConfig::Hvcc(hvcc),
+                payload,
+                width: 0,
+                height: 0,
+                bit_depth: 8,
+                chroma: ChromaSubsampling::Cs420,
+            })
+            .expect("hardware HEVC decode")
+    };
+    // Alternate, so the cache is forced to switch in both directions rather
+    // than settling on one geometry.
+    for round in 0..3 {
+        let big = decode(&mut decoder, &big_hvcc, &big_payload);
+        assert_eq!((big.width(), big.height()), (128, 96), "round {round}");
+        let small = decode(&mut decoder, &small_hvcc, &small_payload);
+        assert_eq!((small.width(), small.height()), (64, 64), "round {round}");
+    }
+    eprintln!("VideoToolbox mixed geometry: 128x96 and 64x64 alternated through one decoder");
+}
+
+// ── (h) colour range ────────────────────────────────────────────────────────
 
 /// The backend derives `ColorRange` from the emitted surface's four-character
 /// code (`420v` vs `420f`) rather than from the SPS. This checks the two
@@ -501,7 +544,7 @@ fn videotoolbox_reports_a_colour_range() {
     eprintln!("VideoToolbox colour range: tv -> {tv:?}, pc -> {pc:?}");
 }
 
-// ── (h) error path on real hardware ─────────────────────────────────────────
+// ── (i) error path on real hardware ─────────────────────────────────────────
 
 /// Garbage input must fail with an error, not a panic and not a blank frame.
 #[test]
