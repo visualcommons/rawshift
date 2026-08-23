@@ -52,8 +52,8 @@ gamut-icc-git = { package = "gamut-icc", git = "https://github.com/visualcommons
 
 # `image-without-codecs` gives the image widget without the `image` crate's
 # decoders — the gallery feeds it rawshift's own buffers, so pulling a second
-# set of codecs in would be both wasteful and dishonest about what decoded
-# the picture. `tokio` is iced's futures executor; `rfd` shares it.
+# set of codecs in would be both wasteful and dishonest about what decoded the
+# picture. `tokio` selects iced's futures executor.
 iced = { version = "0.14", default-features = false, features = [
     "wgpu",
     "tiny-skia",
@@ -61,7 +61,14 @@ iced = { version = "0.14", default-features = false, features = [
     "advanced",
     "tokio",
 ] }
-rfd = "0.15"
+# default-features = false to drop rfd's default `async-std`: it would pull a
+# second async runtime alongside iced's tokio for no benefit. `xdg-portal` is
+# rfd's own default Linux backend and, unlike its `gtk3` alternative, needs no
+# system development packages — so the Linux CI job installs nothing for it.
+rfd = { version = "0.15", default-features = false, features = [
+    "xdg-portal",
+    "tokio",
+] }
 tokio = { version = "1.50", features = ["rt-multi-thread"] }
 
 # The crates.io gamut-color, matching rawshift's own tree — used for the sRGB
