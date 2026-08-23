@@ -258,6 +258,38 @@ jobs:
           name: coverage-report
           path: coverage.json
 
+  # The demonstration GUI (examples/gallery). A standalone package outside the
+  # workspace, so no other job builds it: its gamut-cmm git dependency pulls the
+  # gamut repository's aom/dav1d submodules, a ~1.4 GB checkout that a workspace
+  # member would impose on every job that resolves the workspace.
+  #
+  # Builds and unit-tests only. The window needs a display server, but the
+  # round-trip logic it drives does not — `--headless` runs the same matrix, and
+  # the unit tests cover decode/encode/compare and the colour transform.
+  gallery:
+    name: Gallery (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.92.0"
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: examples/gallery
+      # libjxl (via gamut-jxl, pulled by rawshift-image/full) builds from source.
+      - name: Install build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake clang libclang-dev
+      - run: cargo fmt --manifest-path examples/gallery/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path examples/gallery/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path examples/gallery/Cargo.toml
+
   msrv:
     name: MSRV (1.92)
     runs-on: ubuntu-latest

@@ -28,6 +28,14 @@ members = [
     "crates/rawshift-image-webp",
     "crates/rawshift-video",
 ]
+# `examples/gallery` is deliberately NOT a member. It is a `publish = false`
+# demonstration GUI whose only git dependency (gamut-cmm, see its manifest)
+# drags in the gamut repository's `aom`/`dav1d` submodules — a ~1.4 GB
+# checkout. A workspace member would impose that fetch on every job that
+# resolves the workspace, including ones excluding it by name, because Cargo
+# still reads every member manifest to build the resolve graph. Standalone, it
+# is built only by `just gallery*` and the dedicated `gallery` CI job.
+exclude = ["examples/gallery"]
 
 [workspace.package]
 version = "0.1.1"

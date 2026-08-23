@@ -1,4 +1,7 @@
 /target
+# examples/gallery is a standalone package outside the workspace, so it has a
+# build directory of its own that the anchored rule above does not cover.
+/examples/gallery/target
 
 .DS_Store
 

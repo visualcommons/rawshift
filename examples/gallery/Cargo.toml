@@ -1,0 +1,74 @@
+# Standalone package — deliberately outside the rawshift workspace.
+#
+# The `gamut-cmm` git dependency below pulls the gamut repository, whose
+# `aom` / `dav1d` submodules make for a ~1.4 GB checkout. As a workspace member
+# that cost would land on every job that resolves the workspace; standalone, it
+# lands only here. This also keeps iced/wgpu/winit out of
+# `cargo test -p rawshift-image`.
+[workspace]
+
+[package]
+name = "rawshift-gallery"
+description = "Colour-managed decode/encode round-trip gallery — a demonstration GUI for rawshift."
+version = "0.1.1"
+edition = "2024"
+# Not MSRV-bound: this crate is never published and is excluded from the MSRV
+# job. It is still expected to build on the pinned toolchain in
+# rust-toolchain.toml.
+rust-version = "1.92.0"
+license = "MPL-2.0"
+repository = "https://github.com/visualcommons/rawshift"
+homepage = "https://github.com/visualcommons/rawshift"
+publish = false
+
+[dependencies]
+rawshift-image = { path = "../../crates/rawshift-image", features = [
+    "full",
+    "experimental",
+] }
+rawshift-core = { path = "../../crates/rawshift-core" }
+rawshift-hwdec = { path = "../../crates/rawshift-hwdec", features = ["hw"] }
+
+# ── The one git dependency in this repository ────────────────────────────────
+# AGENTS.md forbids git dependencies on gamut because they prevent publishing
+# rawshift. That reason does not reach this crate: `rawshift-gallery` is
+# `publish = false` and outside the workspace, so no published crate's
+# dependency tree contains it and `cargo publish -p rawshift-image` never sees
+# it. The published crates stay crates.io-only.
+#
+# gamut-cmm is the ICC colour-management module (gamut#323). It is not on
+# crates.io, and it is the only way to apply an ICC transform to pixels —
+# gamut-icc parses and serialises profiles but explicitly does not transform.
+# Retire this carve-out for a crates.io version once gamut-cmm ships.
+#
+# NOTE: gamut-cmm depends on gamut-core/gamut-color/gamut-icc by path inside
+# the gamut workspace, so over git those resolve to the git checkout — a
+# different Cargo *source* from crates.io even at identical version numbers.
+# This crate therefore links two copies of gamut-icc whose `IccProfile` types
+# are NOT interchangeable. ICC data crosses that boundary as bytes and is
+# re-parsed; never pass a typed profile value across it.
+gamut-cmm = { git = "https://github.com/visualcommons/gamut", branch = "master" }
+gamut-icc-git = { package = "gamut-icc", git = "https://github.com/visualcommons/gamut", branch = "master" }
+
+# `image-without-codecs` gives the image widget without the `image` crate's
+# decoders — the gallery feeds it rawshift's own buffers, so pulling a second
+# set of codecs in would be both wasteful and dishonest about what decoded
+# the picture. `tokio` is iced's futures executor; `rfd` shares it.
+iced = { version = "0.14", default-features = false, features = [
+    "wgpu",
+    "tiny-skia",
+    "image-without-codecs",
+    "advanced",
+    "tokio",
+] }
+rfd = "0.15"
+tokio = { version = "1.50", features = ["rt-multi-thread"] }
+
+# The crates.io gamut-color, matching rawshift's own tree — used for the sRGB
+# transfer function. Distinct from the git copy gamut-cmm links; see src/color.rs.
+gamut-color = "2.0.0"
+
+rayon = "1.11.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4.5", features = ["derive"] }
