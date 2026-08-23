@@ -14,9 +14,54 @@ from the published [gamut](https://github.com/visualcommons/gamut) crates.
 dependency is a registry package. 0.x source compatibility is a non-goal (see
 `docs/V1_DESIGN.md`).
 
+### Added
+
+#### Colour management
+
+- `rawshift-image-core::color_resolve` maps what a container declares — a CICP
+  code-point pair, an embedded ICC profile, or neither — onto a
+  `ColorDescription`. Surfaced from `rawshift_image::core` as `resolve_color`,
+  `ContainerColor`, and `is_convertible_to_srgb`.
+- `probe_avif_color` / `probe_heic_color`: the primary item's declared colour
+  space from container parsing alone, with no hardware decoder involved.
+
+#### Examples
+
+- `examples/gallery`, a cross-platform GUI (iced) demonstrating the decode and
+  encode paths end to end: sources are re-encoded through every selected format
+  with every parameter exposed, written to the temp directory, decoded back,
+  and shown side by side with PSNR / max-delta / bit-exact verdicts. Run it
+  with `just gallery`, or `just gallery-headless` for the same matrix without a
+  window. It is a standalone package outside the workspace and is never
+  published; see its README for why, and for the scoped `gamut-cmm` git
+  carve-out recorded in `AGENTS.md`.
+
 ### Changed
 
 All entries below are **breaking**, grouped by area.
+
+#### Colour handling on decode and encode
+
+- **Decode now reports the container's real colour space.** `decode_standard_image`
+  and `decode_standard_image_with` previously forced every result to
+  `ColorDescription::SRGB`. PNG, JPEG, WebP, AVIF, and HEIC now tag from the
+  `cICP` chunk / `colr` box / embedded profile they already parse; the formats
+  with no colour path keep the sRGB default. A profile with no faithful CICP
+  expression (Adobe RGB, ProPhoto RGB) resolves to `UNSPECIFIED`, which is what
+  that value documents, with the profile preserved in
+  `ImageMetadata::icc_profile`. Callers that assumed decode always yields
+  `SRGB` must handle `DISPLAY_P3`, `REC2020`, `LINEAR_SRGB`, and `UNSPECIFIED`.
+- **`ImageProbe::color_space` reads the file** for JPEG, WebP, AVIF, and HEIC
+  instead of returning a hardcoded `SRGB`. PNG reports `UNSPECIFIED` — its
+  `iCCP` chunk is DEFLATE-compressed and gamut-png exposes ancillary chunks
+  only from a full decode, which a header-only probe must not do
+  ([gamut#379](https://github.com/visualcommons/gamut/issues/379)).
+- **Encode preserves the source ICC profile.** Every `embed_icc` path wrote a
+  synthesised sRGB profile, discarding the source's. An image tagged
+  `UNSPECIFIED` now carries its own profile through to the output. Images
+  tagged with a named space still get sRGB, which is what keeps RAW export
+  correct — `RawFile::process` tags its output `SRGB` while the file's metadata
+  may hold a camera profile describing the sensor, not the developed image.
 
 #### Package boundaries
 

@@ -69,6 +69,27 @@ test-hw:
     cargo test -p rawshift-image --features full \
         --test heic_hw_decode --test avif_hw_decode -- --nocapture
 
+# ── Gallery (examples/gallery) ────────────────────────────────────────────────
+# The demonstration GUI is a standalone package outside the workspace: its
+# gamut-cmm git dependency drags in the gamut repository's aom/dav1d submodules
+# (~1.4 GB). Every recipe below addresses it by manifest path, so `just clippy`
+# and `just test` never build it and the pre-commit hook never fetches it.
+
+# Run the gallery GUI. Extra args go to the binary (e.g. `just gallery a.jpg`).
+gallery *args:
+    cargo run --release --manifest-path examples/gallery/Cargo.toml -- {{args}}
+
+# Run the gallery's round-trip matrix with no window — what CI exercises, and
+# how to reproduce a decode/encode failure from a terminal.
+gallery-headless *args:
+    cargo run --manifest-path examples/gallery/Cargo.toml -- --headless --all-formats {{args}}
+
+# Lint, format-check, and test the gallery
+gallery-check:
+    cargo fmt --manifest-path examples/gallery/Cargo.toml -- --check
+    cargo clippy --manifest-path examples/gallery/Cargo.toml --all-targets -- -D warnings
+    cargo test --manifest-path examples/gallery/Cargo.toml
+
 # Generate docs for the whole workspace
 doc:
     cargo doc --workspace --no-deps --open

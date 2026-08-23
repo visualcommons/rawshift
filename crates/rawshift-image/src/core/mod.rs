@@ -9,6 +9,11 @@
 
 pub use rawshift_core::*;
 pub use rawshift_image_core::RgbImage;
+// The container-colour resolution used by the per-format decoders, surfaced
+// so callers can classify a profile the same way a decode does.
+pub use rawshift_image_core::color_resolve::{
+    ContainerColor, is_convertible_to_srgb, resolve_color,
+};
 
 // Re-export IccProfile from the internal metadata module so it remains
 // publicly accessible under `core` as before the workspace split.

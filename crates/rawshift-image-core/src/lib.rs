@@ -1,6 +1,7 @@
 //! Shared still-image contracts for rawshift's per-format crates.
 #![forbid(unsafe_code)]
 
+pub mod color_resolve;
 pub mod error;
 #[cfg(feature = "hw-planes")]
 #[doc(hidden)]
@@ -9,6 +10,7 @@ mod rgb_image;
 
 use std::io::Write;
 
+pub use color_resolve::{ContainerColor, resolve_color};
 pub use error::{EncodeError, FormatError, ParseError, ProcessingError, RawError, RawResult};
 pub use rawshift_core::*;
 pub use rgb_image::RgbImage;

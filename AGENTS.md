@@ -29,6 +29,13 @@ dependencies are not permitted because they prevent publishing rawshift.
   link to the gamut issue.
 - Permanent exceptions (stay on current deps; do not migrate, do not file
   upstream issues): GIF (`gif`), SVG (`resvg`), PPM (`zune-ppm`).
+- One scoped carve-out to the no-git-dependencies rule: `examples/gallery`, the
+  demonstration GUI, takes `gamut-cmm` from gamut `master`. The rule exists
+  because git dependencies prevent publishing; that does not reach a crate
+  which is `publish = false` **and** outside the workspace, so no published
+  crate's dependency tree contains it. The carve-out is limited to that one
+  package and expires when gamut-cmm reaches crates.io. Do not widen it: the
+  workspace `[workspace.dependencies]` gamut pins stay crates.io-only.
 - Supported compilation targets and hardware decode APIs are fixed in
   `docs/SUPPORT.md` (with justifications for exclusions) — do not add or
   remove targets/APIs; they were decided once at v1.

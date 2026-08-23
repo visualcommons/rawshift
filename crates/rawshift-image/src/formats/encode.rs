@@ -21,6 +21,51 @@ use super::export::EncodeOptions;
 #[cfg(feature = "webp-encode")]
 use super::export::WebPMode;
 
+/// The ICC profile bytes to embed for an image.
+///
+/// Prefers the source's own profile so a wide-gamut image survives a
+/// round-trip, but only when that profile is what actually describes these
+/// samples. The image's [`ColorDescription`] is the arbiter:
+///
+/// - [`UNSPECIFIED`] means the decoder found an ICC-authoritative profile with
+///   no faithful CICP expression — Adobe RGB, ProPhoto RGB — and deliberately
+///   declined to invent code points for it. The profile *is* the colour space,
+///   so it is embedded verbatim and the round-trip is lossless.
+/// - Any named space means the samples are in that space regardless of what
+///   `metadata` happens to carry, and a synthesised sRGB profile is used.
+///
+/// That second case is what keeps RAW export correct: `RawFile::process` tags
+/// its output `SRGB`, while the file's metadata may carry a *camera* profile
+/// describing the sensor rather than the developed image. Embedding that would
+/// mis-tag the export.
+///
+/// # Known gap
+///
+/// An image tagged `DISPLAY_P3` or `REC2020` from a container's CICP box gets
+/// an sRGB profile, because rawshift can only synthesise sRGB and the source
+/// carried code points rather than a profile. Writing the code points through
+/// to the output container (a PNG `cICP` chunk, an AVIF `colr nclx` box) is the
+/// correct fix — tracked in
+/// [rawshift#66](https://github.com/visualcommons/rawshift/issues/66).
+///
+/// [`ColorDescription`]: crate::core::ColorDescription
+/// [`UNSPECIFIED`]: crate::core::ColorDescription::UNSPECIFIED
+#[cfg(any_standard_encode)]
+fn profile_to_embed<'a>(
+    image: &RgbImage,
+    metadata: &'a ImageMetadata,
+) -> std::borrow::Cow<'a, [u8]> {
+    use crate::core::ColorDescription;
+    use crate::metadata::icc::IccProfile;
+
+    if image.color() == ColorDescription::UNSPECIFIED
+        && let Some(profile) = metadata.icc_profile.as_deref()
+    {
+        return std::borrow::Cow::Borrowed(profile);
+    }
+    std::borrow::Cow::Owned(IccProfile::srgb().as_bytes().to_vec())
+}
+
 /// Encode a linear RGB image to an in-memory byte buffer.
 ///
 /// This is the core encode entry point — every output format (PNG, JPEG, WebP,
@@ -121,7 +166,6 @@ fn encode_png(
 ) -> RawResult<Vec<u8>> {
     use super::export::{PngCompressionLevel, PngFilterStrategy, PngFilterType};
     use crate::metadata::exif::ExifBuilder;
-    use crate::metadata::icc::IccProfile;
     use gamut_core::{Dimensions, EncodeImage, ImageRef, Rgb8, Rgb16};
     use gamut_png::{FilterStrategy, FilterType, Level, PngEncoder};
 
@@ -161,9 +205,12 @@ fn encode_png(
     // Metadata is embedded by the encoder itself (eXIf / iCCP / XMP iTXt
     // chunks), so it is configured up front — no post-hoc chunk muxing.
     let m = &cfg.common.metadata;
+    // Bound outside the `if` so the borrow the encoder takes outlives it.
+    let icc;
     if m.embed_icc {
         // "ICC Profile" is the conventional iCCP profile name.
-        encoder = encoder.with_icc_profile("ICC Profile", IccProfile::srgb().as_bytes());
+        icc = profile_to_embed(image, metadata);
+        encoder = encoder.with_icc_profile("ICC Profile", &icc);
     }
     if m.embed_exif {
         match ExifBuilder::new(metadata).build_bytes() {
@@ -218,7 +265,6 @@ fn encode_jpeg(
 ) -> RawResult<Vec<u8>> {
     use super::export::{JpegDensityUnit, JpegSubsampling};
     use crate::metadata::exif::ExifBuilder;
-    use crate::metadata::icc::IccProfile;
     use gamut_core::{Dimensions, EncodeImage, ImageRef, Rgb8};
     use gamut_jpeg::{ChromaSubsampling, DensityUnit, JpegEncoder};
 
@@ -264,8 +310,11 @@ fn encode_jpeg(
             Err(e) => tracing::warn!("Failed to embed EXIF in JPEG: {e}"),
         }
     }
+    // Bound outside the `if` so the borrow the encoder takes outlives it.
+    let icc;
     if m.embed_icc {
-        encoder = encoder.with_icc_profile(IccProfile::srgb().as_bytes());
+        icc = profile_to_embed(image, metadata);
+        encoder = encoder.with_icc_profile(&icc);
     }
     if m.embed_xmp
         && let Some(xmp_data) = &metadata.xmp
@@ -295,7 +344,6 @@ fn encode_webp(
     cfg: &super::export::WebpEncodeConfig,
 ) -> RawResult<Vec<u8>> {
     use crate::metadata::exif::ExifBuilder;
-    use crate::metadata::icc::IccProfile;
     use gamut_core::{Dimensions, EncodeImage, ImageRef, Rgb8};
     use gamut_webp::WebpEncoder;
 
@@ -312,7 +360,7 @@ fn encode_webp(
     }
     model.icc = if m.embed_icc {
         Some(
-            gamut_icc::IccProfile::parse(IccProfile::srgb().as_bytes()).map_err(|e| {
+            gamut_icc::IccProfile::parse(&profile_to_embed(image, metadata)).map_err(|e| {
                 RawError::Encode(EncodeError::Encoding {
                     format: "WebP",
                     message: format!("WebP ICC encoding error: {e}"),
@@ -413,7 +461,8 @@ fn encode_avif(
     // items by rawshift's own muxer (`metadata::isobmff::insert_item`).
     let m = &cfg.common.metadata;
     if m.embed_icc {
-        match IccProfile::srgb().append_to_avif(avif_bytes.clone()) {
+        let profile = IccProfile::from_bytes(profile_to_embed(image, metadata).into_owned());
+        match profile.append_to_avif(avif_bytes.clone()) {
             Ok(data) => avif_bytes = data,
             Err(e) => tracing::warn!("Failed to embed ICC in AVIF: {e}"),
         }
@@ -445,7 +494,6 @@ fn encode_jxl(
     cfg: &super::export::JxlEncodeConfig,
 ) -> RawResult<Vec<u8>> {
     use crate::metadata::exif::ExifBuilder;
-    use crate::metadata::icc::IccProfile;
     use gamut_core::{Dimensions, EncodeImage, ImageRef, Rgb8, Rgb16};
     use gamut_jxl::{ColorSpec, Container, Distance, Effort, JxlEncoder};
 
@@ -480,7 +528,9 @@ fn encode_jxl(
     // colour metadata rather than a sidecar box.
     let m = &cfg.common.metadata;
     if m.embed_icc {
-        encoder = encoder.with_color(ColorSpec::Icc(IccProfile::srgb().as_bytes().to_vec()));
+        encoder = encoder.with_color(ColorSpec::Icc(
+            profile_to_embed(image, metadata).into_owned(),
+        ));
     }
     let mut needs_container = cfg.use_container;
     if m.embed_exif {

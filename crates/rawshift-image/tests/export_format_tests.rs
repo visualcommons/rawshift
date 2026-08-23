@@ -1046,6 +1046,95 @@ mod in_memory_tests {
         assert_eq!(decoded.color(), ColorDescription::SRGB);
     }
 
+    /// An ICC-authoritative source profile — one with no faithful CICP
+    /// expression — must survive encode → decode, not be replaced by a
+    /// synthesised sRGB profile. Adobe RGB is the canonical case.
+    #[test]
+    fn adobe_rgb_profile_survives_a_png_round_trip() {
+        use rawshift_image::core::ColorDescription;
+        use rawshift_image::formats::read_standard_image_metadata;
+
+        let profile = adobe_rgb_profile();
+        // Tagging the image UNSPECIFIED is what a decode of an Adobe RGB
+        // source produces: the profile is the colour space.
+        let mut image = synthetic_image();
+        image.set_color(ColorDescription::UNSPECIFIED);
+        let metadata = ImageMetadata {
+            icc_profile: Some(profile.clone()),
+            ..ImageMetadata::default()
+        };
+
+        let bytes =
+            encode_rgb_image_to_vec(&image, &metadata, &EncodeOptions::png()).expect("encode PNG");
+
+        let embedded = read_standard_image_metadata(&bytes, StandardFormat::Png)
+            .icc_profile
+            .expect("PNG carries an ICC profile");
+        assert_eq!(
+            embedded, profile,
+            "the source profile must be embedded verbatim, not replaced by sRGB"
+        );
+
+        // And the decode side must not claim it is sRGB.
+        let decoded = decode_standard_image(&bytes, StandardFormat::Png).expect("decode PNG");
+        assert_eq!(decoded.color(), ColorDescription::UNSPECIFIED);
+    }
+
+    /// An image tagged with a named space keeps the synthesised sRGB profile
+    /// even when the metadata carries some other profile — this is what stops
+    /// a RAW export from embedding the camera's sensor profile, since
+    /// `RawFile::process` tags its output `SRGB`.
+    #[test]
+    fn named_colour_space_does_not_adopt_an_unrelated_profile() {
+        use rawshift_image::core::ColorDescription;
+        use rawshift_image::formats::read_standard_image_metadata;
+
+        let mut image = synthetic_image();
+        image.set_color(ColorDescription::SRGB);
+        let metadata = ImageMetadata {
+            icc_profile: Some(adobe_rgb_profile()),
+            ..ImageMetadata::default()
+        };
+
+        let bytes =
+            encode_rgb_image_to_vec(&image, &metadata, &EncodeOptions::png()).expect("encode PNG");
+        let embedded = read_standard_image_metadata(&bytes, StandardFormat::Png)
+            .icc_profile
+            .expect("PNG carries an ICC profile");
+        assert_ne!(
+            embedded,
+            adobe_rgb_profile(),
+            "an sRGB-tagged image must not adopt the metadata's camera profile"
+        );
+        let decoded = decode_standard_image(&bytes, StandardFormat::Png).expect("decode PNG");
+        assert_eq!(decoded.color(), ColorDescription::SRGB);
+    }
+
+    /// A minimal Adobe RGB (1998) matrix/TRC profile: D50-adapted colorants
+    /// and a gamma-2.2 curve. Distinct enough from sRGB that
+    /// `resolve_color` must classify it `UNSPECIFIED`.
+    fn adobe_rgb_profile() -> Vec<u8> {
+        use gamut_icc::{
+            ColorSpace, Curve, DeviceClass, IccProfile, ProfileHeader, Signature, TagData,
+            U8Fixed8, XyzNumber,
+        };
+        let xyz = |v: [f64; 3]| TagData::Xyz(vec![XyzNumber::from_f64(v)]);
+        let trc = TagData::Curve(Curve::Gamma(U8Fixed8(0x0238)));
+        IccProfile {
+            header: ProfileHeader::new(DeviceClass::Display, ColorSpace::Rgb),
+            tags: vec![
+                (Signature(*b"rXYZ"), xyz([0.609_74, 0.311_11, 0.019_47])),
+                (Signature(*b"gXYZ"), xyz([0.205_28, 0.625_67, 0.060_87])),
+                (Signature(*b"bXYZ"), xyz([0.149_19, 0.063_22, 0.744_57])),
+                (Signature(*b"rTRC"), trc.clone()),
+                (Signature(*b"gTRC"), trc.clone()),
+                (Signature(*b"bTRC"), trc),
+            ],
+        }
+        .to_bytes()
+        .expect("Adobe RGB fixture serialises")
+    }
+
     #[test]
     fn probe_reports_dimensions_without_decoding() {
         let bytes = encode_rgb_image_to_vec(

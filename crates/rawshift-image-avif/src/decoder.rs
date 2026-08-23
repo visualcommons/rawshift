@@ -178,6 +178,19 @@ impl AvifFile {
         }
     }
 
+    /// The colour space the container declared for one item.
+    ///
+    /// A `colr` box holds either CICP code points (`nclx`) or an ICC profile;
+    /// AVIF permits a `colr` per item, so each decoded item is tagged from its
+    /// own box, falling back to the primary item's when it has none — a grid
+    /// tile or auxiliary typically inherits the primary's colour.
+    #[cfg(feature = "hw")]
+    fn item_color(&self, id: u32) -> rawshift_image_core::ColorDescription {
+        let own = self.image.item(id).as_ref().and_then(declared_color);
+        let color = own.or_else(|| declared_color(&self.image.primary_item()));
+        rawshift_image_core::resolve_color(color.unwrap_or_default())
+    }
+
     /// Decode one item through the hardware AV1 decoder.
     #[cfg(feature = "hw")]
     fn decode_item(&self, id: u32) -> RawResult<RgbImage> {
@@ -189,7 +202,11 @@ impl AvifFile {
         };
         let mut adapter = hw::HwAv1Adapter::new(decoder);
         match self.image.decode_item_rgba8(id, &mut adapter) {
-            Ok(rgba) => rawshift_image_core::hw_planes::rgba8_to_rgb_image(&rgba),
+            Ok(rgba) => {
+                let mut image = rawshift_image_core::hw_planes::rgba8_to_rgb_image(&rgba)?;
+                image.set_color(self.item_color(id));
+                Ok(image)
+            }
             Err(source) => Err(adapter.into_raw_error(source)),
         }
     }
@@ -202,6 +219,49 @@ impl AvifFile {
             "rawshift was built without the `hw` feature; AVIF pixel decode requires \
              a hardware AV1 decoder (rawshift-hwdec)",
         ))
+    }
+}
+
+/// What one item's `colr` box declares about its colour space.
+///
+/// A `colr` holds either CICP code points (`nclx`) or an ICC profile. The
+/// returned borrow is of the file data, not of `item`, which is why this is a
+/// free function with an explicit lifetime rather than a closure.
+fn declared_color<'a>(
+    item: &gamut_avif::AvifItem<'a>,
+) -> Option<rawshift_image_core::ContainerColor<'a>> {
+    match item.colour()? {
+        ColourInformation::Nclx(nclx) => Some(rawshift_image_core::ContainerColor {
+            cicp: Some((nclx.colour_primaries, nclx.transfer_characteristics)),
+            icc: None,
+        }),
+        ColourInformation::RestrictedIcc(bytes) | ColourInformation::UnrestrictedIcc(bytes) => {
+            Some(rawshift_image_core::ContainerColor {
+                cicp: None,
+                icc: Some(bytes.as_slice()),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// The colour space a AVIF file declares for its primary item, without
+/// decoding pixels.
+///
+/// Parses the container only — no hardware decoder is involved, so this works
+/// in every build. Returns [`ColorDescription::SRGB`] when the file carries no
+/// `colr` box, and [`ColorDescription::UNSPECIFIED`] when it cannot be parsed
+/// at all or carries a profile with no CICP expression.
+///
+/// [`ColorDescription::SRGB`]: rawshift_image_core::ColorDescription::SRGB
+/// [`ColorDescription::UNSPECIFIED`]: rawshift_image_core::ColorDescription::UNSPECIFIED
+#[must_use]
+pub fn probe_avif_color(data: &[u8]) -> rawshift_image_core::ColorDescription {
+    match AvifFile::open(data.to_vec()) {
+        Ok(file) => rawshift_image_core::resolve_color(
+            declared_color(&file.image.primary_item()).unwrap_or_default(),
+        ),
+        Err(_) => rawshift_image_core::ColorDescription::UNSPECIFIED,
     }
 }
 
