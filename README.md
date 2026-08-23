@@ -29,6 +29,26 @@ The key priorities in order are:
 
 <!-- TODO: Add docs on the specific features, etc. on the docs.rs page -->
 
+### Seeing it work
+
+`crates/rawshift-image/examples/` holds small CLI examples (decode, encode,
+develop a RAW, dump metadata, inspect an AVIF/HEIC container).
+
+For an end-to-end view there is a GUI, [`examples/gallery`](examples/gallery):
+pick images and each is decoded, re-encoded through every selected output
+format with every parameter exposed, written to the temp directory, decoded
+back, and shown side by side against the source with PSNR / max-delta /
+bit-exact verdicts. It also reports which hardware decode backend is active.
+
+```sh
+just gallery                          # the window
+just gallery-headless path/to/*.jpg   # the same matrix, no window
+```
+
+It is a standalone package outside the workspace and is never published — see
+its README for why, and for the one scoped `gamut-cmm` git carve-out to the
+upstream-first policy.
+
 ## Format Support
 
 Rawshift targets both still image and video formats. Image decoding is the

@@ -45,7 +45,8 @@ use super::export::WebPMode;
 /// an sRGB profile, because rawshift can only synthesise sRGB and the source
 /// carried code points rather than a profile. Writing the code points through
 /// to the output container (a PNG `cICP` chunk, an AVIF `colr nclx` box) is the
-/// correct fix and is tracked separately.
+/// correct fix — tracked in
+/// [rawshift#66](https://github.com/visualcommons/rawshift/issues/66).
 ///
 /// [`ColorDescription`]: crate::core::ColorDescription
 /// [`UNSPECIFIED`]: crate::core::ColorDescription::UNSPECIFIED

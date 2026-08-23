@@ -40,7 +40,8 @@ outside the workspace, so no published crate's dependency tree contains it.
 `gamut-cmm` is the ICC colour-management module ([gamut#323]). It is not on
 crates.io yet, and it is the only way to apply an ICC transform to pixels:
 `gamut-icc` parses and serialises profiles but explicitly does not transform
-them. Retire the carve-out for a crates.io version once gamut-cmm ships.
+them. Retire the carve-out for a crates.io version once gamut-cmm ships
+([gamut#377]); the ~1.4 GB fetch is [gamut#378].
 
 **Two gamut trees.** `gamut-cmm` depends on `gamut-core` / `gamut-color` /
 `gamut-icc` by path inside the gamut workspace, so over git those resolve to
@@ -50,6 +51,8 @@ version numbers. This crate therefore links two copies of `gamut-icc` whose
 **bytes** and is re-parsed; see `src/color.rs`.
 
 [gamut#323]: https://github.com/visualcommons/gamut/issues/323
+[gamut#377]: https://github.com/visualcommons/gamut/issues/377
+[gamut#378]: https://github.com/visualcommons/gamut/issues/378
 
 ## Layout
 
@@ -85,8 +88,9 @@ On Apple hardware, rawshift cannot currently decode its own AVIF output.
 `gamut-avif` encodes identity-matrix 4:4:4, which is AV1 Profile 1, and
 VideoToolbox's still-image path decodes Main / Profile 0 only. The AVIF column
 therefore shows a decode error on macOS even though both halves work in
-isolation. The gallery surfaces this rather than hiding it — see the tracking
-issue linked from the pull request that added this crate.
+isolation. The gallery surfaces this rather than hiding it: [gamut#375].
+
+[gamut#375]: https://github.com/visualcommons/gamut/issues/375
 
 ## Colour management
 
@@ -100,3 +104,11 @@ Two layers, addressed separately:
   no faithful CICP expression) goes through `gamut-cmm`. Anything gamut-cmm
   cannot link — LUT-based profiles, since its phase P5 is unimplemented — falls
   back to sRGB with a visible warning rather than refusing to draw.
+
+  A wide-gamut image that carried CICP code points rather than a profile has
+  nothing for gamut-cmm to link from, so it is shown as sRGB with a warning.
+  Closing that needs a `ColourPrimaries` → chromaticities accessor upstream
+  ([gamut#376]); the matching library-side conversion is [rawshift#66].
+
+[gamut#376]: https://github.com/visualcommons/gamut/issues/376
+[rawshift#66]: https://github.com/visualcommons/rawshift/issues/66

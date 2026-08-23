@@ -759,7 +759,9 @@ pub fn probe_standard_image(data: &[u8]) -> RawResult<ImageProbe> {
 /// [`UNSPECIFIED`](crate::core::ColorDescription::UNSPECIFIED), meaning "not
 /// determined by the probe" rather than "no profile"; a PNG cICP chunk is
 /// uncompressed but is rare enough not to be worth a bespoke chunk walk here.
-/// [`decode_standard_image`] resolves PNG's colour authoritatively.
+/// [`decode_standard_image`] resolves PNG's colour authoritatively. A
+/// metadata-only entry point is asked for in
+/// [gamut#379](https://github.com/visualcommons/gamut/issues/379).
 ///
 /// Formats with no colour path at all report
 /// [`SRGB`](crate::core::ColorDescription::SRGB), the documented default.

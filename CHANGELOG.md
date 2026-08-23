@@ -54,7 +54,8 @@ All entries below are **breaking**, grouped by area.
 - **`ImageProbe::color_space` reads the file** for JPEG, WebP, AVIF, and HEIC
   instead of returning a hardcoded `SRGB`. PNG reports `UNSPECIFIED` — its
   `iCCP` chunk is DEFLATE-compressed and gamut-png exposes ancillary chunks
-  only from a full decode, which a header-only probe must not do.
+  only from a full decode, which a header-only probe must not do
+  ([gamut#379](https://github.com/visualcommons/gamut/issues/379)).
 - **Encode preserves the source ICC profile.** Every `embed_icc` path wrote a
   synthesised sRGB profile, discarding the source's. An image tagged
   `UNSPECIFIED` now carries its own profile through to the output. Images
