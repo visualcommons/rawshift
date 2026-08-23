@@ -54,6 +54,15 @@ version numbers. This crate therefore links two copies of `gamut-icc` whose
 [gamut#377]: https://github.com/visualcommons/gamut/issues/377
 [gamut#378]: https://github.com/visualcommons/gamut/issues/378
 
+## Linux
+
+No system development packages are needed. The crate selects iced's `x11` and
+`wayland` features; `wayland` brings `winit/wayland-dlopen`, so libwayland is
+loaded at runtime rather than linked. Those two features are not optional
+extras — they are the only windowing backends on Linux, and building with
+`default-features = false` and neither of them selected fails in `wayland-sys`,
+whose build script requires `wayland-client` through pkg-config.
+
 ## Layout
 
 | Module | Role |

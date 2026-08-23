@@ -54,12 +54,20 @@ gamut-icc-git = { package = "gamut-icc", git = "https://github.com/visualcommons
 # decoders — the gallery feeds it rawshift's own buffers, so pulling a second
 # set of codecs in would be both wasteful and dishonest about what decoded the
 # picture. `tokio` selects iced's futures executor.
+# `x11` and `wayland` are not optional extras on Linux — they are the only
+# windowing backends there, and `default-features = false` drops both. They
+# also select `winit/wayland-dlopen`, which loads libwayland at runtime instead
+# of linking it, so neither a Linux build nor a Linux user needs
+# libwayland-dev. Without them the build reaches `wayland-sys`, whose build
+# script demands `wayland-client` through pkg-config, and fails.
 iced = { version = "0.14", default-features = false, features = [
     "wgpu",
     "tiny-skia",
     "image-without-codecs",
     "advanced",
     "tokio",
+    "x11",
+    "wayland",
 ] }
 # default-features = false to drop rfd's default `async-std`: it would pull a
 # second async runtime alongside iced's tokio for no benefit. `xdg-portal` is

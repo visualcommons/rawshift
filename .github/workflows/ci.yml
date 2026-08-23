@@ -285,7 +285,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: examples/gallery
-      # libjxl (via gamut-jxl, pulled by rawshift-image/full) builds from source.
+      # libjxl (via gamut-jxl, pulled by rawshift-image/full) builds from
+      # source, hence cmake/clang. Nothing is installed for windowing: the
+      # gallery selects iced's `x11` + `wayland` features, and the latter
+      # brings `winit/wayland-dlopen`, so libwayland is loaded at runtime
+      # rather than linked. Dropping those features sends the build into
+      # `wayland-sys`, which needs libwayland-dev via pkg-config.
       - name: Install build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y cmake clang libclang-dev
