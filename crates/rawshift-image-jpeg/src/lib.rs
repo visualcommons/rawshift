@@ -44,6 +44,9 @@ pub fn decode(data: &[u8], _config: &JpegDecodeConfig) -> RawResult<RgbImage> {
     };
     let info = gamut_jpeg::info(data).map_err(jpeg_err)?;
     if info.components == 4 {
+        // CMYK. The embedded profile describes the *CMYK* samples, not the RGB
+        // this branch synthesises with the Blinn approximation below, so it
+        // must not be used to tag the result. Left at the sRGB default.
         let decoded: ImageBuf<Cmyk8> = JpegDecoder::new().decode_image(data).map_err(jpeg_err)?;
         let dims = decoded.dimensions();
         let samples = decoded
@@ -61,10 +64,18 @@ pub fn decode(data: &[u8], _config: &JpegDecodeConfig) -> RawResult<RgbImage> {
     }
     let decoded: ImageBuf<Rgb8> = JpegDecoder::new().decode_image(data).map_err(jpeg_err)?;
     let dims = decoded.dimensions();
-    RgbImage::new(
+    // A second pass over the APP segments: a marker walk, not an entropy
+    // decode, so it costs a scan of the headers rather than of the image.
+    let icc = gamut_jpeg::metadata(data).ok().and_then(|meta| meta.icc);
+    let color = rawshift_image_core::resolve_color(rawshift_image_core::ContainerColor {
+        cicp: None,
+        icc: icc.as_deref(),
+    });
+    RgbImage::with_color(
         dims.width,
         dims.height,
         decoded.as_samples().iter().map(|&v| scale(v)).collect(),
+        color,
     )
 }
 

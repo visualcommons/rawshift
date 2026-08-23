@@ -50,7 +50,14 @@ pub fn decode(data: &[u8], _config: &WebpDecodeConfig) -> RawResult<RgbImage> {
         .iter()
         .map(|&value| u16::from(value) * 257)
         .collect();
-    RgbImage::new(dimensions.width, dimensions.height, samples)
+    // `gamut_webp::metadata` walks the RIFF chunk list; it does not re-decode
+    // the VP8/VP8L payload.
+    let icc = gamut_webp::metadata(data).ok().and_then(|meta| meta.icc);
+    let color = rawshift_image_core::resolve_color(rawshift_image_core::ContainerColor {
+        cicp: None,
+        icc: icc.as_deref(),
+    });
+    RgbImage::with_color(dimensions.width, dimensions.height, samples, color)
 }
 
 #[cfg(feature = "encode")]

@@ -583,7 +583,7 @@ pub fn decode_standard_image(data: &[u8], format: StandardFormat) -> RawResult<R
             format.name()
         ))),
     };
-    decoded.map(tag_srgb)
+    decoded.map(|image| default_to_srgb(format, image))
 }
 
 /// Decode a standard (non-RAW) image with an explicitly selected decoder
@@ -623,20 +623,45 @@ pub fn decode_standard_image_with(data: &[u8], options: &DecodeOptions) -> RawRe
         #[allow(unreachable_patterns)]
         _ => unreachable!(),
     };
-    decoded.map(tag_srgb)
+    decoded.map(|image| default_to_srgb(options.format(), image))
 }
 
-/// Tag a freshly-decoded standard image with its color description.
+/// Whether `format`'s decoder resolves the container's colour space itself.
 ///
-/// Every standard decoder produces display-referred, sRGB-encoded RGB, so the
-/// result is tagged [`ColorDescription::SRGB`](crate::core::ColorDescription::SRGB).
-/// When the source carried a non-sRGB ICC profile the pixels are *not*
-/// converted — the precise profile is preserved in
+/// These decoders already hold the `colr` box / `iCCP` chunk / APP2 segment
+/// they need, so they tag the image with
+/// [`resolve_color`](rawshift_image_core::resolve_color) at no extra parsing
+/// cost, and [`default_to_srgb`] must leave their answer alone.
+///
+/// Everything else — GIF, JXL, TIFF, SVG, PPM, APV — has no colour path in
+/// rawshift today and falls back to the sRGB default.
+const fn decoder_resolves_color(format: StandardFormat) -> bool {
+    matches!(
+        format,
+        StandardFormat::Png
+            | StandardFormat::Jpeg
+            | StandardFormat::WebP
+            | StandardFormat::Avif
+            | StandardFormat::Heic
+    )
+}
+
+/// Apply the sRGB default to a decoder that does not resolve colour itself.
+///
+/// For the formats in [`decoder_resolves_color`] this is the identity: their
+/// tag is authoritative, including
+/// [`UNSPECIFIED`](crate::core::ColorDescription::UNSPECIFIED), which means
+/// "the source carried an ICC-authoritative profile that has no CICP
+/// expression" — overwriting that with sRGB is precisely the bug this
+/// distinction exists to avoid. Those pixels are *not* converted; the profile
+/// is preserved in
 /// [`ImageMetadata::icc_profile`](crate::core::ImageMetadata) by
 /// [`read_standard_image_metadata`], and a caller wanting true sRGB pixels can
 /// apply [`convert_to_srgb`](crate::transforms::convert_to_srgb).
-fn tag_srgb(mut image: RgbImage) -> RgbImage {
-    image.set_color(crate::core::ColorDescription::SRGB);
+fn default_to_srgb(format: StandardFormat, mut image: RgbImage) -> RgbImage {
+    if !decoder_resolves_color(format) {
+        image.set_color(crate::core::ColorDescription::SRGB);
+    }
     image
 }
 
@@ -718,8 +743,55 @@ pub fn probe_standard_image(data: &[u8]) -> RawResult<ImageProbe> {
         format,
         size,
         bit_depth,
-        color_space: crate::core::ColorDescription::SRGB,
+        color_space: probe_color(data, format),
     })
+}
+
+/// The colour space a probe can determine without decoding pixels.
+///
+/// JPEG, WebP, AVIF, and HEIC expose their colour declaration in a marker,
+/// chunk, or box walk, which is what a probe is allowed to cost.
+///
+/// PNG is the gap: its `iCCP` chunk is DEFLATE-compressed, and gamut-png
+/// exposes ancillary chunks only from its full `PngDecoder::decode`, so
+/// reading it here would decode every pixel — exactly what a probe promises
+/// not to do. PNG therefore reports
+/// [`UNSPECIFIED`](crate::core::ColorDescription::UNSPECIFIED), meaning "not
+/// determined by the probe" rather than "no profile"; a PNG cICP chunk is
+/// uncompressed but is rare enough not to be worth a bespoke chunk walk here.
+/// [`decode_standard_image`] resolves PNG's colour authoritatively.
+///
+/// Formats with no colour path at all report
+/// [`SRGB`](crate::core::ColorDescription::SRGB), the documented default.
+fn probe_color(data: &[u8], format: StandardFormat) -> crate::core::ColorDescription {
+    use crate::core::ColorDescription;
+
+    let _ = data;
+    match format {
+        #[cfg(any(feature = "jpeg-decode", feature = "jpeg-encode"))]
+        StandardFormat::Jpeg => {
+            let icc = gamut_jpeg::metadata(data).ok().and_then(|meta| meta.icc);
+            rawshift_image_core::resolve_color(rawshift_image_core::ContainerColor {
+                cicp: None,
+                icc: icc.as_deref(),
+            })
+        }
+        #[cfg(any(feature = "webp-decode", feature = "webp-encode"))]
+        StandardFormat::WebP => {
+            let icc = gamut_webp::metadata(data).ok().and_then(|meta| meta.icc);
+            rawshift_image_core::resolve_color(rawshift_image_core::ContainerColor {
+                cicp: None,
+                icc: icc.as_deref(),
+            })
+        }
+        #[cfg(feature = "avif-decode")]
+        StandardFormat::Avif => crate::formats::avif::probe_avif_color(data),
+        #[cfg(feature = "heic-decode")]
+        StandardFormat::Heic => crate::formats::heic::probe_heic_color(data),
+        // Not determined by a header-only probe; see the doc comment.
+        StandardFormat::Png => ColorDescription::UNSPECIFIED,
+        _ => ColorDescription::SRGB,
+    }
 }
 
 /// PNG: dimensions and bit depth live in the fixed-offset IHDR chunk.

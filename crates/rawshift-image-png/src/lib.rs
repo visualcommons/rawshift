@@ -46,6 +46,19 @@ pub fn decode(data: &[u8], config: &PngDecodeConfig) -> RawResult<RgbImage> {
         })
     })?;
     let (width, height) = (decoded.header.width, decoded.header.height);
+    // Tag from what the container declared, before `decoded.image` is consumed
+    // below. cICP is authoritative when present; otherwise the iCCP profile
+    // decides. A bare sRGB chunk needs no special case — with no iCCP,
+    // `resolve_color` already defaults to sRGB.
+    let color = rawshift_image_core::resolve_color(rawshift_image_core::ContainerColor {
+        cicp: decoded
+            .cicp
+            .map(|c| (u16::from(c.color_primaries), u16::from(c.transfer_function))),
+        icc: decoded
+            .icc_profile
+            .as_ref()
+            .map(|icc| icc.profile.as_slice()),
+    });
     let samples = match decoded.image {
         PngImage::Gray8(image) => image
             .as_samples()
@@ -92,7 +105,7 @@ pub fn decode(data: &[u8], config: &PngDecodeConfig) -> RawResult<RgbImage> {
                 .collect()
         }
     };
-    RgbImage::new(width, height, samples)
+    RgbImage::with_color(width, height, samples, color)
 }
 
 #[cfg(feature = "decode")]

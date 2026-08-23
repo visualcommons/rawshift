@@ -14,6 +14,8 @@ categories = ["multimedia::images"]
 [dependencies]
 rawshift-core = { workspace = true }
 gamut-core = { workspace = true }
+gamut-color = { workspace = true }
+gamut-icc = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, optional = true }
 rawshift-hwdec = { workspace = true, optional = true }
