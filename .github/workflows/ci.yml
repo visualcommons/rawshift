@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [master]
+  # No branch filter: a pull request targeting any branch runs CI. Stacked PRs
+  # (one feature branch based on another, retargeted to master once the parent
+  # lands) would otherwise get no checks at all — not pending ones, none — and
+  # sit unverified for as long as the parent is open.
   pull_request:
-    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
