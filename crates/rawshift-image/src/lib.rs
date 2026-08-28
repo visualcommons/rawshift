@@ -110,3 +110,6 @@ pub mod processing;
 pub mod transforms;
 
 pub mod prelude;
+
+#[cfg(all(target_os = "android", feature = "hw"))]
+pub use rawshift_hwdec::{AndroidHwDecodeInitError, AndroidJavaVm, initialize_android_hw_decode};

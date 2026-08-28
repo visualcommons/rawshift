@@ -93,6 +93,11 @@ The `rawshift` facade deliberately exposes only coarse features:
   and fail the compile elsewhere (see [docs/SUPPORT.md](./docs/SUPPORT.md)).
 - `full` — every image format, `serde`, and `hw`.
 
+Android API 29+ applications call the safely re-exported
+`initialize_android_hw_decode(JavaVM)` before querying or decoding. The
+physical-device acceptance matrix is in the
+[`android/mediacodec-harness`](./android/mediacodec-harness/README.md).
+
 There is no `video` feature: video is parked for v1 (see [Video](#video)).
 
 The facade does **not** re-export per-format flags. Cargo cannot forward a child

@@ -1,4 +1,8 @@
 /target
+/android/mediacodec-harness/.gradle/
+/android/mediacodec-harness/app/build/
+/android/mediacodec-harness/native/target/
+/android/mediacodec-harness/local.properties
 
 .DS_Store
 

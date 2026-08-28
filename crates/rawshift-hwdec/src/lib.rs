@@ -11,8 +11,9 @@
 //! crate and nowhere else: `#![deny(unsafe_op_in_unsafe_fn)]`, every public
 //! item is safe, and every `unsafe` block documents its invariants inside the
 //! platform backend module that owns it. The **VAAPI backend** (linux-gnu,
-//! dlopen'd libva — see the `vaapi` module) is implemented; VideoToolbox and
-//! MediaCodec land as separate issues. On targets/builds with no backend
+//! dlopen'd libva — see the `vaapi` module) and **MediaCodec backend**
+//! (Android API 29+, explicitly initialized from the process VM) are
+//! implemented; VideoToolbox lands separately. On targets/builds with no backend
 //! every entry point reports "no decoder" — [`decoder`] returns `None`,
 //! [`backend`] returns `None`, and [`available_codecs`] is empty.
 //!
@@ -47,6 +48,12 @@
 //! [`docs/SUPPORT.md`]: https://github.com/visualcommons/rawshift/blob/master/docs/SUPPORT.md
 
 #![deny(unsafe_op_in_unsafe_fn)]
+
+#[cfg(any(hwdec_backend = "vaapi", hwdec_backend = "mediacodec", test))]
+mod bitstream;
+
+#[cfg(any(hwdec_backend = "mediacodec", test))]
+mod mediacodec;
 
 // The VAAPI platform backend: compiled only when build.rs selected it
 // (`vaapi` explicit flag, or `hw` on a linux-gnu target).
@@ -86,6 +93,48 @@ compile_error!(
 use thiserror::Error;
 
 pub use gamut_color::{ChromaSubsampling, ColorRange};
+
+/// The process Java VM used to discover Android codecs.
+///
+/// This is re-exported so Android applications do not need to align a second
+/// `jni` crate version merely to initialize hardware decode.
+#[cfg(hwdec_backend = "mediacodec")]
+pub use jni::JavaVM as AndroidJavaVm;
+
+/// Errors from [`initialize_android_hw_decode`].
+#[cfg(hwdec_backend = "mediacodec")]
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum AndroidHwDecodeInitError {
+    /// Initialization already succeeded with another VM in this process.
+    #[error("Android hardware decode is already initialized with a different Java VM")]
+    DifferentJavaVm,
+    /// JNI could not enumerate the platform's hardware codecs.
+    #[error("Android MediaCodec initialization failed during {operation}: {message}")]
+    Jni {
+        /// The discovery operation that failed.
+        operation: &'static str,
+        /// The JNI error or Java exception summary.
+        message: String,
+    },
+}
+
+/// Initializes Android hardware decode from the application's process VM.
+///
+/// Call this once from an Android/JNI entry point before querying
+/// [`available_codecs`] or decoding HEIC/AVIF pixels. Repeating the call with
+/// the same VM is harmless. A failed attempt does not latch state and may be
+/// retried; a successful initialization cannot be replaced with another VM.
+///
+/// # Errors
+///
+/// Returns [`AndroidHwDecodeInitError::DifferentJavaVm`] if a different VM
+/// was already installed, or [`AndroidHwDecodeInitError::Jni`] when codec
+/// discovery fails.
+#[cfg(hwdec_backend = "mediacodec")]
+pub fn initialize_android_hw_decode(vm: AndroidJavaVm) -> Result<(), AndroidHwDecodeInitError> {
+    mediacodec::initialize(vm)
+}
 
 // ── Codec / backend identity ────────────────────────────────────────────────
 
@@ -479,15 +528,19 @@ pub enum HwDecodeError {
 /// dlopens libva on first use and answers from the driver's actual
 /// profile/entrypoint list; missing libraries, render nodes, or driver
 /// support all degrade to `None` (never a link or startup failure).
-/// VideoToolbox and MediaCodec land as separate issues; without a backend
-/// this returns `None` everywhere.
+/// Android MediaCodec additionally requires an explicit successful
+/// [`initialize_android_hw_decode`] call before this can return a decoder.
 #[must_use]
 pub fn decoder(codec: HwCodec) -> Option<Box<dyn HwStillDecoder>> {
     #[cfg(hwdec_backend = "vaapi")]
     {
         vaapi::decoder(codec)
     }
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(hwdec_backend = "mediacodec")]
+    {
+        mediacodec::decoder(codec)
+    }
+    #[cfg(not(any(hwdec_backend = "vaapi", hwdec_backend = "mediacodec")))]
     {
         let _ = codec;
         None
@@ -506,7 +559,11 @@ pub fn backend() -> Option<HwBackend> {
     {
         vaapi::backend()
     }
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(hwdec_backend = "mediacodec")]
+    {
+        mediacodec::backend()
+    }
+    #[cfg(not(any(hwdec_backend = "vaapi", hwdec_backend = "mediacodec")))]
     {
         None
     }
@@ -522,7 +579,11 @@ pub fn available_codecs() -> &'static [HwCodec] {
     {
         vaapi::available_codecs()
     }
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(hwdec_backend = "mediacodec")]
+    {
+        mediacodec::available_codecs()
+    }
+    #[cfg(not(any(hwdec_backend = "vaapi", hwdec_backend = "mediacodec")))]
     {
         &[]
     }
@@ -534,14 +595,14 @@ mod tests {
 
     // ── stub behaviour (builds with no selected backend) ────────────────────
 
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(not(any(hwdec_backend = "vaapi", hwdec_backend = "mediacodec")))]
     #[test]
     fn stub_has_no_decoder_for_any_codec() {
         assert!(decoder(HwCodec::Hevc).is_none());
         assert!(decoder(HwCodec::Av1).is_none());
     }
 
-    #[cfg(not(hwdec_backend = "vaapi"))]
+    #[cfg(not(any(hwdec_backend = "vaapi", hwdec_backend = "mediacodec")))]
     #[test]
     fn stub_reports_no_backend_and_no_codecs() {
         assert_eq!(backend(), None);

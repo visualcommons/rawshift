@@ -30,6 +30,11 @@ thiserror   = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 libloading = "0.8"
 
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.22.4"
+ndk = { version = "0.9", default-features = false, features = ["media", "api-level-29"] }
+tracing = { workspace = true }
+
 [features]
 # Verified backend feature flags — see docs/SUPPORT.md for the permanent
 # target/API matrix. Each explicit backend flag hard-fails the compile
@@ -39,9 +44,10 @@ libloading = "0.8"
 # (windows-msvc, linux-musl, wasm) emits a build-script warning and compiles
 # the no-backend stub.
 #
-# Backends implemented: VAAPI (linux-gnu; dlopen'd libva, HEVC Main/Main10 +
-# AV1 Profile 0 still pictures). VideoToolbox / MediaCodec land as separate
-# issues; builds without a selected backend compile the no-backend stub —
+# Backends implemented: VAAPI (linux-gnu; dlopen'd libva) and MediaCodec
+# (Android API 29+, explicitly initialized through JNI), both for HEVC
+# Main/Main10 + AV1 Profile 0 still pictures. VideoToolbox lands separately;
+# builds without a selected backend compile the no-backend stub —
 # `decoder()` returns `None`, `backend()` returns `None`, and
 # `available_codecs()` is empty.
 videotoolbox = []
