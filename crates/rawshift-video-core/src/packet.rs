@@ -41,6 +41,23 @@ pub struct Packet {
 }
 
 impl Packet {
+    /// A packet carrying `data` for `track`, with no timing and not marked as
+    /// a random access point.
+    ///
+    /// [`Packet`] is `#[non_exhaustive]`, so demuxers in other crates build
+    /// one through this and then set the fields the container supplied.
+    #[must_use]
+    pub const fn new(track: TrackId, data: Vec<u8>) -> Self {
+        Self {
+            track,
+            pts: None,
+            dts: None,
+            duration: None,
+            is_keyframe: false,
+            data,
+        }
+    }
+
     /// Convert a timestamp in `time_base` units to a [`Duration`].
     ///
     /// Returns `None` for an absent or negative timestamp: a `Duration` cannot

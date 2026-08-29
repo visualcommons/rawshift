@@ -28,6 +28,7 @@ members = [
     "crates/rawshift-image-webp",
     "crates/rawshift-video",
     "crates/rawshift-video-core",
+    "crates/rawshift-video-isobmff",
 ]
 
 [workspace.package]
@@ -62,6 +63,17 @@ gamut-heic = "0.2.2"
 # backend-less HEIC enumeration/decode-pipeline tests.
 gamut-isobmff = "2.0.1"
 
+# symphonia — demuxing for rawshift's video crates. MPL-2.0 (rawshift's own
+# license), pure Rust with no build script, MSRV 1.85, so it builds on every
+# target in docs/SUPPORT.md including wasm32, musl, iOS and Android. gamut's
+# charter excludes video, so this is a direct dependency rather than an
+# upstream ask — see "Video is outside gamut's charter" in AGENTS.md.
+# default-features off keeps symphonia-core's optional rustfft (audio DSP) out
+# of the tree; rawshift never decodes audio.
+symphonia-core = { version = "0.6.1", default-features = false }
+symphonia-format-isomp4 = "0.6.1"
+symphonia-format-mkv = "0.6.1"
+
 # Shared infrastructure dependencies (used across multiple workspace crates).
 thiserror = "2.0"
 tracing   = "0.1"
@@ -95,6 +107,7 @@ rawshift-image-tiff = { path = "crates/rawshift-image-tiff", version = "0.1.1", 
 rawshift-image-webp = { path = "crates/rawshift-image-webp", version = "0.1.1", default-features = false }
 rawshift-video = { path = "crates/rawshift-video", version = "0.1.1" }
 rawshift-video-core = { path = "crates/rawshift-video-core", version = "0.1.1" }
+rawshift-video-isobmff = { path = "crates/rawshift-video-isobmff", version = "0.1.1" }
 
 # Profiles must live at the workspace root — Cargo ignores profiles declared in
 # member manifests.

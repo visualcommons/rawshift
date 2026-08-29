@@ -194,6 +194,38 @@ pub struct VideoTrack {
     pub codec_config: CodecConfig,
 }
 
+impl VideoTrack {
+    /// A video track with `codec`, `dimensions` and `time_base` set and every
+    /// other field at its neutral default.
+    ///
+    /// These types are `#[non_exhaustive]`, so demuxers in other crates build
+    /// one through this and then assign the fields their container supplied.
+    /// A new field therefore arrives with a default rather than breaking every
+    /// demuxer.
+    #[must_use]
+    pub fn new(
+        id: TrackId,
+        codec: VideoCodecId,
+        dimensions: Dimensions,
+        time_base: URational,
+    ) -> Self {
+        Self {
+            id,
+            codec,
+            dimensions,
+            color: CicpColor::UNSPECIFIED,
+            bit_depth: BitDepth::Eight,
+            chroma: ChromaSubsampling::Cs420,
+            frame_rate: None,
+            time_base,
+            duration: None,
+            frame_count: None,
+            rotation: Rotation::None,
+            codec_config: CodecConfig::default(),
+        }
+    }
+}
+
 /// A track's colour signalling, as the container states it.
 ///
 /// Stored as raw CICP (ITU-T H.273) code points rather than as typed enums,
@@ -325,6 +357,24 @@ pub struct AudioTrack {
     pub language: Option<String>,
 }
 
+impl AudioTrack {
+    /// An audio track with `codec` and `time_base` set and every other field
+    /// at its neutral default. See [`VideoTrack::new`].
+    #[must_use]
+    pub fn new(id: TrackId, codec: AudioCodecId, time_base: URational) -> Self {
+        Self {
+            id,
+            codec,
+            sample_rate: None,
+            channels: None,
+            time_base,
+            duration: None,
+            codec_config: CodecConfig::default(),
+            language: None,
+        }
+    }
+}
+
 /// A track rawshift enumerates but models no further.
 /// # Serialization
 ///
@@ -349,6 +399,21 @@ pub struct OtherTrack {
     pub duration: Option<Duration>,
     /// BCP 47 / ISO 639 language tag, when the container states one.
     pub language: Option<String>,
+}
+
+impl OtherTrack {
+    /// A track of `kind` with `time_base` set and every other field at its
+    /// neutral default. See [`VideoTrack::new`].
+    #[must_use]
+    pub fn new(id: TrackId, kind: TrackKind, time_base: URational) -> Self {
+        Self {
+            id,
+            kind,
+            time_base,
+            duration: None,
+            language: None,
+        }
+    }
 }
 
 /// One track of any kind.

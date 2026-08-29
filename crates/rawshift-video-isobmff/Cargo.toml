@@ -1,0 +1,23 @@
+[package]
+name = "rawshift-video-isobmff"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "MP4, M4V and QuickTime (MOV) demuxing and metadata for rawshift"
+documentation = "https://docs.rs/rawshift-video-isobmff"
+keywords = ["video", "mp4", "mov", "quicktime", "isobmff"]
+categories = ["multimedia::video"]
+readme = "README.md"
+
+[dependencies]
+rawshift-core = { workspace = true }
+rawshift-video-core = { workspace = true }
+symphonia-core = { workspace = true }
+symphonia-format-isomp4 = { workspace = true }
+tracing = { workspace = true }
+
+[features]
+default = []
