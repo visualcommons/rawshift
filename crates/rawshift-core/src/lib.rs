@@ -25,8 +25,8 @@
 //! now keeps the boundary from drifting into "everything shared-ish lives in
 //! core". The division is:
 //!
-//! **Genuinely video-shared** — media-agnostic, and video will consume these
-//! as-is:
+//! **Genuinely video-shared** — media-agnostic, and consumed as-is by
+//! `rawshift-video-core` and the `rawshift-video-*` crates:
 //!
 //! - Geometry — [`image::Dimensions`], [`image::Point`], [`image::Rect`].
 //! - Codec descriptors — [`codec::CodecId`], [`codec::CodecInfo`],

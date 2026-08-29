@@ -14,9 +14,51 @@ from the published [gamut](https://github.com/visualcommons/gamut) crates.
 dependency is a registry package. 0.x source compatibility is a non-goal (see
 `docs/V1_DESIGN.md`).
 
+### Added
+
+#### Video (`rawshift-video`)
+
+`rawshift-video` is no longer a parked placeholder: it ships containers,
+tracks, timelines, metadata, and hardware-backed frame decode, and is wired
+into the `rawshift` facade behind a new `video` feature. Six crates make it up
+— `rawshift-video-core` (the shared vocabulary), `-isobmff`, `-matroska`,
+`-symphonia` (an internal bridge), `-hwdec`, and the `rawshift-video` facade.
+
+- **Containers** — MP4, M4V and QuickTime on `mp4-atom` with a rawshift-owned
+  sample index; Matroska and WebM on `symphonia-format-mkv`. Both read tracks,
+  timelines, rotation, colour signalling and metadata. AVI and MXF are named
+  in the API and return a matchable `UnsupportedContainer`.
+- **Decode** — HEVC random access points through `rawshift-hwdec`, which
+  covers keyframe extraction, thumbnails, scrubbing, and All-Intra camera
+  modes end to end. H.264's seam is final and its backend path is a follow-up.
+- **Everything but decode works with no hardware decoder**, on every target
+  in `docs/SUPPORT.md` including `wasm32` and `musl`. A missing backend
+  surfaces as `VideoError::HwDecoderUnavailable`, and
+  `hw_decode_available()` reports capability up front.
+
+No software H.264 or HEVC decoder ships, and none will: `docs/SUPPORT.md`
+records why. FFmpeg/libav is excluded as a dependency in any form, on license
+and portability grounds.
+
+Video is outside gamut's charter — gamut states it "will not grow video
+primitives" — so `AGENTS.md` now carves video out of the Upstream-First
+Policy: video containers and codecs take third-party dependencies judged by
+the `PRINCIPLES.md` maturity rule instead.
+
 ### Changed
 
 All entries below are **breaking**, grouped by area.
+
+#### Video and hardware decode
+
+- `HwCodec` gains `H264`. The enum is documented as deliberately exhaustive,
+  so this is that decision taken explicitly; matches on it need a new arm.
+  H.264 is reachable only through the new sequence seam —
+  `decoder(HwCodec::H264)` returns `None` and `available_codecs()` never lists
+  it — because no rawshift still format uses H.264.
+- `MetadataNamespace` is now `#[non_exhaustive]` and gains `Quicktime` and
+  `Matroska`. Matches on it need a `_` arm. Both changes land together while
+  the workspace is pre-1.0, after which new namespaces are additive forever.
 
 #### Package boundaries
 

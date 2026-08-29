@@ -250,8 +250,13 @@ pub enum MetadataValue {
 }
 
 /// Namespace identifying the origin of a generic metadata tag.
+///
+/// Marked `#[non_exhaustive]`: new namespaces arrive whenever a new container
+/// or format grows container-level facts worth surfacing, and that must not be
+/// a breaking change. Match with a `_` arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum MetadataNamespace {
     /// Standard TIFF/EXIF IFD tags.
     Exif,
@@ -267,6 +272,12 @@ pub enum MetadataNamespace {
     Heic,
     /// AVIF container-level facts.
     Avif,
+    /// QuickTime / ISOBMFF movie-level facts — `moov`-tree values and the
+    /// `com.apple.quicktime.*` `udta`/`mdta` keys iOS writes.
+    Quicktime,
+    /// Matroska / WebM segment-level facts — `Tags`, `Info`, and `TrackEntry`
+    /// elements.
+    Matroska,
     /// Vendor/format-specific, identified by the accompanying tag string.
     Other,
 }

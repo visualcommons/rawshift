@@ -40,6 +40,7 @@ mod av1;
 mod bits;
 mod hevc;
 mod sys;
+mod video;
 
 use std::ffi::c_int;
 use std::fs::File;
@@ -59,6 +60,10 @@ pub fn decoder(codec: HwCodec) -> Option<Box<dyn HwStillDecoder>> {
     let supported = match codec {
         HwCodec::Hevc => caps.hevc_main || caps.hevc_main10,
         HwCodec::Av1 => caps.av1_profile0,
+        // H.264 exists only on the sequence seam: no rawshift still format
+        // uses it, so offering a still decoder would advertise an untested
+        // path. See `HwCodec`'s "Seams" documentation.
+        HwCodec::H264 => false,
     };
     if !supported {
         return None;
@@ -74,7 +79,8 @@ pub fn decoder(codec: HwCodec) -> Option<Box<dyn HwStillDecoder>> {
 /// Backend hook for [`crate::backend`].
 pub fn backend() -> Option<HwBackend> {
     let caps = probe();
-    (caps.hevc_main || caps.hevc_main10 || caps.av1_profile0).then_some(HwBackend::Vaapi)
+    (caps.hevc_main || caps.hevc_main10 || caps.av1_profile0 || caps.h264_any())
+        .then_some(HwBackend::Vaapi)
 }
 
 /// Backend hook for [`crate::available_codecs`].
@@ -92,6 +98,32 @@ pub fn available_codecs() -> &'static [HwCodec] {
     }
 }
 
+/// Backend hook for [`crate::video_decoder`].
+pub fn video_decoder(
+    config: crate::VideoConfig<'_>,
+) -> Result<Box<dyn crate::HwVideoDecoder>, HwDecodeError> {
+    video::open(config)
+}
+
+/// Backend hook for [`crate::available_video_codecs`].
+///
+/// Reports only what [`video_decoder`] can actually open. The driver on this
+/// machine may well decode H.264 — the probe tracks that in
+/// [`Caps::h264_any`] — but this crate has no H.264 picture-parameter path
+/// yet, so advertising it would promise a session that fails to open.
+/// Discovery that lies is worse than discovery that is narrow.
+pub fn available_video_codecs() -> &'static [HwCodec] {
+    const NONE: &[HwCodec] = &[];
+    const HEVC_ONLY: &[HwCodec] = &[HwCodec::Hevc];
+
+    let caps = probe();
+    if caps.hevc_main || caps.hevc_main10 {
+        HEVC_ONLY
+    } else {
+        NONE
+    }
+}
+
 // ── Runtime probe ───────────────────────────────────────────────────────────
 
 /// What the driver actually decodes, per `vaQueryConfigProfiles` +
@@ -101,6 +133,16 @@ struct Caps {
     hevc_main: bool,
     hevc_main10: bool,
     av1_profile0: bool,
+    h264_constrained_baseline: bool,
+    h264_main: bool,
+    h264_high: bool,
+}
+
+impl Caps {
+    /// Whether the driver decodes H.264 at any profile rawshift accepts.
+    fn h264_any(&self) -> bool {
+        self.h264_constrained_baseline || self.h264_main || self.h264_high
+    }
 }
 
 /// Probe once per process: dlopen, open a render node, init a display,
@@ -137,7 +179,12 @@ fn probe_uncached() -> Option<Caps> {
     for &profile in &profiles {
         let interesting = matches!(
             profile,
-            sys::VA_PROFILE_HEVC_MAIN | sys::VA_PROFILE_HEVC_MAIN10 | sys::VA_PROFILE_AV1_PROFILE0
+            sys::VA_PROFILE_HEVC_MAIN
+                | sys::VA_PROFILE_HEVC_MAIN10
+                | sys::VA_PROFILE_AV1_PROFILE0
+                | sys::VA_PROFILE_H264_CONSTRAINED_BASELINE
+                | sys::VA_PROFILE_H264_MAIN
+                | sys::VA_PROFILE_H264_HIGH
         );
         if !interesting {
             continue;
@@ -149,6 +196,9 @@ fn probe_uncached() -> Option<Caps> {
             sys::VA_PROFILE_HEVC_MAIN => caps.hevc_main = true,
             sys::VA_PROFILE_HEVC_MAIN10 => caps.hevc_main10 = true,
             sys::VA_PROFILE_AV1_PROFILE0 => caps.av1_profile0 = true,
+            sys::VA_PROFILE_H264_CONSTRAINED_BASELINE => caps.h264_constrained_baseline = true,
+            sys::VA_PROFILE_H264_MAIN => caps.h264_main = true,
+            sys::VA_PROFILE_H264_HIGH => caps.h264_high = true,
             _ => {}
         }
     }

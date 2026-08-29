@@ -1,0 +1,23 @@
+[package]
+name = "rawshift-video-matroska"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Matroska and WebM demuxing and metadata for rawshift"
+documentation = "https://docs.rs/rawshift-video-matroska"
+keywords = ["video", "matroska", "mkv", "webm", "demux"]
+categories = ["multimedia::video"]
+readme = "README.md"
+
+[dependencies]
+rawshift-core = { workspace = true }
+rawshift-video-core = { workspace = true }
+rawshift-video-symphonia = { workspace = true }
+symphonia-core = { workspace = true }
+symphonia-format-mkv = { workspace = true }
+
+[features]
+default = []

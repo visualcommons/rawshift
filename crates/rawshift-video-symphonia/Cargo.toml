@@ -1,0 +1,21 @@
+[package]
+name = "rawshift-video-symphonia"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Internal symphonia bridge shared by rawshift's container crates"
+documentation = "https://docs.rs/rawshift-video-symphonia"
+keywords = ["video", "demux", "symphonia", "internal"]
+categories = ["multimedia::video"]
+readme = "README.md"
+
+[dependencies]
+rawshift-core = { workspace = true }
+rawshift-video-core = { workspace = true }
+symphonia-core = { workspace = true }
+
+[features]
+default = []

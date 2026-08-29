@@ -1,0 +1,32 @@
+[package]
+name = "rawshift-video-hwdec"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Hardware-backed H.264 and HEVC video decoders for rawshift"
+documentation = "https://docs.rs/rawshift-video-hwdec"
+keywords = ["video", "h264", "hevc", "decode", "hardware"]
+categories = ["multimedia::video"]
+readme = "README.md"
+
+[dependencies]
+rawshift-core = { workspace = true }
+rawshift-video-core = { workspace = true }
+rawshift-hwdec = { workspace = true }
+
+[features]
+default = []
+# One per codec, so a build takes only the decoders it needs.
+h264 = []
+hevc = []
+
+# Hardware backend selection, forwarded to rawshift-hwdec. These are verified
+# flags: `hw` is portable and picks the native backend for the target, while
+# the pinned ones fail to compile off-target on purpose.
+hw = ["rawshift-hwdec/hw"]
+hw-vaapi = ["rawshift-hwdec/vaapi"]
+hw-videotoolbox = ["rawshift-hwdec/videotoolbox"]
+hw-mediacodec = ["rawshift-hwdec/mediacodec"]

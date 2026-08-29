@@ -1,44 +1,78 @@
 # rawshift-video
 
-Video format support for [rawshift](https://github.com/visualcommons/rawshift).
+Video support for [rawshift](https://github.com/visualcommons/rawshift):
+containers, tracks, timelines, metadata, and hardware-backed frame decode.
 
-> **Status: parked for v1, unpublished.** rawshift v1 ships image only. No
-> video code ships today, this crate is marked `publish = false`, and it is
-> **not** a dependency of the [`rawshift`](https://crates.io/crates/rawshift)
-> facade — there is no `video` feature to enable. The crate remains in the
-> workspace to hold the roadmap below and the workspace slot for post-v1 work.
->
-> It is re-added to the publish set and to the facade when it has an
-> implementation to publish. Until then the feature flags below gate no code and
-> should be treated as a design sketch, not a supported surface.
+The video counterpart to `rawshift-image` — a feature facade over the
+container and decoder crates, plus the entry points that tie them together.
 
-## Roadmap
+```rust,no_run
+use rawshift_video::prelude::*;
 
-The formats below are prioritised by the cameras in rawshift's supported device
-list:
+let mut video = VideoFile::open(std::fs::File::open("clip.mp4")?)?;
+println!("{} {:?}", video.container(), video.metadata().container.duration);
 
-| Format / Codec       | Container       | Status  | Notes                                          |
-| -------------------- | --------------- | ------- | ---------------------------------------------- |
-| XAVC HS (H.265/HEVC) | MP4             | Planned | Sony mirrorless video.                         |
-| XAVC S (H.264/AVC)   | MP4             | Planned | Sony mirrorless video.                         |
-| Apple ProRes         | QuickTime (MOV) | Planned | iPhone Pro and professional editing workflows. |
-| HEVC (H.265)         | QuickTime (MOV) | Planned | Default iPhone video.                          |
-| H.264 (AVC)          | QuickTime (MOV) | Planned | Legacy and compatibility video.                |
+for track in video.video_tracks() {
+    println!("{} {}x{} rotation {}", track.codec, track.dimensions.width,
+             track.dimensions.height, track.rotation);
+}
 
-Initial work will focus on container parsing and metadata extraction, reusing
-the in-repo ISOBMFF parser already used for Canon CR3 (both MP4 and QuickTime
-are ISOBMFF-based). Codec-level decoding is a later milestone.
+if let Some(frame) = video.thumbnail()? {
+    println!("{}x{}", frame.width(), frame.height());
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+## What works without a hardware decoder
+
+Container parsing, track enumeration, timelines, packet access and metadata
+work on **every** target in `docs/SUPPORT.md`, including `wasm32` and `musl`
+where no hardware decode API can exist. Only frame decode needs a backend;
+without one it reports `VideoError::HwDecoderUnavailable`, and
+`hw_decode_available()` lets a caller check before committing.
+
+## Support
+
+| Container | Status | Backing |
+| --- | --- | --- |
+| MP4 / M4V | ✅ | `mp4-atom` boxes, rawshift sample index |
+| QuickTime (MOV) | ✅ | the same |
+| Matroska / WebM | ✅ | `symphonia-format-mkv` |
+| AVI | named, not implemented | no viable Rust crate |
+| MXF | named, not implemented | the only `mxf` crate dates from 2017 |
+
+| Codec | Decode | Notes |
+| --- | --- | --- |
+| HEVC / H.265 | ✅ random access points | via `rawshift-hwdec`; see below |
+| H.264 / AVC | seam ready, no backend path yet | the API is final; the VAAPI picture-parameter path is a follow-up |
+| ProRes | named, not implemented | |
+| AV1, VP9 | named, not implemented | AV1 stills decode through `rawshift-image` |
+
+**Decode scope.** Every random access point decodes, which covers keyframe
+extraction, poster frames, thumbnails and scrubbing, and decodes All-Intra
+camera modes (Sony XAVC S-I, XAVC HS All-I) completely. Inter-frame decoding
+is a purely internal change behind the same public API — it adds a decoded
+picture buffer and reference handling — so it needs no second breaking
+release.
+
+**No software decode**, deliberately. `docs/SUPPORT.md` rules out shipping
+software H.264 or HEVC: both are patent-encumbered independently of any
+implementation's own license. Hardware decoders carry the device OEM's
+licence.
 
 ## Feature Flags
 
-Video features mirror the `rawshift-image` tier structure but currently gate no
-code or dependencies. They are a design sketch for post-v1 work and are not
-reachable through the `rawshift` facade — see the status note above.
+- **Bundles** — `video` (every container and codec), `full` (adds `hw`).
+- **Containers** — `mp4`, `mkv`.
+- **Codecs** — `h264`, `hevc`.
+- **Directions** — `h264-decode`, `hevc-decode`. Encode is a finished trait
+  seam with no implementations, so no `-encode` flag gates anything yet.
+- **Backends** — `hw` (portable), `hw-vaapi` / `hw-videotoolbox` /
+  `hw-mediacodec` (pinned; these fail to compile off-target by design).
+- **Device aliases** — `xavc-hs` (HEVC in MP4), `xavc-s` (H.264 in MP4).
 
-- **Bundles** — `video` (all formats), `full`.
-- **Formats** — `xavc-hs`, `xavc-s`, `hevc`, `h264`, `prores`.
-- **Directions** — `xavc-hs-decode`, `xavc-s-decode`, `hevc-decode`,
-  `h264-decode`, `prores-decode` (decode-only for now).
+A container feature without a codec feature is a valid metadata-and-timeline
+build — the same shape as `heic`/`avif` without `hw` on the image side.
 
 ## License
 

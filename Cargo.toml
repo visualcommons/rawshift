@@ -27,6 +27,11 @@ members = [
     "crates/rawshift-image-tiff",
     "crates/rawshift-image-webp",
     "crates/rawshift-video",
+    "crates/rawshift-video-core",
+    "crates/rawshift-video-isobmff",
+    "crates/rawshift-video-matroska",
+    "crates/rawshift-video-symphonia",
+    "crates/rawshift-video-hwdec",
 ]
 
 [workspace.package]
@@ -61,6 +66,25 @@ gamut-heic = "0.2.2"
 # backend-less HEIC enumeration/decode-pipeline tests.
 gamut-isobmff = "2.0.1"
 
+# symphonia — demuxing for rawshift's video crates. MPL-2.0 (rawshift's own
+# license), pure Rust with no build script, MSRV 1.85, so it builds on every
+# target in docs/SUPPORT.md including wasm32, musl, iOS and Android. gamut's
+# charter excludes video, so this is a direct dependency rather than an
+# upstream ask — see "Video is outside gamut's charter" in AGENTS.md.
+# default-features off keeps symphonia-core's optional rustfft (audio DSP) out
+# of the tree; rawshift never decodes audio.
+symphonia-core = { version = "0.6.1", default-features = false }
+symphonia-format-mkv = "0.6.1"
+
+# mp4-atom — the ISOBMFF box layer under rawshift-video-isobmff. MIT, pure
+# Rust, no build script. It replaced symphonia-format-isomp4, which is
+# audio-first and caps the hvcC record at 1 KB — real HEVC records are 2-3 KB,
+# so every HEVC MP4 and MOV failed to open. mp4-atom additionally surfaces the
+# tkhd matrix, the colr box and ProRes-shaped sample entries, all of which the
+# audio-first reader hides. rawshift owns the sample-index and demux semantics
+# on top; mp4-atom deliberately does no interpretation.
+mp4-atom = "0.15.0"
+
 # Shared infrastructure dependencies (used across multiple workspace crates).
 thiserror = "2.0"
 tracing   = "0.1"
@@ -92,7 +116,12 @@ rawshift-image-ppm = { path = "crates/rawshift-image-ppm", version = "0.1.1", de
 rawshift-image-svg = { path = "crates/rawshift-image-svg", version = "0.1.1", default-features = false }
 rawshift-image-tiff = { path = "crates/rawshift-image-tiff", version = "0.1.1", default-features = false }
 rawshift-image-webp = { path = "crates/rawshift-image-webp", version = "0.1.1", default-features = false }
-rawshift-video = { path = "crates/rawshift-video", version = "0.1.1" }
+rawshift-video = { path = "crates/rawshift-video", version = "0.1.1", default-features = false }
+rawshift-video-core = { path = "crates/rawshift-video-core", version = "0.1.1" }
+rawshift-video-isobmff = { path = "crates/rawshift-video-isobmff", version = "0.1.1" }
+rawshift-video-matroska = { path = "crates/rawshift-video-matroska", version = "0.1.1" }
+rawshift-video-symphonia = { path = "crates/rawshift-video-symphonia", version = "0.1.1" }
+rawshift-video-hwdec = { path = "crates/rawshift-video-hwdec", version = "0.1.1", default-features = false }
 
 # Profiles must live at the workspace root — Cargo ignores profiles declared in
 # member manifests.

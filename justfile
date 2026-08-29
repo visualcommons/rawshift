@@ -31,10 +31,11 @@ build-features features:
 build-image:
     cargo build -p rawshift --no-default-features --features image
 
-# Build the parked video crate directly — the facade has no `video` feature
-# while rawshift-video is parked (see crates/rawshift/Cargo.toml)
+# Build the video stack. `--all-features` is wrong here for the same reason as
+# `test-all`: the hw-* backend pins are mutually exclusive and would
+# compile_error!. `full` is the meaningful everything-build.
 build-video:
-    cargo build -p rawshift-video --all-features
+    cargo build -p rawshift-video --features full
 
 # Run tests for the whole workspace (default features) — fetches fixtures first
 test: setup-test-data
@@ -72,6 +73,7 @@ publish-check:
     cargo doc --workspace --no-deps
     cargo publish --dry-run -p rawshift-core
     cargo publish --dry-run -p rawshift-image
+    cargo publish --dry-run -p rawshift-video-core
     cargo publish --dry-run -p rawshift-video
 
 # Install git hooks

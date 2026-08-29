@@ -10,12 +10,12 @@
 #
 # Publish order is dependency order, which cargo resolves on its own:
 #
-#   rawshift-core -> rawshift-hwdec -> rawshift-image-core -> the format
-#   crates (rawshift-image-{ifd,ljpeg,metadata,arw,…}) -> rawshift-image
-#   -> rawshift
-#
-# `rawshift-video` is parked and unpublished for v1 (`publish = false`) and so
-# is absent from that order.
+#   rawshift-core -> rawshift-hwdec
+#     -> rawshift-image-core -> the image format crates
+#        (rawshift-image-{ifd,ljpeg,metadata,arw,…}) -> rawshift-image
+#     -> rawshift-video-core -> rawshift-video-{symphonia,isobmff,matroska,hwdec}
+#        -> rawshift-video
+#     -> rawshift
 
 [workspace]
 # The lockstep defaults, applied to *every* member so a newly added crate is
@@ -62,8 +62,4 @@ git_release_enable = true
 git_tag_name = "v{{ version }}"      # e.g. v0.1.0 (not rawshift-v0.1.0)
 git_release_name = "v{{ version }}"
 
-[[package]]
-name = "rawshift-video"
-# Parked for v1: the crate carries `publish = false`, so release-plz must not
-# try to release it either.
-publish = false
+

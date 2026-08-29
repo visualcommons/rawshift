@@ -18,33 +18,34 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rawshift-image = { workspace = true, optional = true }
-# `rawshift-video` is deliberately absent: it is parked and unpublished for v1.
-# A facade that ships to crates.io cannot depend on an unpublished crate, and a
-# `video` feature that gates zero code is a promise the workspace cannot keep.
-# It is re-added when video has an implementation.
+rawshift-video = { workspace = true, optional = true }
 
 # The `rawshift` facade exposes only coarse, high-level features. Cargo cannot
-# auto-forward a child crate's features, so per-format flags (jpeg, png, arw, …)
-# are intentionally NOT re-listed here — depend on `rawshift-image` directly for
-# fine-grained control. See the README "Feature Flags" section.
+# auto-forward a child crate's features, so per-format flags (jpeg, png, arw, …
+# and mp4, mkv, h264, hevc) are intentionally NOT re-listed here — depend on
+# `rawshift-image` or `rawshift-video` directly for fine-grained control. See
+# the README "Feature Flags" section.
 [features]
 default = ["image"]
 # Enable still-image support with `rawshift-image`'s own default formats.
 image = ["dep:rawshift-image"]
-# Serde derives for metadata/option types (no-op unless `image` is also on).
-serde = ["rawshift-image?/serde"]
+# Enable video support: containers, tracks, timelines and metadata always, and
+# frame decode wherever a hardware backend exists (see docs/SUPPORT.md).
+video = ["dep:rawshift-video", "rawshift-video/video"]
+# Serde derives for metadata/option types.
+serde = ["rawshift-image?/serde", "rawshift-video?/serde"]
 # Hardware still-frame decode (HEVC for HEIC, AV1 for AVIF) via rawshift-hwdec.
 # `hw` selects the native backend for the compile target; the `hw-*` flags pin
 # one explicit backend and fail the compile on any other target. All are
 # no-ops unless `image` is also on. See docs/SUPPORT.md for the permanent
 # target/API matrix.
-hw              = ["rawshift-image?/hw"]
-hw-videotoolbox = ["rawshift-image?/hw-videotoolbox"]
-hw-vaapi        = ["rawshift-image?/hw-vaapi"]
-hw-mediacodec   = ["rawshift-image?/hw-mediacodec"]
-# Everything: every image format, serde, and hardware decode (`hw` is listed
-# explicitly so the facade's own flag is active, matching the design contract
-# `full` = all formats + serde + experimental + `hw`; `rawshift-image/full`
-# already enables it transitively). v1 is image-only — there is no `video`
-# feature until `rawshift-video` has an implementation.
-full = ["image", "rawshift-image/full", "serde", "hw"]
+hw              = ["rawshift-image?/hw", "rawshift-video?/hw"]
+hw-videotoolbox = ["rawshift-image?/hw-videotoolbox", "rawshift-video?/hw-videotoolbox"]
+hw-vaapi        = ["rawshift-image?/hw-vaapi", "rawshift-video?/hw-vaapi"]
+hw-mediacodec   = ["rawshift-image?/hw-mediacodec", "rawshift-video?/hw-mediacodec"]
+# Everything: every image format, every video container and codec, serde, and
+# hardware decode (`hw` is listed explicitly so the facade's own flag is
+# active, matching the design contract `full` = all formats + serde +
+# experimental + `hw`; the child crates' `full` already enable it
+# transitively).
+full = ["image", "rawshift-image/full", "video", "serde", "hw"]

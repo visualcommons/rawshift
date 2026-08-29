@@ -1,0 +1,23 @@
+[package]
+name = "rawshift-video-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Shared vocabulary for rawshift's video crates: errors, identity, tracks, packets, frames, and the demux/decode contracts"
+documentation = "https://docs.rs/rawshift-video-core"
+keywords = ["video", "demux", "container", "codec"]
+categories = ["multimedia::video"]
+readme = "README.md"
+
+[dependencies]
+rawshift-core = { workspace = true }
+gamut-color = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "rawshift-core/serde"]
