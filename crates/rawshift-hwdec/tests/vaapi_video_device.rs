@@ -211,14 +211,45 @@ fn a_malformed_configuration_record_fails_at_open() {
 
 #[test]
 fn discovery_agrees_with_what_can_actually_be_opened() {
-    // available_video_codecs() must not promise a codec that fails to open.
+    // Every advertised codec must genuinely open a session. Advertising one
+    // the driver supports but this crate cannot drive would make callers
+    // choose a path that then fails.
+    let Some(stream) = hevc_keyframe() else {
+        return;
+    };
+    let nals = split_annex_b(&stream);
+    let (hvcc, _) = build_hvcc_and_payload(&nals);
+
     for &codec in available_video_codecs() {
-        assert_ne!(
-            codec,
-            HwCodec::Av1,
-            "AV1 has no sequence path and must not be advertised"
+        let config = match codec {
+            HwCodec::Hevc => VideoConfig::Hvcc(&hvcc),
+            other => panic!("{other} is advertised but this test cannot build a config for it"),
+        };
+        assert!(
+            video_decoder(config).is_ok(),
+            "{codec} is advertised yet fails to open"
         );
     }
-    // H.264 is sequence-only; it must never appear on the still seam.
+}
+
+#[test]
+fn an_unimplemented_codec_is_refused_with_a_reason_not_advertised() {
+    // H.264 must be absent from discovery, and asking anyway must explain
+    // itself rather than failing opaquely.
+    assert!(!available_video_codecs().contains(&HwCodec::H264));
+
+    let mut avcc = vec![0u8; 8];
+    avcc[0] = 1;
+    avcc[4] = 0xff; // lengthSizeMinusOne = 3
+    match video_decoder(VideoConfig::Avcc(&avcc)) {
+        Ok(_) => panic!("H.264 has no sequence path yet and must not open"),
+        Err(e) => assert!(
+            e.to_string().contains("H.264 sequence path")
+                || e.to_string().contains("no decode entry point"),
+            "the error must say why: {e}"
+        ),
+    }
+
+    // And H.264 must never appear on the still seam either.
     assert!(!rawshift_hwdec::available_codecs().contains(&HwCodec::H264));
 }

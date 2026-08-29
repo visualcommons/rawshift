@@ -106,18 +106,21 @@ pub fn video_decoder(
 }
 
 /// Backend hook for [`crate::available_video_codecs`].
+///
+/// Reports only what [`video_decoder`] can actually open. The driver on this
+/// machine may well decode H.264 — the probe tracks that in
+/// [`Caps::h264_any`] — but this crate has no H.264 picture-parameter path
+/// yet, so advertising it would promise a session that fails to open.
+/// Discovery that lies is worse than discovery that is narrow.
 pub fn available_video_codecs() -> &'static [HwCodec] {
     const NONE: &[HwCodec] = &[];
     const HEVC_ONLY: &[HwCodec] = &[HwCodec::Hevc];
-    const H264_ONLY: &[HwCodec] = &[HwCodec::H264];
-    const BOTH: &[HwCodec] = &[HwCodec::Hevc, HwCodec::H264];
 
     let caps = probe();
-    match (caps.hevc_main || caps.hevc_main10, caps.h264_any()) {
-        (true, true) => BOTH,
-        (true, false) => HEVC_ONLY,
-        (false, true) => H264_ONLY,
-        (false, false) => NONE,
+    if caps.hevc_main || caps.hevc_main10 {
+        HEVC_ONLY
+    } else {
+        NONE
     }
 }
 

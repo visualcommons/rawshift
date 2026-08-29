@@ -6,49 +6,55 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Video format support for rawshift (not yet implemented)"
+description = "Video decoding and metadata for rawshift: containers, tracks, timelines, and hardware-backed frame decode"
 documentation = "https://docs.rs/rawshift-video"
-keywords = ["video", "raw", "metadata"]
+keywords = ["video", "mp4", "matroska", "metadata", "decode"]
 categories = ["multimedia::video"]
 readme = "README.md"
-# Parked for v1: rawshift v1 ships image only. This crate is an unpublished
-# placeholder that holds the workspace slot and roadmap for post-v1 video work.
-# It is excluded from the publish set and from the `rawshift` facade until it
-# has an implementation to publish. See README.md and release-plz.toml.
-publish = false
 
 [dependencies]
+rawshift-core = { workspace = true }
+rawshift-video-core = { workspace = true }
+rawshift-video-isobmff = { workspace = true, optional = true }
+rawshift-video-matroska = { workspace = true, optional = true }
+rawshift-video-hwdec = { workspace = true, optional = true }
 
-# Feature flags mirror the tier structure of `rawshift-image`, so the two
-# libraries present a consistent surface. Video is not yet implemented: there
-# are no tier-4 implementation features and no dependencies — the tiers below
-# exist so the feature tree, public API, and `rawshift` facade can be laid out
-# ahead of the decoder work. See the README "Video" section for the roadmap.
-#
-#   tier 1  bundle      video, full
-#   tier 2  format      xavc-hs, xavc-s, hevc, h264, prores
-#   tier 3  direction   xavc-hs-decode, … (decode-only for now)
 [features]
 default = []
 
-# ── Tier 1: bundle features ───────────────────────────────────────────────────
-full  = ["video"]
-video = ["xavc-hs", "xavc-s", "hevc", "h264", "prores"]
+# ── Tier 1: bundles ──────────────────────────────────────────────────────────
+full = ["video", "hw"]
+# Every container and codec rawshift implements.
+video = ["mp4", "mkv", "h264", "hevc"]
 
-# ── Tier 2: format features ───────────────────────────────────────────────────
-# One per roadmap format. Each is the codec+container pairing produced by a
-# supported device (see the device support table in the README).
-xavc-hs = ["xavc-hs-decode"] # Sony XAVC HS — H.265/HEVC in MP4
-xavc-s  = ["xavc-s-decode"]  # Sony XAVC S — H.264/AVC in MP4
-hevc    = ["hevc-decode"]    # HEVC (H.265) in QuickTime — default iPhone video
-h264    = ["h264-decode"]    # H.264 (AVC) in QuickTime — legacy/compatibility
-prores  = ["prores-decode"]  # Apple ProRes in QuickTime
+# ── Tier 2: containers ───────────────────────────────────────────────────────
+# MP4 / M4V / QuickTime. One feature: they share a box grammar and a demuxer.
+mp4 = ["dep:rawshift-video-isobmff"]
+# Matroska / WebM.
+mkv = ["dep:rawshift-video-matroska"]
 
-# ── Tier 3: direction features ────────────────────────────────────────────────
-# Decode-only for now. Encode directions and tier-4 implementation features
-# will be added when concrete decoder backends land.
-xavc-hs-decode = []
-xavc-s-decode  = []
-hevc-decode    = []
-h264-decode    = []
-prores-decode  = []
+# ── Tier 2: codecs ───────────────────────────────────────────────────────────
+h264 = ["h264-decode"]
+hevc = ["hevc-decode"]
+
+# ── Tier 3: directions ───────────────────────────────────────────────────────
+# Decode only. Encode is a finished trait seam with no implementations, so
+# there is nothing for an `-encode` feature to gate yet.
+h264-decode = ["dep:rawshift-video-hwdec", "rawshift-video-hwdec/h264"]
+hevc-decode = ["dep:rawshift-video-hwdec", "rawshift-video-hwdec/hevc"]
+
+# ── Tier 4: hardware backends ────────────────────────────────────────────────
+# Verified flags, forwarded to rawshift-hwdec: `hw` is portable and selects the
+# native backend for the target, the pinned ones fail to compile off-target.
+hw = ["rawshift-video-hwdec?/hw"]
+hw-vaapi = ["rawshift-video-hwdec?/hw-vaapi"]
+hw-videotoolbox = ["rawshift-video-hwdec?/hw-videotoolbox"]
+hw-mediacodec = ["rawshift-video-hwdec?/hw-mediacodec"]
+
+# ── Device-oriented aliases ──────────────────────────────────────────────────
+# The roadmap's names, kept so the documented surface survives now that
+# container and codec are independent axes.
+xavc-hs = ["mp4", "hevc-decode"] # Sony XAVC HS — HEVC in MP4
+xavc-s = ["mp4", "h264-decode"]  # Sony XAVC S — H.264 in MP4
+
+serde = ["rawshift-video-core/serde"]

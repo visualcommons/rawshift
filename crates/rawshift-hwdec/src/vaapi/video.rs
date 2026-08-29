@@ -34,13 +34,22 @@ pub fn open(config: VideoConfig<'_>) -> Result<Box<dyn HwVideoDecoder>, HwDecode
 
     let supported = match codec {
         HwCodec::Hevc => caps.hevc_main || caps.hevc_main10,
-        HwCodec::H264 => caps.h264_any(),
-        HwCodec::Av1 => false,
+        // The driver may well decode H.264, but this crate has no H.264
+        // picture-parameter path yet. Refusing here keeps `open` consistent
+        // with `available_video_codecs`, which does not advertise it.
+        HwCodec::H264 | HwCodec::Av1 => false,
     };
     if !supported {
+        let reason = match codec {
+            HwCodec::H264 if caps.h264_any() => {
+                "the driver decodes H.264, but this build has no H.264 sequence path yet"
+            }
+            HwCodec::Av1 => "AV1 video sequences are not implemented; AV1 stills use `decoder()`",
+            _ => "the VAAPI driver exposes no decode entry point for this codec",
+        };
         return Err(HwDecodeError::Unavailable {
             codec,
-            reason: "the VAAPI driver exposes no decode entry point for this codec".to_string(),
+            reason: reason.to_string(),
         });
     }
 

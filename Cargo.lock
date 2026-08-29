@@ -1590,6 +1590,13 @@ dependencies = [
 [[package]]
 name = "rawshift-video"
 version = "0.1.1"
+dependencies = [
+ "rawshift-core",
+ "rawshift-video-core",
+ "rawshift-video-hwdec",
+ "rawshift-video-isobmff",
+ "rawshift-video-matroska",
+]
 
 [[package]]
 name = "rawshift-video-core"
@@ -1599,6 +1606,15 @@ dependencies = [
  "rawshift-core",
  "serde",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "rawshift-video-hwdec"
+version = "0.1.1"
+dependencies = [
+ "rawshift-core",
+ "rawshift-hwdec",
+ "rawshift-video-core",
 ]
 
 [[package]]
