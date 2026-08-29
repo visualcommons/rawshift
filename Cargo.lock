@@ -1513,9 +1513,30 @@ version = "0.1.1"
 dependencies = [
  "rawshift-core",
  "rawshift-video-core",
+ "rawshift-video-symphonia",
  "symphonia-core",
  "symphonia-format-isomp4",
  "tracing",
+]
+
+[[package]]
+name = "rawshift-video-matroska"
+version = "0.1.1"
+dependencies = [
+ "rawshift-core",
+ "rawshift-video-core",
+ "rawshift-video-symphonia",
+ "symphonia-core",
+ "symphonia-format-mkv",
+]
+
+[[package]]
+name = "rawshift-video-symphonia"
+version = "0.1.1"
+dependencies = [
+ "rawshift-core",
+ "rawshift-video-core",
+ "symphonia-core",
 ]
 
 [[package]]
@@ -1827,6 +1848,18 @@ dependencies = [
  "symphonia-common",
  "symphonia-core",
  "symphonia-metadata",
+]
+
+[[package]]
+name = "symphonia-format-mkv"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d015c5c0558864665894b3f4cbd95e10abb01b9c868e751c72670f326a56360e"
+dependencies = [
+ "lazy_static",
+ "log",
+ "symphonia-common",
+ "symphonia-core",
 ]
 
 [[package]]
