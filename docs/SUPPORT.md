@@ -31,15 +31,28 @@ The list is intentionally minimal.
 
 ## Hardware decode APIs
 
-rawshift decodes HEVC (HEIC) and AV1 (AVIF) still-frame codestreams through
-platform hardware decoders in the `rawshift-hwdec` crate. The API set is
-fixed:
+rawshift decodes codestreams through platform hardware decoders in the
+`rawshift-hwdec` crate, on two seams: **still frames** (HEVC for HEIC, AV1 for
+AVIF) and **coded video sequences** (HEVC and H.264, for `rawshift-video`).
+The API set is fixed:
 
-| API | Status | Platforms | HEVC | AV1 | Linking |
-| --- | --- | --- | --- | --- | --- |
-| VideoToolbox | ✅ in | macOS 11+, iOS 14+ | ✅ | ✅ runtime-probed (M3+ / A17 Pro+ hardware) | system framework |
-| VAAPI (libva) | ✅ in | Linux (gnu) | ✅ Main / Main10 | ✅ AV1 Main (driver-dependent) | dlopen at runtime — absence degrades to "no decoder", never a link failure |
-| MediaCodec (NDK) | ✅ in | Android | ✅ | ✅ (device codec; mandated on newer API levels) | NDK |
+| API | Status | Platforms | HEVC | AV1 | H.264 | Linking |
+| --- | --- | --- | --- | --- | --- | --- |
+| VideoToolbox | ✅ in | macOS 11+, iOS 14+ | ✅ | ✅ runtime-probed (M3+ / A17 Pro+ hardware) | still: n/a · sequence: pending | system framework |
+| VAAPI (libva) | ✅ in | Linux (gnu) | ✅ Main / Main10 | ✅ AV1 Main (driver-dependent) | ✅ sequence only (Constrained Baseline / Main / High, 8-bit 4:2:0) | dlopen at runtime — absence degrades to "no decoder", never a link failure |
+| MediaCodec (NDK) | ✅ in | Android | ✅ | ✅ (device codec; mandated on newer API levels) | still: n/a · sequence: pending | NDK |
+
+**Seam scope.** H.264 exists only on the sequence seam: `decoder(HwCodec::H264)`
+returns `None` and `available_codecs()` never lists it, because no rawshift
+still-image format uses H.264 and shipping an untested path would be dishonest.
+Conversely AV1 exists only on the still seam today; AV1 video sequences are a
+post-v1 follow-up over the same backend.
+
+**Progressive frames only.** The sequence seam rejects H.264 `field_pic_flag = 1`
+(PAFF / interlaced field coding) with a clear error. Every camera-origin source
+in rawshift's device list shoots progressive frames, and paired-field reference
+management roughly doubles the decoder state machine for no covered use case.
+MBAFF is accepted — it is frame coding and does not affect the picture buffer.
 
 VAAPI covers Intel and AMD natively, **and NVIDIA via the maintained
 [`nvidia-vaapi-driver`](https://github.com/elFarto/nvidia-vaapi-driver)
@@ -63,13 +76,39 @@ translation layer over NVDEC**.
 - **D3D12 / Vulkan Video** — pre-1.0 API churn (Vulkan Video), the largest
   implementation surface of all options, and no coverage gain over the three
   chosen APIs on any tier-1 target.
+- **FFmpeg / libav** — excluded as a dependency in any form, including as an
+  optional feature. (1) **License:** FFmpeg is LGPL-2.1+ (GPL once `x264`/`x265`
+  are enabled). rawshift is MPL-2.0, and static linking an LGPL library into an
+  iOS application binary leaves the end user no relinking path — the same
+  redistribution concern that excluded NVDEC above. (2) **Portability:** it
+  needs autotools plus `nasm`/`yasm` at build time, which cannot be satisfied on
+  `wasm32-unknown-unknown` at all and would require cross C toolchains in the
+  `aarch64-apple-ios` and `aarch64-linux-android` build lanes, breaking the
+  "builds anywhere `cargo` does" property the target list above depends on.
+  (3) **Coverage:** the codecs rawshift's device list actually produces
+  (H.264, HEVC, ProRes) are served by platform hardware decoders that the OS
+  already licenses. Demuxing is served by `symphonia`, which is pure Rust and
+  MPL-2.0. A `ffmpeg-sidecar`-style subprocess is likewise out of scope: it
+  moves the license and distribution problem onto the consuming application
+  rather than solving it.
 
 ### Software decode
 
 - **HEVC: never.** No acceptable pure-Rust implementation exists, and the
-  patent posture rules out shipping one.
+  patent posture rules out shipping one. This covers video sequences as well as
+  still frames.
+- **H.264: never**, for the same reason. H.264 is patent-encumbered
+  independently of any implementation's own license, and the Cisco OpenH264
+  royalty grant covers Cisco's *prebuilt binary*, not a from-source build and
+  not a clean-slate reimplementation. The pure-Rust `rusty_h264` and `rust_h265`
+  crates were evaluated in August 2026 and rejected on this ground and on
+  maturity (both are months old and pre-1.0). Hardware decoders are the answer:
+  the device OEM already holds the licence.
 - **AV1: post-v1.** gamut's planned pure-Rust AV1 still decoder will restore
   AVIF decode on Windows, musl, and wasm as a software fallback.
+- **ProRes: undecided.** Unlike H.264/HEVC the bitstream is publicly specified
+  (SMPTE RDD 36) and intra-only, so a clean-slate safe-Rust decoder is
+  technically open. Not scoped for v1.
 
 ### Behavior without a hardware decoder
 
@@ -78,3 +117,10 @@ every target. Pixel decode without a compiled-in, runtime-probed backend
 fails with the matchable `RawError::HwDecoderUnavailable`; capability is
 exposed honestly via `heic_hw_decode_available()` /
 `avif_hw_decode_available()` and the codec registry.
+
+The same contract holds for video: container parsing, track enumeration,
+timeline, and metadata always work on every target, including `wasm32` and
+`musl` where no hardware decoder can exist. Only frame decode requires a
+backend, and its absence surfaces as the matchable
+`VideoError::HwDecoderUnavailable` with `rawshift_video::hw_decode_available()`
+reporting capability up front.
