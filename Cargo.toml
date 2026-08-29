@@ -73,8 +73,16 @@ gamut-isobmff = "2.0.1"
 # default-features off keeps symphonia-core's optional rustfft (audio DSP) out
 # of the tree; rawshift never decodes audio.
 symphonia-core = { version = "0.6.1", default-features = false }
-symphonia-format-isomp4 = "0.6.1"
 symphonia-format-mkv = "0.6.1"
+
+# mp4-atom — the ISOBMFF box layer under rawshift-video-isobmff. MIT, pure
+# Rust, no build script. It replaced symphonia-format-isomp4, which is
+# audio-first and caps the hvcC record at 1 KB — real HEVC records are 2-3 KB,
+# so every HEVC MP4 and MOV failed to open. mp4-atom additionally surfaces the
+# tkhd matrix, the colr box and ProRes-shaped sample entries, all of which the
+# audio-first reader hides. rawshift owns the sample-index and demux semantics
+# on top; mp4-atom deliberately does no interpretation.
+mp4-atom = "0.15.0"
 
 # Shared infrastructure dependencies (used across multiple workspace crates).
 thiserror = "2.0"

@@ -15,9 +15,7 @@ readme = "README.md"
 [dependencies]
 rawshift-core = { workspace = true }
 rawshift-video-core = { workspace = true }
-rawshift-video-symphonia = { workspace = true }
-symphonia-core = { workspace = true }
-symphonia-format-isomp4 = { workspace = true }
+mp4-atom = { workspace = true }
 tracing = { workspace = true }
 
 [features]
