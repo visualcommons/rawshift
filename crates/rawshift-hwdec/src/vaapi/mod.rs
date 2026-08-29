@@ -59,6 +59,10 @@ pub fn decoder(codec: HwCodec) -> Option<Box<dyn HwStillDecoder>> {
     let supported = match codec {
         HwCodec::Hevc => caps.hevc_main || caps.hevc_main10,
         HwCodec::Av1 => caps.av1_profile0,
+        // H.264 exists only on the sequence seam: no rawshift still format
+        // uses it, so offering a still decoder would advertise an untested
+        // path. See `HwCodec`'s "Seams" documentation.
+        HwCodec::H264 => false,
     };
     if !supported {
         return None;

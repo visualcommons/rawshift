@@ -89,26 +89,43 @@ pub use gamut_color::{ChromaSubsampling, ColorRange};
 
 // ── Codec / backend identity ────────────────────────────────────────────────
 
-/// A codec this crate can decode still frames of.
+/// A codec this crate can decode.
 ///
-/// The set is fixed at v1 (see `docs/SUPPORT.md`): HEVC for HEIC and AV1 for
-/// AVIF. It is deliberately exhaustive — a new codec is a deliberate,
-/// breaking decision, not an additive one.
+/// The set is fixed by `docs/SUPPORT.md` and is deliberately exhaustive — a
+/// new codec is a deliberate, breaking decision, not an additive one.
+///
+/// # Seams
+///
+/// Not every codec is decodable on both seams, and the set differs by design
+/// rather than by omission:
+///
+/// - [`decoder`] (still frames) answers for [`Hevc`](Self::Hevc) (HEIC) and
+///   [`Av1`](Self::Av1) (AVIF).
+/// - [`video_decoder`] (coded sequences) answers for [`Hevc`](Self::Hevc) and
+///   [`H264`](Self::H264).
+///
+/// [`H264`](Self::H264) exists only on the sequence seam: no rawshift still
+/// format uses H.264, and offering an untested still path for it would
+/// misreport what this crate can do. [`Av1`](Self::Av1) is still-only for now;
+/// AV1 video sequences are a follow-up over the same backend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HwCodec {
-    /// HEVC / H.265 intra (HEIC still images).
+    /// HEVC / H.265 — intra stills (HEIC) and coded video sequences.
     Hevc,
     /// AV1 intra (AVIF still images).
     Av1,
+    /// H.264 / AVC coded video sequences.
+    H264,
 }
 
 impl HwCodec {
-    /// The conventional display name of the codec (`"HEVC"` / `"AV1"`).
+    /// The conventional display name of the codec.
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             HwCodec::Hevc => "HEVC",
             HwCodec::Av1 => "AV1",
+            HwCodec::H264 => "H.264",
         }
     }
 }
@@ -470,6 +487,188 @@ pub enum HwDecodeError {
     },
 }
 
+// ── Video sequence seam ─────────────────────────────────────────────────────
+
+/// The codec configuration record of a video-sequence decode session.
+///
+/// **The variant is the codec**, so a mismatched codec/config pair cannot be
+/// constructed. Separate from [`CodecConfig`] deliberately: adding an `Avcc`
+/// variant there would make "H.264 still image" representable, which is not a
+/// rawshift use case and would ship an untested path.
+///
+/// The bytes are the record **body** as the container stores it, with no box
+/// header — an `AVCDecoderConfigurationRecord` (ISO/IEC 14496-15 §5.3.3.1) or
+/// an `HEVCDecoderConfigurationRecord` (§8.3.3.1). Both carry the parameter
+/// sets and the NAL length-prefix width every [`VideoPacket::data`] of the
+/// track uses, so a session cannot be opened without one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoConfig<'a> {
+    /// An `avcC` record body; the codec is [`HwCodec::H264`].
+    Avcc(&'a [u8]),
+    /// An `hvcC` record body; the codec is [`HwCodec::Hevc`].
+    Hvcc(&'a [u8]),
+}
+
+impl<'a> VideoConfig<'a> {
+    /// The codec this configuration selects.
+    #[must_use]
+    pub fn codec(&self) -> HwCodec {
+        match self {
+            VideoConfig::Avcc(_) => HwCodec::H264,
+            VideoConfig::Hvcc(_) => HwCodec::Hevc,
+        }
+    }
+
+    /// The configuration record body.
+    #[must_use]
+    pub fn bytes(&self) -> &'a [u8] {
+        match self {
+            VideoConfig::Avcc(b) | VideoConfig::Hvcc(b) => b,
+        }
+    }
+}
+
+/// One access unit: the coded picture for a single presentation time.
+///
+/// `data` is the sample payload exactly as the container stores it — a
+/// **length-prefixed** NAL stream, never Annex B — with the prefix width taken
+/// from the session's [`VideoConfig`]. Exactly one coded picture per packet,
+/// as ISO/IEC 14496-15 requires of a sample.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VideoPacket<'a> {
+    /// The access unit's length-prefixed NAL units.
+    pub data: &'a [u8],
+    /// Container presentation timestamp, carried through to the frame this
+    /// picture becomes and never used for ordering.
+    pub pts: Option<i64>,
+    /// Container decode timestamp. Diagnostics only: output order comes from
+    /// the bitstream's picture order count, which is authoritative where a
+    /// container's timestamps are absent or wrong.
+    pub dts: Option<i64>,
+    /// Whether the container marks this as a sync sample. Advisory; the
+    /// bitstream decides.
+    pub is_sync: bool,
+}
+
+/// A decoded picture in output (display) order, with the timestamp of the
+/// packet it was coded from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoFrame {
+    frame: DecodedFrame,
+    pts: Option<i64>,
+    poc: i32,
+}
+
+impl VideoFrame {
+    /// Wrap a decoded picture with its timing.
+    #[must_use]
+    pub fn new(frame: DecodedFrame, pts: Option<i64>, poc: i32) -> Self {
+        Self { frame, pts, poc }
+    }
+
+    /// The decoded picture.
+    #[must_use]
+    pub fn frame(&self) -> &DecodedFrame {
+        &self.frame
+    }
+
+    /// Take ownership of the decoded picture.
+    #[must_use]
+    pub fn into_frame(self) -> DecodedFrame {
+        self.frame
+    }
+
+    /// The `pts` of the packet this picture was coded from.
+    #[must_use]
+    pub fn pts(&self) -> Option<i64> {
+        self.pts
+    }
+
+    /// The picture order count derived from the bitstream.
+    ///
+    /// Strictly increasing across the frames emitted between two random access
+    /// points, which makes it the reliable ordering key even for a container
+    /// whose timestamps are missing or wrong.
+    #[must_use]
+    pub fn poc(&self) -> i32 {
+        self.poc
+    }
+}
+
+/// A hardware decoder for one coded video sequence, from [`video_decoder`].
+///
+/// **Send-packet / receive-frame**, because coded order and output order
+/// differ whenever a stream reorders (B pictures, hierarchical GOPs): one
+/// [`send_packet`](Self::send_packet) may make zero, one, or several frames
+/// available. Drive it as:
+///
+/// ```text
+/// for packet in access_units {
+///     decoder.send_packet(&packet)?;
+///     while let Some(frame) = decoder.receive_frame()? { sink(frame); }
+/// }
+/// decoder.flush()?;
+/// while let Some(frame) = decoder.receive_frame()? { sink(frame); }
+/// ```
+///
+/// **This decoder owns the picture buffer and emits frames in output order**,
+/// because VAAPI is a slice-level API: the caller must hand it fully-formed
+/// picture parameters including the reference lists, so the buffer and the
+/// ordering cannot live above it. Callers must not reorder the output;
+/// [`VideoFrame::poc`] is already monotonic within a coded video sequence.
+pub trait HwVideoDecoder: Send {
+    /// The codec this session decodes.
+    fn codec(&self) -> HwCodec;
+
+    /// Submit one access unit, making zero or more frames available to
+    /// [`receive_frame`](Self::receive_frame).
+    ///
+    /// After [`reset`](Self::reset), packets before the next random access
+    /// point reference pictures that no longer exist; they are dropped and
+    /// `Ok(())` returned, so seeking into the middle of a group of pictures is
+    /// not an error.
+    ///
+    /// # Errors
+    ///
+    /// [`HwDecodeError::Decode`] when the access unit is malformed or uses a
+    /// coding tool outside the backend's scope, and
+    /// [`HwDecodeError::Unavailable`] when in-band parameter sets change the
+    /// stream to something the driver cannot decode.
+    fn send_packet(&mut self, packet: &VideoPacket<'_>) -> Result<(), HwDecodeError>;
+
+    /// Take the next frame in output order, or `None` when none is ready.
+    ///
+    /// `None` is the normal state while a reordering stream fills its buffer:
+    /// it means "not yet", not "end of stream". Only [`flush`](Self::flush)
+    /// establishes the latter.
+    ///
+    /// # Errors
+    ///
+    /// [`HwDecodeError::Decode`] when reading a decoded surface back fails,
+    /// or [`HwDecodeError::InvalidFrame`] when the readback is inconsistent.
+    fn receive_frame(&mut self) -> Result<Option<VideoFrame>, HwDecodeError>;
+
+    /// Signal end of stream: every picture still held for output becomes
+    /// available to [`receive_frame`](Self::receive_frame).
+    ///
+    /// Without this the last frames of every reordering stream are never
+    /// emitted. The session stays usable — a later
+    /// [`send_packet`](Self::send_packet) starts a new coded video sequence
+    /// and must begin at a random access point.
+    ///
+    /// # Errors
+    ///
+    /// As [`send_packet`](Self::send_packet).
+    fn flush(&mut self) -> Result<(), HwDecodeError>;
+
+    /// Discard all decoder state **without** emitting pending frames — the
+    /// seek path.
+    ///
+    /// Reference pictures and queued output are dropped; the parameter sets
+    /// from the session's [`VideoConfig`] are retained.
+    fn reset(&mut self);
+}
+
 // ── Backend discovery ───────────────────────────────────────────────────────
 
 /// Returns a decoder for `codec`, or `None` when no compiled-in backend can
@@ -491,6 +690,52 @@ pub fn decoder(codec: HwCodec) -> Option<Box<dyn HwStillDecoder>> {
     {
         let _ = codec;
         None
+    }
+}
+
+/// Opens a video-sequence decoder for `config`.
+///
+/// The configuration record is parsed and validated up front — parameter sets,
+/// profile, bit depth, chroma format — and the driver is probed for the
+/// matching profile, so an unsupported stream fails here rather than on the
+/// first packet.
+///
+/// Unlike [`decoder`] this returns a `Result`: the caller supplied a real
+/// configuration record, so there is a specific, reportable reason for
+/// failure, and a consumer needs it for its own error surface.
+///
+/// # Errors
+///
+/// [`HwDecodeError::Unavailable`] when no backend is compiled in or the driver
+/// cannot decode the stream's profile, and [`HwDecodeError::Decode`] when the
+/// configuration record is malformed or out of scope.
+pub fn video_decoder(config: VideoConfig<'_>) -> Result<Box<dyn HwVideoDecoder>, HwDecodeError> {
+    #[cfg(hwdec_backend = "vaapi")]
+    {
+        vaapi::video_decoder(config)
+    }
+    #[cfg(not(hwdec_backend = "vaapi"))]
+    {
+        Err(HwDecodeError::Unavailable {
+            codec: config.codec(),
+            reason: "no hardware decode backend is compiled in for this target".to_string(),
+        })
+    }
+}
+
+/// The codecs [`video_decoder`] can open a session for on this machine.
+///
+/// Empty when no backend is compiled in, or when the runtime probe finds no
+/// usable driver — never a link or startup failure.
+#[must_use]
+pub fn available_video_codecs() -> &'static [HwCodec] {
+    #[cfg(hwdec_backend = "vaapi")]
+    {
+        vaapi::available_video_codecs()
+    }
+    #[cfg(not(hwdec_backend = "vaapi"))]
+    {
+        &[]
     }
 }
 
