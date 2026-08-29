@@ -40,6 +40,7 @@ mod av1;
 mod bits;
 mod hevc;
 mod sys;
+mod video;
 
 use std::ffi::c_int;
 use std::fs::File;
@@ -78,7 +79,8 @@ pub fn decoder(codec: HwCodec) -> Option<Box<dyn HwStillDecoder>> {
 /// Backend hook for [`crate::backend`].
 pub fn backend() -> Option<HwBackend> {
     let caps = probe();
-    (caps.hevc_main || caps.hevc_main10 || caps.av1_profile0).then_some(HwBackend::Vaapi)
+    (caps.hevc_main || caps.hevc_main10 || caps.av1_profile0 || caps.h264_any())
+        .then_some(HwBackend::Vaapi)
 }
 
 /// Backend hook for [`crate::available_codecs`].
@@ -96,6 +98,29 @@ pub fn available_codecs() -> &'static [HwCodec] {
     }
 }
 
+/// Backend hook for [`crate::video_decoder`].
+pub fn video_decoder(
+    config: crate::VideoConfig<'_>,
+) -> Result<Box<dyn crate::HwVideoDecoder>, HwDecodeError> {
+    video::open(config)
+}
+
+/// Backend hook for [`crate::available_video_codecs`].
+pub fn available_video_codecs() -> &'static [HwCodec] {
+    const NONE: &[HwCodec] = &[];
+    const HEVC_ONLY: &[HwCodec] = &[HwCodec::Hevc];
+    const H264_ONLY: &[HwCodec] = &[HwCodec::H264];
+    const BOTH: &[HwCodec] = &[HwCodec::Hevc, HwCodec::H264];
+
+    let caps = probe();
+    match (caps.hevc_main || caps.hevc_main10, caps.h264_any()) {
+        (true, true) => BOTH,
+        (true, false) => HEVC_ONLY,
+        (false, true) => H264_ONLY,
+        (false, false) => NONE,
+    }
+}
+
 // ── Runtime probe ───────────────────────────────────────────────────────────
 
 /// What the driver actually decodes, per `vaQueryConfigProfiles` +
@@ -105,6 +130,16 @@ struct Caps {
     hevc_main: bool,
     hevc_main10: bool,
     av1_profile0: bool,
+    h264_constrained_baseline: bool,
+    h264_main: bool,
+    h264_high: bool,
+}
+
+impl Caps {
+    /// Whether the driver decodes H.264 at any profile rawshift accepts.
+    fn h264_any(&self) -> bool {
+        self.h264_constrained_baseline || self.h264_main || self.h264_high
+    }
 }
 
 /// Probe once per process: dlopen, open a render node, init a display,
@@ -141,7 +176,12 @@ fn probe_uncached() -> Option<Caps> {
     for &profile in &profiles {
         let interesting = matches!(
             profile,
-            sys::VA_PROFILE_HEVC_MAIN | sys::VA_PROFILE_HEVC_MAIN10 | sys::VA_PROFILE_AV1_PROFILE0
+            sys::VA_PROFILE_HEVC_MAIN
+                | sys::VA_PROFILE_HEVC_MAIN10
+                | sys::VA_PROFILE_AV1_PROFILE0
+                | sys::VA_PROFILE_H264_CONSTRAINED_BASELINE
+                | sys::VA_PROFILE_H264_MAIN
+                | sys::VA_PROFILE_H264_HIGH
         );
         if !interesting {
             continue;
@@ -153,6 +193,9 @@ fn probe_uncached() -> Option<Caps> {
             sys::VA_PROFILE_HEVC_MAIN => caps.hevc_main = true,
             sys::VA_PROFILE_HEVC_MAIN10 => caps.hevc_main10 = true,
             sys::VA_PROFILE_AV1_PROFILE0 => caps.av1_profile0 = true,
+            sys::VA_PROFILE_H264_CONSTRAINED_BASELINE => caps.h264_constrained_baseline = true,
+            sys::VA_PROFILE_H264_MAIN => caps.h264_main = true,
+            sys::VA_PROFILE_H264_HIGH => caps.h264_high = true,
             _ => {}
         }
     }

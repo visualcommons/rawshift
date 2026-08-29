@@ -42,6 +42,12 @@ pub const VA_INVALID_ID: u32 = 0xffff_ffff;
 pub const VA_INVALID_SURFACE: VASurfaceID = VA_INVALID_ID;
 
 // VAProfile values (va.h).
+/// `VAProfileH264ConstrainedBaseline` (va.h).
+pub const VA_PROFILE_H264_CONSTRAINED_BASELINE: VAProfile = 13;
+/// `VAProfileH264Main` (va.h).
+pub const VA_PROFILE_H264_MAIN: VAProfile = 6;
+/// `VAProfileH264High` (va.h).
+pub const VA_PROFILE_H264_HIGH: VAProfile = 7;
 pub const VA_PROFILE_HEVC_MAIN: VAProfile = 17;
 pub const VA_PROFILE_HEVC_MAIN10: VAProfile = 18;
 pub const VA_PROFILE_AV1_PROFILE0: VAProfile = 32;
