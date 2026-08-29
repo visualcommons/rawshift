@@ -318,15 +318,25 @@ mod tests {
             }
         }
 
-        let mut source = Dribble(Cursor::new(
-            b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00mp41 padding padding".to_vec(),
-        ));
+        let header = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00mp41 padding padding";
+        let mut source = Dribble(Cursor::new(header.to_vec()));
         let mut buf = [0u8; SNIFF_BYTES];
         let read = read_prefix(&mut source, &mut buf).expect("prefix read");
-        assert!(
-            read > 12,
+
+        assert_eq!(
+            read,
+            header.len(),
             "a one-byte-at-a-time reader must still fill the buffer"
         );
+        assert_eq!(
+            &buf[..read],
+            &header[..],
+            "and fill it with the right bytes"
+        );
+
+        // Detection itself is feature-gated; the point above is that the
+        // prefix reaches it intact however the source dribbles it out.
+        #[cfg(feature = "mp4")]
         assert_eq!(detect_container(&buf[..read]), Some(ContainerId::Mp4));
     }
 

@@ -1287,6 +1287,7 @@ name = "rawshift"
 version = "0.1.1"
 dependencies = [
  "rawshift-image",
+ "rawshift-video",
 ]
 
 [[package]]

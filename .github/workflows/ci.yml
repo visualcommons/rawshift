@@ -108,30 +108,52 @@ jobs:
         with:
           toolchain: "1.92.0"
       - uses: Swatinem/rust-cache@v2
-      # `rawshift-video` is parked and unpublished for v1, and the facade no
-      # longer has a `video` feature, so this builds the crate directly.
-      - run: cargo build -p rawshift-video --all-features
-      # Assert the video build pulls in zero image crates — this is the contract
-      # the image/video workspace split exists to guarantee, and it must keep
-      # holding while the crate is parked.
+      - run: cargo build -p rawshift-video --features full
+      # The contract the image/video workspace split exists to guarantee:
+      # video shares only rawshift-core and rawshift-hwdec with image, and
+      # pulls in none of the image codec stack.
       - name: Assert no image crates in the video dependency tree
         run: |
-          tree=$(cargo tree -p rawshift-video --all-features --prefix none --no-dedupe)
+          tree=$(cargo tree -p rawshift-video --features full --prefix none --no-dedupe)
           echo "$tree"
           if echo "$tree" | grep -qiE 'rawshift-image|zune-|libheif|libwebp|img-parts|little_exif|resvg|ravif|jxl-oxide|^image '; then
             echo "::error::video build pulled in image crates"
             exit 1
           fi
           echo "OK: video build is free of image crates"
-      # Assert the parked crate stays out of the facade entirely.
-      - name: Assert the facade does not depend on rawshift-video
+      # Opacity: no backend type may appear in a public signature. The crates
+      # wrap every backend rather than re-exporting it, so swapping one is not
+      # a breaking change for callers — this keeps that true.
+      - name: Assert backend types stay out of the public API
         run: |
-          tree=$(cargo tree -p rawshift --all-features --prefix none --no-dedupe)
-          if echo "$tree" | grep -q 'rawshift-video'; then
-            echo "::error::rawshift facade depends on the parked rawshift-video crate"
+          set -o pipefail
+          leaks=$(grep -rn --include='*.rs' \
+            -E '^\s*pub (fn|struct|enum|trait|type|const)[^;{]*\b(symphonia_[a-z_]*|mp4_atom|rawshift_hwdec)::' \
+            crates/rawshift-video/src crates/rawshift-video-core/src \
+            crates/rawshift-video-isobmff/src crates/rawshift-video-matroska/src \
+            crates/rawshift-video-hwdec/src || true)
+          if [ -n "$leaks" ]; then
+            echo "$leaks"
+            echo "::error::a backend type appears in a public signature"
             exit 1
           fi
-          echo "OK: facade is free of rawshift-video"
+          echo "OK: no backend type in a public signature"
+      # The facade must expose video, and must still build without it.
+      - name: Assert the facade wires video behind its own feature
+        run: |
+          cargo tree -p rawshift --features video --prefix none --no-dedupe \
+            | grep -q 'rawshift-video' \
+            || { echo "::error::the facade's video feature does not pull in rawshift-video"; exit 1; }
+          if cargo tree -p rawshift --no-default-features --features image --prefix none --no-dedupe \
+            | grep -q 'rawshift-video'; then
+            echo "::error::an image-only facade build pulled in rawshift-video"
+            exit 1
+          fi
+          echo "OK: video is behind its own facade feature"
+      # Container parsing and metadata must work with no decoder at all, which
+      # is what every backend-less target gets.
+      - name: Build the containers with no codec features
+        run: cargo build -p rawshift-video --no-default-features --features mp4,mkv
 
   # ── Compile boundaries (issue #34) ──────────────────────────────────────────
   # The `hw-*` backend pins are *verified* feature flags: rawshift-hwdec holds
