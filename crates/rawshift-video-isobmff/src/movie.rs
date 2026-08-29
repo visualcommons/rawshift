@@ -105,7 +105,11 @@ impl Movie {
 
         for trak in &moov.trak {
             tracks.push(map_track(trak));
-            indices.push(SampleIndex::build(&trak.mdia.minf.stbl, trak.edts.as_ref()));
+            indices.push(SampleIndex::build(
+                &trak.mdia.minf.stbl,
+                trak.edts.as_ref(),
+                end,
+            ));
         }
 
         let metadata = build_metadata(&moov, ftyp.as_ref(), container);

@@ -44,16 +44,23 @@ pub struct SampleIndex {
 }
 
 impl SampleIndex {
-    /// Reconstruct the index from a track's sample tables, applying .
+    /// Reconstruct the index from a track's sample tables, applying `edts`.
+    ///
+    /// `file_len` bounds every table against reality. The sample tables are
+    /// attacker-controlled, and a sample occupies at least one byte, so no
+    /// honest table can claim more samples than the file has bytes, and no
+    /// sample can extend past the end. Without that bound an `stsz` claiming
+    /// `u32::MAX` samples allocates tens of gigabytes before a single byte of
+    /// media is read.
     ///
     /// Never fails: a malformed or inconsistent table stops the walk and
     /// yields the samples recovered so far, because a partly-readable track is
     /// more useful than none and the caller cannot act on a parse error here
     /// anyway.
     #[must_use]
-    pub fn build(stbl: &Stbl, edts: Option<&Edts>) -> Self {
+    pub fn build(stbl: &Stbl, edts: Option<&Edts>, file_len: u64) -> Self {
         let shift = presentation_shift(edts);
-        let sizes = sample_sizes(&stbl.stsz.samples);
+        let sizes = sample_sizes(&stbl.stsz.samples, file_len);
         let sample_count = sizes.len();
         if sample_count == 0 {
             return Self::default();
@@ -81,6 +88,13 @@ impl SampleIndex {
 
         let usable = offsets.len().min(times.len()).min(sample_count);
         let samples = (0..usable)
+            // A sample that runs past the end of the file is not readable, so
+            // indexing it would only produce a failing read later.
+            .filter(|&i| {
+                offsets[i]
+                    .checked_add(u64::from(sizes[i]))
+                    .is_some_and(|end| end <= file_len)
+            })
             .map(|i| {
                 let (dts, duration) = times[i];
                 let composition_shift = composition.get(i).copied().unwrap_or(0);
@@ -170,11 +184,22 @@ fn presentation_shift(edts: Option<&Edts>) -> i64 {
     i64::try_from(media_time).unwrap_or(0)
 }
 
-/// Expand `stsz` into a per-sample size list.
-fn sample_sizes(samples: &StszSamples) -> Vec<u32> {
+/// Expand `stsz` into a per-sample size list, bounded by the file length.
+///
+/// The count is clamped because it is attacker-controlled and drives an
+/// allocation: a sample occupies at least one byte, so a file cannot hold more
+/// samples than it has bytes.
+fn sample_sizes(samples: &StszSamples, file_len: u64) -> Vec<u32> {
+    let ceiling = usize::try_from(file_len).unwrap_or(usize::MAX);
     match samples {
-        StszSamples::Identical { count, size } => vec![*size; *count as usize],
-        StszSamples::Different { sizes } => sizes.clone(),
+        StszSamples::Identical { count, size } => {
+            vec![*size; (*count as usize).min(ceiling)]
+        }
+        StszSamples::Different { sizes } => {
+            let mut sizes = sizes.clone();
+            sizes.truncate(ceiling);
+            sizes
+        }
     }
 }
 
@@ -268,6 +293,9 @@ fn composition_offsets(ctts: Option<&mp4_atom::Ctts>, sample_count: usize) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Generous bound for tests that are not about the file-length clamp.
+    const TEST_FILE_LEN: u64 = 1 << 20;
+
     use mp4_atom::{
         Co64, Ctts, CttsEntry, Elst, ElstEntry, Stco, Stsc, StscEntry, Stsd, Stss, Stsz, Stts,
         SttsEntry,
@@ -326,6 +354,7 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         let offsets: Vec<_> = index.samples().iter().map(|s| s.offset).collect();
@@ -358,6 +387,7 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         let offsets: Vec<_> = index.samples().iter().map(|s| s.offset).collect();
@@ -381,6 +411,7 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         let dts: Vec<_> = index.samples().iter().map(|s| s.dts).collect();
@@ -420,6 +451,7 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         let dts: Vec<_> = index.samples().iter().map(|s| s.dts).collect();
@@ -451,6 +483,7 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         let pts: Vec<_> = index.samples().iter().map(|s| s.pts).collect();
@@ -475,6 +508,7 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         assert!(index.samples().iter().all(|s| s.is_sync));
@@ -497,6 +531,7 @@ mod tests {
                 Some(vec![1, 4]),
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         let sync: Vec<_> = index.samples().iter().map(|s| s.is_sync).collect();
@@ -523,7 +558,9 @@ mod tests {
             entries: vec![0x1_0000_0000],
         });
 
-        let index = SampleIndex::build(&tables, None);
+        // Addressing past 4 GB is the whole point of co64, so this needs a
+        // file length that can hold it.
+        let index = SampleIndex::build(&tables, None, 0x1_0000_0100);
         assert_eq!(index.samples()[0].offset, 0x1_0000_0000);
     }
 
@@ -543,6 +580,7 @@ mod tests {
                 Some(vec![1, 4]), // sync at pts 0 and 300
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         // Exactly on a sync sample.
@@ -593,10 +631,11 @@ mod tests {
         // Without the edit list every timestamp is offset by the reorder
         // delay, and rawshift would disagree with every other tool reading the
         // same file.
-        let unshifted = SampleIndex::build(&reordered_tables(), None);
+        let unshifted = SampleIndex::build(&reordered_tables(), None, TEST_FILE_LEN);
         assert_eq!(unshifted.samples()[0].pts, 100);
 
-        let shifted = SampleIndex::build(&reordered_tables(), Some(&edts(Some(100))));
+        let shifted =
+            SampleIndex::build(&reordered_tables(), Some(&edts(Some(100))), TEST_FILE_LEN);
         assert_eq!(shifted.samples()[0].pts, 0, "presentation must start at 0");
         // Decode time goes negative, which is correct: the frame is decoded
         // before the presentation timeline begins.
@@ -606,7 +645,7 @@ mod tests {
     #[test]
     fn an_empty_edit_shifts_nothing() {
         // media_time == -1 is a dwell with no media, not an offset.
-        let index = SampleIndex::build(&reordered_tables(), Some(&edts(None)));
+        let index = SampleIndex::build(&reordered_tables(), Some(&edts(None)), TEST_FILE_LEN);
         assert_eq!(index.samples()[0].pts, 100);
     }
 
@@ -631,7 +670,7 @@ mod tests {
                 ],
             }),
         };
-        let index = SampleIndex::build(&reordered_tables(), Some(&cut_list));
+        let index = SampleIndex::build(&reordered_tables(), Some(&cut_list), TEST_FILE_LEN);
         assert_eq!(index.samples()[0].pts, 100, "left untrimmed, not shifted");
     }
 
@@ -659,9 +698,111 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         assert_eq!(index.len(), 2, "only the samples in the known chunk");
+    }
+
+    #[test]
+    fn a_sample_count_beyond_the_file_length_is_clamped() {
+        // An stsz claiming u32::MAX samples would otherwise allocate tens of
+        // gigabytes before a byte of media is read. A sample occupies at least
+        // one byte, so the file length is the honest ceiling.
+        let tables = stbl(
+            StszSamples::Identical {
+                count: u32::MAX,
+                size: 1,
+            },
+            vec![StscEntry {
+                first_chunk: 1,
+                samples_per_chunk: 4,
+                sample_description_index: 1,
+            }],
+            vec![0],
+            vec![run(4, 100)],
+            None,
+            None,
+        );
+
+        // A 64-byte file cannot hold four billion samples.
+        let index = SampleIndex::build(&tables, None, 64);
+        assert!(
+            index.len() <= 64,
+            "clamped to the file length, got {}",
+            index.len()
+        );
+    }
+
+    #[test]
+    fn an_explicit_size_table_longer_than_the_file_is_truncated() {
+        let tables = stbl(
+            StszSamples::Different {
+                sizes: vec![1; 10_000],
+            },
+            vec![StscEntry {
+                first_chunk: 1,
+                samples_per_chunk: 10_000,
+                sample_description_index: 1,
+            }],
+            vec![0],
+            vec![run(10_000, 1)],
+            None,
+            None,
+        );
+        assert!(SampleIndex::build(&tables, None, 32).len() <= 32);
+    }
+
+    #[test]
+    fn a_sample_running_past_the_end_of_the_file_is_dropped() {
+        // Indexing it would only produce a failing read later, and a size of
+        // u32::MAX would allocate four gigabytes to do it.
+        let tables = stbl(
+            StszSamples::Different {
+                sizes: vec![10, u32::MAX],
+            },
+            vec![StscEntry {
+                first_chunk: 1,
+                samples_per_chunk: 2,
+                sample_description_index: 1,
+            }],
+            vec![0],
+            vec![run(2, 100)],
+            None,
+            None,
+        );
+
+        let index = SampleIndex::build(&tables, None, 100);
+        assert_eq!(index.len(), 1, "only the sample that fits");
+        assert_eq!(index.samples()[0].size, 10);
+    }
+
+    #[test]
+    fn an_offset_plus_size_that_overflows_is_dropped_rather_than_wrapping() {
+        // Only a 64-bit co64 offset can get near the top of the range; two
+        // 32-bit values cannot overflow a u64 between them.
+        let mut tables = stbl(
+            StszSamples::Different {
+                sizes: vec![u32::MAX],
+            },
+            vec![StscEntry {
+                first_chunk: 1,
+                samples_per_chunk: 1,
+                sample_description_index: 1,
+            }],
+            vec![0],
+            vec![run(1, 100)],
+            None,
+            None,
+        );
+        tables.stco = None;
+        tables.co64 = Some(Co64 {
+            entries: vec![u64::MAX - 1],
+        });
+
+        // Wrapping would place the sample at a small offset and read the
+        // wrong bytes; it must be dropped instead.
+        assert!(SampleIndex::build(&tables, None, u64::MAX).is_empty());
     }
 
     #[test]
@@ -681,6 +822,7 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
         assert!(index.is_empty());
     }
@@ -700,7 +842,7 @@ mod tests {
             None,
         );
         tables.stco = None;
-        assert!(SampleIndex::build(&tables, None).is_empty());
+        assert!(SampleIndex::build(&tables, None, TEST_FILE_LEN).is_empty());
     }
 
     #[test]
@@ -721,6 +863,7 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         assert_eq!(index.len(), 4);
@@ -747,6 +890,7 @@ mod tests {
                 None,
             ),
             None,
+            TEST_FILE_LEN,
         );
 
         assert_eq!(index.len(), 3);
