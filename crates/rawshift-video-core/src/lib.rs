@@ -44,6 +44,7 @@ pub mod error;
 pub mod frame;
 pub mod id;
 pub mod metadata;
+pub mod nal;
 pub mod packet;
 pub mod track;
 
@@ -53,6 +54,7 @@ pub use error::{VideoError, VideoResult};
 pub use frame::{FrameDesc, FramePixelFormat, Plane, VideoFrame};
 pub use id::{AudioCodecId, ContainerId, TrackId, TrackKind, VideoCodecId};
 pub use metadata::{ContainerMetadata, VideoMetadata};
+pub use nal::{NalLengthSize, is_random_access_point, split_length_prefixed};
 pub use packet::{Packet, SeekMode, SeekTo};
 pub use track::{AudioTrack, CicpColor, CodecConfig, OtherTrack, Rotation, Track, VideoTrack};
 
