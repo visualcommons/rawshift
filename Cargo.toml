@@ -27,6 +27,7 @@ members = [
     "crates/rawshift-image-tiff",
     "crates/rawshift-image-webp",
     "crates/rawshift-video",
+    "crates/rawshift-video-core",
 ]
 
 [workspace.package]
@@ -93,6 +94,7 @@ rawshift-image-svg = { path = "crates/rawshift-image-svg", version = "0.1.1", de
 rawshift-image-tiff = { path = "crates/rawshift-image-tiff", version = "0.1.1", default-features = false }
 rawshift-image-webp = { path = "crates/rawshift-image-webp", version = "0.1.1", default-features = false }
 rawshift-video = { path = "crates/rawshift-video", version = "0.1.1" }
+rawshift-video-core = { path = "crates/rawshift-video-core", version = "0.1.1" }
 
 # Profiles must live at the workspace root — Cargo ignores profiles declared in
 # member manifests.
