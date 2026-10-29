@@ -96,6 +96,18 @@ rawshift-video = { path = "crates/rawshift-video", version = "0.1.1" }
 
 # Profiles must live at the workspace root — Cargo ignores profiles declared in
 # member manifests.
+
+# Line tables only for workspace crates and no debug info for Rust dependencies,
+# so `target/` stays small under fast iteration. Workspace backtraces keep
+# file:line; dependency frames keep symbol names but lose file:line. For full
+# debug info, use `CARGO_PROFILE_DEV_DEBUG=2` (workspace) and
+# `cargo --config 'profile.dev.package."*".debug=2' ...` (dependencies).
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
@@ -105,9 +117,13 @@ inherits = "release"
 debug = 1
 incremental = true
 
+# opt-level 3 because some suites are dominated by run time. Debug info matches
+# `[profile.dev]`: line tables here, and dependencies inherit its `package."*"`
+# override (full debug info: `CARGO_PROFILE_TEST_DEBUG=2` plus the `--config`
+# above).
 [profile.test]
 opt-level = 3
-debug = 1
+debug = "line-tables-only"
 incremental = true
 
 [profile.bench]
